@@ -1,4 +1,6 @@
 import 'server-only';
+import {parseSpeechEffects} from './speech-options';
+import {isVoiceFormat} from './contract';
 import type {VoiceAuth} from './auth';
 import {VoiceError,voiceBody} from './contract';
 import {publicVoiceGeneration} from './generations';
@@ -15,7 +17,9 @@ export function parseDraft(raw:unknown):SpeechScript {
   if(!Array.isArray(ids)||ids.length>3||ids.some(id=>typeof id!=='string'||!/^[a-f0-9-]{36}$/i.test(id)))throw new VoiceError('invalid_draft',422,'Dicionário inválido.');
   if(b.language_code!==undefined&&(typeof b.language_code!=='string'||!/^[a-z]{2,3}$/.test(b.language_code)))throw new VoiceError('invalid_draft',422,'Idioma inválido.');
   let performance;try{performance=parsePerformance(b.performance);}catch{throw new VoiceError('invalid_draft',422,'Interpretação inválida.');}
-  return {text:b.text,voice_id:b.voice_id,model_id:b.model_id,voice_settings:b.voice_settings===undefined?{}:parseVoiceSettings(b.voice_settings),
+  let effects;try{effects=parseSpeechEffects(b.audio_effects);}catch{throw new VoiceError('invalid_draft',422,'Efeitos inválidos.');}
+  if(b.output_format!==undefined&&!isVoiceFormat(b.output_format))throw new VoiceError('invalid_draft',422,'Formato inválido.');
+  return {...(effects?{audio_effects:effects}:{}),...(b.output_format?{output_format:String(b.output_format)}:{}),text:b.text,voice_id:b.voice_id,model_id:b.model_id,voice_settings:b.voice_settings===undefined?{}:parseVoiceSettings(b.voice_settings),
     dictionary_ids:ids,performance:{...performance,preview:false},...(b.language_code?{language_code:b.language_code as string}:{})};
 }
 export async function studioDraft(auth:VoiceAuth,request:Request) {
@@ -42,6 +46,8 @@ export async function studioHistoryPage(auth:VoiceAuth,request:Request) {
   const params=new URL(request.url).searchParams;
   let query=auth.client.from('voice_studio_history').select('*').eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id)
     .in('operation',['text_to_speech','studio']).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(21);
+  const kind=params.get('kind');if(kind&&kind!=='voice_change')throw new VoiceError('invalid_filter',422,'Tipo de histórico inválido.');
+  query=kind==='voice_change'?query.eq('model_id','eleven_multilingual_sts_v2'):query.neq('model_id','eleven_multilingual_sts_v2');
   const cursor=params.get('cursor');
   if(cursor){
     const [date,id]=cursor.split('|');
@@ -55,7 +61,7 @@ export async function studioHistoryPage(auth:VoiceAuth,request:Request) {
   if(error)throw new VoiceError('history_unavailable',503,'Não foi possível consultar o histórico.');
   const rows=(data??[]).slice(0,20),generations=[];
   for(const row of rows){
-    if(row.operation==='studio'){const {r,s}=await ownedStudioOperation(auth,row.id);if(s.operation==='long_tts')generations.push(publicStudioOperation(r,s));}
+    if(row.operation==='studio'){const {r,s}=await ownedStudioOperation(auth,row.id);if(['long_tts','voice_change'].includes(s.operation))generations.push(publicStudioOperation(r,s));}
     else generations.push(publicVoiceGeneration(row));
   }
   const last=rows.at(-1);

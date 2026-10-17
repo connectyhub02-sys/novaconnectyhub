@@ -19,7 +19,12 @@ it('stores long scripts atomically, isolates drafts, and detects competing saves
   await db.exec(`insert into voice_studio_drafts(project_id,organization_id,user_id,script) values('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','11111111-1111-1111-1111-111111111111','{"text":"draft"}');`);
   expect((await db.query('update voice_studio_drafts set version=2 where version=1 returning version')).rows).toHaveLength(1);
   expect((await db.query('update voice_studio_drafts set version=2 where version=1 returning version')).rows).toHaveLength(0);
+  await db.exec(readFileSync('supabase/migrations/0209_voice_reference_history.sql','utf8'));
+  await db.exec(`insert into voice_generations(id) values('55555555-5555-5555-5555-555555555555');
+    insert into studio_operations values('55555555-5555-5555-5555-555555555555','voice_change','{}');`);
+  expect((await db.query('select id from voice_studio_history')).rows).toHaveLength(2);
   await db.exec('set role authenticated');
+  await expect(db.query('select * from voice_studio_history')).rejects.toThrow(/permission denied/);
   await expect(db.query('select * from voice_studio_drafts')).rejects.toThrow(/permission denied/);
   await db.exec('reset role');await db.close();
 },30000);

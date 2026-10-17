@@ -1,4 +1,5 @@
 import 'server-only';
+import {speechEffectsCatalog,validateSpeechEffects} from './speech-effects';
 import {studioDraft,studioHistoryPage} from './studio-editor';
 import {authenticateVoice,authenticateVoiceStudio,type VoiceAuth} from './auth';
 import {voiceFailure,voiceJson,VoiceError,voiceBody,parseVoiceInput} from './contract';
@@ -13,6 +14,7 @@ export async function voiceRoute(request:Request,path:string[],studio=false) {
     const auth=await (studio?authenticateVoiceStudio(request):authenticateVoice(request));
     if(studio&&path.length===1&&path[0]==='draft'&&['GET','POST'].includes(request.method))return voiceJson(await studioDraft(auth,request));
     if(studio&&path.length===1&&path[0]==='history'&&request.method==='GET')return voiceJson(await studioHistoryPage(auth,request));
+    if(path.length===1&&path[0]==='effects'&&request.method==='GET')return voiceJson(await speechEffectsCatalog(auth));
     if(path.length===1&&path[0]==='capabilities'&&request.method==='GET')return voiceJson(await studioCatalog(auth));
     if(path.length===1&&path[0]==='resources'&&request.method==='GET')return voiceJson(await studioResources(auth));
     if(path[0]==='operations'){
@@ -58,7 +60,7 @@ export async function voiceRoute(request:Request,path:string[],studio=false) {
       if(path[0]==='generations')return voiceJson(await listGenerations(auth));
     }
     if(path[0]==='generations'){
-      if(path.length===2&&path[1]==='quote'&&request.method==='POST'){const input=parseVoiceInput(await jsonBody(request));const {price}=await quoteVoice(auth,input.model_id,input.text.length);return voiceJson({credits:price.chargeCredits,characters:input.text.length});}
+      if(path.length===2&&path[1]==='quote'&&request.method==='POST'){const input=parseVoiceInput(await jsonBody(request));await validateSpeechEffects(auth,input.audio_effects);const {price}=await quoteVoice(auth,input.model_id,input.text.length);return voiceJson({credits:price.chargeCredits,characters:input.text.length});}
       if(path.length===1 && request.method==='POST'){
         const result=await generateVoice(auth,request,await jsonBody(request));return voiceJson(result,['reserved','processing','uncertain'].includes(result.status)?202:200);
       }

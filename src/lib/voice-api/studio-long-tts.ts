@@ -48,7 +48,7 @@ export const longTextParts=(input:StudioInput)=>input.script?splitSpeechText(inp
 export function longTextRequestBody(input:StudioInput,parts:string[],index:number,dictionaries:unknown[]=[]){
  const stitched=input.model_id!=='eleven_v3';
  return {
-  text:parts[index],model_id:input.model_id,
+  text:parts[index],model_id:input.model_id,...(input.audio_effects?{audio_effects:input.audio_effects}:{}),
   ...(input.voice_settings&&Object.keys(input.voice_settings).length?{voice_settings:input.voice_settings}:{}),
   ...(input.language_code?{language_code:input.language_code}:{}),
   ...(stitched&&index>0?{previous_text:parts[index-1].slice(-contextChars)}:{}),
@@ -127,7 +127,7 @@ export async function generateLongTextPart(client:SupabaseClient,id:string,index
  try{
   const dictionaries=await resolveStudioDictionaries(auth,s.input.dictionary_ids??[]);
   const {apiKey}=await loadElevenLabsCredentials(client);
-  const response=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(s.input.voice_id!)}?output_format=${longTextFormat}`,{
+  const response=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(s.input.voice_id!)}?output_format=${s.input.output_format??longTextFormat}`,{
    method:'POST',headers:{'xi-api-key':apiKey,'Content-Type':'application/json',Accept:'audio/mpeg'},
    body:JSON.stringify(longTextRequestBody(s.input,parts,index,dictionaries)),
    signal:AbortSignal.timeout(180_000),redirect:'error',cache:'no-store',

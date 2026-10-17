@@ -18,7 +18,7 @@ function fixture(rows:Record<string,unknown>[]){
       select:()=>query,order:()=>query,limit:()=>query,in:()=>query,
       eq:(key:string,value:unknown)=>{calls.push(['eq',key,value]);filtered=filtered.filter(r=>r[key]===value);return query;},
       ilike:(key:string,value:unknown)=>{calls.push(['ilike',key,value]);return query;},
-      gte:()=>query,or:(value:string)=>{calls.push(['or',value]);return query;},
+      neq:()=>query,gte:()=>query,or:(value:string)=>{calls.push(['or',value]);return query;},
       update:()=>query,insert:()=>query,
       maybeSingle:async()=>({data:filtered[0]??null,error:null}),
       then:(resolve:(v:unknown)=>unknown)=>Promise.resolve({data:filtered,error:null}).then(resolve),

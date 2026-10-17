@@ -1,4 +1,6 @@
 import 'server-only';
+import {studioFormats} from './speech-options';
+import type {VoiceSettings} from './studio-contract';
 import {VoiceError} from './contract';
 
 // Internal transport only. The operation worker must verify project ownership,
@@ -7,7 +9,7 @@ import {VoiceError} from './contract';
 export type StudioAudioRequest =
   | {operation:'transcription'; audio:Blob; language?:string; diarize:boolean}
   | {operation:'audio_isolation'; audio:Blob}
-  | {operation:'voice_change'; audio:Blob; voiceId:string}
+  | {operation:'voice_change'; audio:Blob; voiceId:string; voiceSettings?:VoiceSettings; outputFormat?:string}
   | {operation:'forced_alignment'; audio:Blob; text:string};
 
 export const studioAudioTransportLimits = {inputBytes:20_000_000, resultBytes:20_000_000, jsonBytes:4_000_000} as const;
@@ -41,7 +43,9 @@ export function studioAudioProviderRequest(input:StudioAudioRequest) {
       break;
     case 'voice_change':
       if (!/^[a-zA-Z0-9_-]{1,100}$/.test(input.voiceId)) throw new VoiceError('invalid_voice',422,'Voz inválida.');
-      path = `/v1/speech-to-speech/${encodeURIComponent(input.voiceId)}?output_format=mp3_44100_128`;
+      if(input.outputFormat&&!studioFormats.some(f=>f.id===input.outputFormat))throw new VoiceError('invalid_format',422,'Formato de transformação inválido.');
+      path = `/v1/speech-to-speech/${encodeURIComponent(input.voiceId)}?output_format=${input.outputFormat??'mp3_44100_128'}`;
+      if(input.voiceSettings)form.set('voice_settings',JSON.stringify(input.voiceSettings));
       form.set('audio',input.audio,'audio');
       form.set('model_id','eleven_multilingual_sts_v2');
       // Isolation is a separate operation. Never silently enable a second cost.

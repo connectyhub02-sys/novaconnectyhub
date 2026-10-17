@@ -39,3 +39,11 @@ it('replays a pre-upgrade receipt without charging or regenerating after scripts
   const result=await f.module.generateVoice(f.auth,new Request('https://example.test',{headers:{'Idempotency-Key':'old-key'}}),{text:'Minha fala',voice_id:'clone'});
   expect(result.replayed).toBe(true);expect(result.id).toBe('old');expect(f.provider).not.toHaveBeenCalled();expect(f.rpc).not.toHaveBeenCalled();
 });
+
+it('replays a scripted receipt with an explicit format created before format was saved in scripts',async()=>{
+  const raw={text:'Minha fala',voice_id:'clone',output_format:'mp3_44100_64'};
+  const parsed=contract.parseVoiceInput(raw);delete parsed.script.output_format;
+  const f=fixture({id:'old-script',operation:'text_to_speech',status:'completed',input_hash:createHash('sha256').update(JSON.stringify({operation:'text_to_speech',...parsed})).digest('hex')});
+  const result=await f.module.generateVoice(f.auth,new Request('https://example.test',{headers:{'Idempotency-Key':'old-format'}}),raw);
+  expect(result.replayed).toBe(true);expect(f.provider).not.toHaveBeenCalled();expect(f.rpc).not.toHaveBeenCalled();
+});

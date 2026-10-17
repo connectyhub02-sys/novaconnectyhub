@@ -19,6 +19,8 @@ export type StudioVoice = {
 export type StudioModel = { model_id: string; name: string; available: boolean; credits_per_character?: number; minimum_credits?: number };
 type Settings = { stability: number; similarity_boost: number; style: number; speed: number; use_speaker_boost: boolean };
 
+import {VoiceOutputOptions} from './voice-output-options';
+import {validateEffectsFormat,validateLongFormat,type SpeechEffects} from '../../lib/voice-api/speech-options';
 import { VoiceDirectionEditor } from './voice-direction-editor';
 import { useVoiceDraft } from './use-voice-draft';
 import { defaultPerformance, interpretations, normalizeSpeech, prepareSpeech, previewExcerpt, speechCapabilities, type Performance, type SpeechScript } from '../../lib/voice-api/performance';
@@ -56,6 +58,8 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   const [settings, setSettings] = useState<Settings>(defaults);
   const [language, setLanguage] = useState("");
   const [text, setText] = useState("");
+  const [effects,setEffects]=useState<SpeechEffects|undefined>(undefined);
+  const [outputFormat,setOutputFormat]=useState('');
   const [performance,setPerformance]=useState<Performance>(defaultPerformance);
   const [restoredDictionaries,setRestoredDictionaries]=useState<{base:string;ids:string[]}|null>(null);
   const dictionaries=useMemo(()=>restoredDictionaries?.base===dictionaryId?restoredDictionaries.ids:(dictionaryId?[dictionaryId]:[]),[restoredDictionaries,dictionaryId]);
@@ -92,9 +96,9 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   const model = models.find(item => item.model_id === modelId);
   const clean = normalize(text);
   const preparation=useMemo(()=>{
-    try{return {...prepareSpeech(text,modelId,{...settings,...(modelId==='eleven_v3'?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance),error:''};}
+    try{validateEffectsFormat(effects,outputFormat||'mp3_44100_128');if(normalize(text).length>SHORT_LIMIT)validateLongFormat(outputFormat||undefined,normalize(text).length);return {...prepareSpeech(text,modelId,{...settings,...(modelId==='eleven_v3'?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance),error:''};}
     catch(e){return {text:normalize(text),voiceSettings:settings,performance,error:(e as Error).message};}
-  },[text,modelId,settings,performance]);
+  },[text,modelId,settings,performance,effects,outputFormat]);
   const chars = preparation.text.length;
   const long = chars > SHORT_LIMIT || clean.length > SHORT_LIMIT;
   const isV3 = modelId === "eleven_v3";
@@ -102,8 +106,9 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   const localQuote = model?.available && chars ? Math.max(model.minimum_credits ?? 0, chars * pricePerChar) : null;
   const minutes = chars ? chars / CHARS_PER_MINUTE : 0;
   const balanceMinutes = availableCredits !== null && pricePerChar > 0 ? availableCredits / (pricePerChar * CHARS_PER_MINUTE) : null;
-  const script:SpeechScript={text,voice_id:voiceId,model_id:modelId,voice_settings:{...settings,...(isV3?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance:{...performance,preview:false},dictionary_ids:dictionaries,...(language?{language_code:language}:{})};
+  const script:SpeechScript={...(effects?{audio_effects:effects}:{}),...(outputFormat?{output_format:outputFormat}:{}),text,voice_id:voiceId,model_id:modelId,voice_settings:{...settings,...(isV3?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance:{...performance,preview:false},dictionary_ids:dictionaries,...(language?{language_code:language}:{})};
   function restoreScript(saved:SpeechScript){
+    setEffects(saved.audio_effects);setOutputFormat(saved.output_format??'');
     setText(saved.text);setVoiceId(saved.voice_id);setModelId(saved.model_id);
     setSettings({...defaults,...saved.voice_settings});setLanguage(saved.language_code??'');
     setPerformance({...saved.performance,preview:false});setRestoredDictionaries({base:dictionaryId,ids:saved.dictionary_ids??[]});
@@ -111,9 +116,9 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   }
   const draft=useVoiceDraft(project,script,restoreScript);
   const payload = useMemo(() => ({
-    text: clean, voice_id: voiceId, model_id: modelId, voice_settings: {...settings,...(isV3?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance,
+    ...(effects?{audio_effects:effects}:{}),...(outputFormat?{output_format:outputFormat}:{}),text: clean, voice_id: voiceId, model_id: modelId, voice_settings: {...settings,...(isV3?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance,
     ...(language&&speechCapabilities[modelId as keyof typeof speechCapabilities]?.language ? { language_code: language } : {}), ...(dictionaries.length ? { dictionary_ids: dictionaries } : {}),
-  }), [clean, voiceId, modelId, settings, isV3, performance, language, dictionaries]);
+  }), [clean, voiceId, modelId, settings, isV3, performance, language, dictionaries, effects, outputFormat]);
 
   // Long texts are quoted by the server with the same rules used to reserve them.
   const quoteKey = `${project}:${JSON.stringify(payload)}`;
@@ -344,6 +349,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
             {dictionaries.some(id=>!dictionaryOptions.some(d=>d.id===id))&&<button className="mt-2 text-xs text-amber-800" onClick={()=>setRestoredDictionaries({base:dictionaryId,ids:[]})}>Limpar vínculos de pronúncia indisponíveis</button>}
             <p className="mt-2 text-xs text-slate-500">{dictionaries.length?`${dictionaries.length} dicionário(s) vinculado(s) ao roteiro.`:'Sem dicionário vinculado. Configure a pronúncia de nomes e marcas em Mais ferramentas → Dicionário de pronúncia.'}</p></details>
 
+          <VoiceOutputOptions project={project} effects={effects} onEffects={setEffects} format={outputFormat} onFormat={setOutputFormat} long={long} />
           {balanceMinutes !== null && <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">Seu saldo rende cerca de <strong>{number(Math.floor(balanceMinutes))} min</strong> de áudio com este modelo.</p>}
           </div>
         </aside>

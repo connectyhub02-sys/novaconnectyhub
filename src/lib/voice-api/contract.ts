@@ -1,3 +1,4 @@
+import {parseSpeechEffects,validateEffectsFormat} from './speech-options';
 import { normalizeSpeech, prepareSpeech, type SpeechScript } from './performance';
 export const voiceLimits = { characters: 4800, audioBytes: 40000000, requestsPerMinute: 10, concurrentPerWallet: 2 } as const;
 /** Output formats offered to customers, with the stored file type of each. */
@@ -15,7 +16,7 @@ export type VoiceInput = ReturnType<typeof parseVoiceInput>;
 export function parseVoiceInput(raw: unknown) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new VoiceError('invalid_input',422,'Envie um objeto JSON.');
   const b = raw as Record<string,unknown>;
-  if (Object.keys(b).some(k=>!['text','voice_id','model_id','voice_settings','dictionary_ids','language_code','output_format','with_timestamps','seed','previous_text','next_text','apply_text_normalization','performance'].includes(k))) throw new VoiceError('unsupported_parameter',422,'Parâmetro não suportado. Consulte a documentação de Voz.');
+  if (Object.keys(b).some(k=>!['text','voice_id','model_id','voice_settings','dictionary_ids','language_code','output_format','with_timestamps','seed','previous_text','next_text','apply_text_normalization','performance','audio_effects'].includes(k))) throw new VoiceError('unsupported_parameter',422,'Parâmetro não suportado. Consulte a documentação de Voz.');
   const source = typeof b.text === 'string' ? normalizeSpeech(b.text) : '';
   let text=source;
   if (!text || text.length>voiceLimits.characters) throw new VoiceError('text_limit',422,'Envie entre 1 e 4800 caracteres.');
@@ -52,8 +53,10 @@ export function parseVoiceInput(raw: unknown) {
   if(prepared.performance.preview&&source.length>600)throw new VoiceError('preview_limit',422,'Selecione até 600 caracteres para a prévia.');
   text=prepared.text;
   if(text.length>voiceLimits.characters)throw new VoiceError('text_limit',422,'Texto e interpretação excedem 4800 caracteres.');
-  const script:SpeechScript={text:source,voice_id:b.voice_id,model_id:model,voice_settings:settings,...(typeof b.language_code==='string'?{language_code:b.language_code}:{}),dictionary_ids:dictionaryIds as string[],performance:prepared.performance};
-  return { ...extras, script, ...(dictionaryIds.length?{dictionary_ids:dictionaryIds as string[]}:{}),...(typeof b.language_code==='string'?{language_code:b.language_code}:{}),text, voice_id:b.voice_id, model_id:model, voice_settings:prepared.voiceSettings, output_format:(isVoiceFormat(b.output_format)?b.output_format:'mp3_44100_128') as VoiceFormat };
+  let audioEffects;try{audioEffects=parseSpeechEffects(b.audio_effects);validateEffectsFormat(audioEffects,String(b.output_format??'mp3_44100_128'));}catch(e){throw new VoiceError('invalid_effect',422,(e as Error).message);}
+  const options={...(audioEffects?{audio_effects:audioEffects}:{}),...(b.output_format!==undefined?{output_format:String(b.output_format)}:{})};
+  const script:SpeechScript={...options,text:source,voice_id:b.voice_id,model_id:model,voice_settings:settings,...(typeof b.language_code==='string'?{language_code:b.language_code}:{}),dictionary_ids:dictionaryIds as string[],performance:prepared.performance};
+  return { ...extras, ...(audioEffects?{audio_effects:audioEffects}:{}), script, ...(dictionaryIds.length?{dictionary_ids:dictionaryIds as string[]}:{}),...(typeof b.language_code==='string'?{language_code:b.language_code}:{}),text, voice_id:b.voice_id, model_id:model, voice_settings:prepared.voiceSettings, output_format:(isVoiceFormat(b.output_format)?b.output_format:'mp3_44100_128') as VoiceFormat };
 }
 export function voiceIdempotency(request: Request) {
   const key=request.headers.get('idempotency-key');

@@ -1,3 +1,4 @@
+import type {SpeechEffects} from './speech-options';
 /** Shared, deterministic speech direction. No provider calls or text rewriting. */
 export const speechCapabilities = {
   eleven_multilingual_v2: { timedPauses: true, emotions: false, speakerBoost: true, language: false },
@@ -15,7 +16,7 @@ export const interpretations = [
 ] as const;
 export type Performance = { style: typeof interpretations[number]['id']; intensity: 'gentle' | 'balanced' | 'strong'; preview: boolean };
 export type SpeechSettings = { stability?: number; similarity_boost?: number; style?: number; speed?: number; use_speaker_boost?: boolean };
-export type SpeechScript = { text: string; voice_id: string; model_id: string; voice_settings?: SpeechSettings; language_code?: string; dictionary_ids?: string[]; performance: Performance };
+export type SpeechScript = { audio_effects?:SpeechEffects; output_format?:string; text: string; voice_id: string; model_id: string; voice_settings?: SpeechSettings; language_code?: string; dictionary_ids?: string[]; performance: Performance };
 export const defaultPerformance: Performance = { style: 'natural', intensity: 'balanced', preview: false };
 export const directionMarkers = [
   { label: 'Pausa · 0,5 s', tag: '<break time="0.5s" />', kind: 'timed' },

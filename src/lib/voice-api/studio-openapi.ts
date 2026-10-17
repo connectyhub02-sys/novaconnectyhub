@@ -18,10 +18,10 @@ const rule={oneOf:[object({type:{const:'alias'},string_to_replace:text(1,100),al
 export const studioSchemas={
  StudioInput:{oneOf:[
   operation('transcription',{...audio,language,diarize:{type:'boolean',default:false}},['asset_id']),
-  operation('audio_isolation',audio),operation('voice_change',{...audio,voice_id:text(1,100)}),
+  operation('audio_isolation',audio),operation('voice_change',{...audio,voice_id:text(1,100),output_format:{enum:['mp3_44100_128','mp3_44100_64','mp3_22050_32']},voice_settings:object({stability:{type:'number',minimum:0,maximum:1},similarity_boost:{type:'number',minimum:0,maximum:1},style:{type:'number',minimum:0,maximum:1},use_speaker_boost:{type:'boolean'}},[])},['asset_id','voice_id']),
   operation('forced_alignment',{...audio,text:text(1,4800)}),operation('dubbing',{...audio,target_language:language}),
   operation('gemini_tts',{voice_id:text(1,100),text:text(1,4800)}),
-  operation('long_tts',{voice_id:text(1,100),text:{...text(1,240000),description:'Livro ou documento inteiro. Toda a cotação é reservada antes do início.'},voice_settings:voiceSettings,language_code:language,dictionary_ids:dictionaries},['voice_id','text']),
+  operation('long_tts',{voice_id:text(1,100),text:{...text(1,240000),description:'Livro ou documento inteiro. Toda a cotação é reservada antes do início.'},audio_effects:ref('SpeechEffects'),performance:ref('SpeechPerformance'),output_format:{enum:['mp3_44100_128','mp3_44100_64','mp3_22050_32']},voice_settings:voiceSettings,language_code:language,dictionary_ids:dictionaries},['voice_id','text']),
   operation('dialogue',{turns:{type:'array',minItems:1,maxItems:50,description:'Soma até 2.000 caracteres e 10 vozes diferentes.',items:object({voice_id:text(1,100),text:text(1,2000)})},dictionary_ids:dictionaries},['turns']),
   operation('voice_design',{description:text(20,1000),sample_text:text(100,1000)}),
   operation('voice_remix',{voice_id:{...text(1,100),description:'Voz clonada ou desenhada do próprio projeto.'},description:text(5,1000),sample_text:text(100,1000)}),
@@ -78,4 +78,9 @@ operation=sound_effects recebe text (3–450 caracteres descrevendo o som), dura
 
 ## Voz desenhada e voz nativa
 voice_design recebe description (20–1.000 caracteres) e sample_text (100–1.000). As prévias privadas concluídas aparecem em GET /resources; ouça /resources/{id}/audio. voice_design_save recebe preview_id próprio, name (2–80) e description. A voz salva aparece no catálogo deste projeto. Cada criação/salvamento tem sua própria cotação; não são automaticamente gratuitos. gemini_tts recebe text de até 4.800 caracteres e uma voice_id de gemini_voices em /capabilities. Clones de outro serviço não são vozes nativas compatíveis. Nessa operação, a cotação é uma reserva máxima; o débito usa tokens de entrada e saída efetivamente informados, com liberação da diferença. Ausência da medição mantém a operação em conferência, sem inventar custo zero.
+`;
+
+export const speechExtensionGuide = `
+Efeitos e saída: long_tts aceita audio_effects e output_format MP3 32/64/128 kbps; padrão 64. Até 120.000 caracteres por volume em 128 kbps, 240.000 nos demais. A reverberação pode prolongar as transições entre partes.
+Usar minha interpretação: voice_change usa áudio próprio enviado a /assets, com duração medida no servidor, e voice_id do catálogo autorizado. Aceita ajustes stability/similarity_boost/style (0–1), use_speaker_boost e saída MP3 32/64/128; a atuação e o ritmo vêm da gravação. Em 128 kbps, até 20 minutos; nos demais, até 30 minutos, sempre 20 MB de entrada. Remoção de ruído não é ativada junto. Consulte /operations/quote e envie X-Max-Credits antes de transformar. Reproduzir um resultado existente não gera nova transformação.
 `;

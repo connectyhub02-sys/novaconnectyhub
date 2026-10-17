@@ -1,5 +1,6 @@
 import {resolveStudioDictionaries} from './studio-dictionaries';
 import 'server-only';
+import {validateSpeechEffects} from './speech-effects';
 import {createHash} from 'node:crypto';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {inngest} from '@/lib/inngest/client';
@@ -36,7 +37,7 @@ export async function ownedStudioOperation(auth:VoiceAuth,id:string){
  const {data:s,error:se}=await auth.client.from('studio_operations').select('*').eq('id',id).single<Operation>();
  if(se||!s)throw new VoiceError('service_unavailable',503,'Registro da operação indisponível.');return {r,s};
 }
-export function publicStudioOperation(r:Receipt,s:Operation){return {id:r.id,project_id:r.project_id,billing_organization_id:r.billing_organization_id,operation:s.operation,voice_id:s.input.voice_id,script:s.operation==='long_tts'?(s.input.script??null):null,model_id:r.model_id,status:r.status,usage:{credits:Number(r.charged_credits),reserved_credits:Number(r.reserved_credits),quoted_credits:Number(r.quoted_credits),units:s.actual_units},result:r.status==='completed'&&s.result_state!=='deleted'&&s.result_state!=='deleting'?{path:`/api/v1/voice/operations/${r.id}/result`,content_type:s.result_mime}:null,result_state:s.result_state??'available',error:r.error_code?{code:r.error_code}:null,created_at:r.created_at};}
+export function publicStudioOperation(r:Receipt,s:Operation){return {id:r.id,project_id:r.project_id,billing_organization_id:r.billing_organization_id,operation:s.operation,...(s.operation==='voice_change'?{reference:{asset_id:s.input.asset_id,voice_id:s.input.voice_id,voice_settings:s.input.voice_settings,output_format:s.input.output_format}}:{}),...(['long_tts','voice_change'].includes(s.operation)?{output_format:s.input.output_format??(s.operation==='long_tts'?'mp3_44100_64':'mp3_44100_128')}:{}),voice_id:s.input.voice_id,script:s.operation==='long_tts'?(s.input.script??null):null,model_id:r.model_id,status:r.status,usage:{credits:Number(r.charged_credits),reserved_credits:Number(r.reserved_credits),quoted_credits:Number(r.quoted_credits),units:s.actual_units},result:r.status==='completed'&&s.result_state!=='deleted'&&s.result_state!=='deleting'?{path:`/api/v1/voice/operations/${r.id}/result`,content_type:s.result_mime}:null,result_state:s.result_state??'available',error:r.error_code?{code:r.error_code}:null,created_at:r.created_at};}
 export async function ownedStudioResource(auth:VoiceAuth,id:string,kind?:string){
  if(!uuid.test(id))throw new VoiceError('not_found',404,'Recurso não encontrado.');
  const {data,error}=await auth.client.from('studio_resources').select('*').eq('id',id).eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).eq('status','ready').maybeSingle<Resource>();
@@ -45,8 +46,10 @@ export async function ownedStudioResource(auth:VoiceAuth,id:string,kind?:string)
  const {r}=await ownedStudioOperation(auth,data.operation_id);if(r.status!=='completed')throw new VoiceError('resource_pending',409,'Recurso ainda em processamento.');return data;
 }
 export async function validateResources(auth:VoiceAuth,input:StudioInput){
+ await validateSpeechEffects(auth,input.audio_effects);
  let duration:number|undefined;
  if(input.asset_id){const a=await ownedStudioAsset(auth,input.asset_id);if(a.status!=='ready'||a.duration_seconds===null)throw new VoiceError('asset_pending',409,'Espere o áudio terminar de processar.');duration=Number(a.duration_seconds);}
+ if(input.operation==='voice_change'&&(input.output_format??'mp3_44100_128')==='mp3_44100_128'&&duration!==undefined&&duration>1200)throw new VoiceError('duration_limit',422,'Em 128 kbps, use até 20 minutos ou selecione 64 kbps.');
  if(input.operation==='gemini_tts')studioGeminiRequest({text:input.text!,voiceId:input.voice_id!,modelId:input.model_id});
  else if(input.voice_id||input.turns){const voices=(await voiceCatalog(auth)).voices;for(const id of input.turns?.map(t=>t.voice_id)??[input.voice_id!])if(!voices.some(v=>v.voice_id===id&&v.status==='ready'&&(input.operation!=='voice_remix'||['private','designed'].includes(v.kind))))throw new VoiceError('voice_unavailable',404,input.operation==='voice_remix'?'Remix só para vozes clonadas ou desenhadas neste projeto.':'Voz não disponível neste projeto.');}
  if(input.preview_id)await ownedStudioResource(auth,input.preview_id,'voice_preview');
@@ -66,7 +69,7 @@ export async function createStudioOperation(auth:VoiceAuth,request:Request,raw:u
  const duration=await validateResources(auth,input),units=studioInputUnits(input,duration),{rates,price}=await studioPrice(auth,input,units);
  studioCreditCeiling(request,price.chargeCredits);
  const jsonOnly=['transcription','forced_alignment','dictionary_create','voice_design_save'].includes(input.operation);
- const r=await rpc(auth.client,'reserve_studio_operation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_operation:input.operation,p_model:input.model_id,p_voice:input.voice_id??'studio',p_characters:Math.max(1,input.text?.length??input.sample_text?.length??input.turns?.reduce((n,t)=>n+t.text.length,0)??1),p_charge:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_input:input,p_units:units,p_storage_bytes:input.operation==='long_tts'?longTextStorageBytes(input.text!.length):jsonOnly?4_000_000:20_000_000,p_storage_files:['voice_design','voice_remix'].includes(input.operation)?4:1});
+ const r=await rpc(auth.client,'reserve_studio_operation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_operation:input.operation,p_model:input.model_id,p_voice:input.voice_id??'studio',p_characters:Math.max(1,input.text?.length??input.sample_text?.length??input.turns?.reduce((n,t)=>n+t.text.length,0)??1),p_charge:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_input:input,p_units:units,p_storage_bytes:input.operation==='long_tts'?longTextStorageBytes(input.text!.length*(input.output_format==='mp3_44100_128'?2:1)):jsonOnly?4_000_000:20_000_000,p_storage_files:['voice_design','voice_remix'].includes(input.operation)?4:1});
  // A lost queue acknowledgment is safe: the sweeper finds this reserved receipt.
  await inngest.send({name:input.operation==='long_tts'?'connectyhub/studio.long_tts':'connectyhub/studio.operation',data:{operationId:r.id}}).catch(()=>{});
  const current=await ownedStudioOperation(auth,r.id);return {...publicStudioOperation(current.r,current.s),replayed:!r.claimed};
@@ -226,7 +229,7 @@ export async function runStudioOperation(client:SupabaseClient,id:string){
    const result=await readStudioGeminiResult(response);const final=await persist(auth,r,s,{bytes:result.bytes,mime:result.contentType,units:result.usage});return {status:final.status};
   }
   if(['transcription','audio_isolation','voice_change','forced_alignment'].includes(input.operation)){
-   const request={operation:input.operation,audio:audio!,language:input.language,diarize:input.diarize??false,voiceId:input.voice_id,text:input.text} as StudioAudioRequest;
+   const request={operation:input.operation,audio:audio!,language:input.language,diarize:input.diarize??false,voiceId:input.voice_id,text:input.text,voiceSettings:input.voice_settings,outputFormat:input.output_format} as StudioAudioRequest;
    dispatched=true;const response=await requestStudioAudio(apiKey,request);await checkResponse(response);
    const result=await readStudioAudioResult(response,['audio_isolation','voice_change'].includes(input.operation));
    const final=await persist(auth,r,s,{bytes:result.bytes,mime:result.contentType,units:s.reserved_units});return {status:final.status};

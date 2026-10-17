@@ -1,0 +1,24 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {studioFormats,type SpeechEffects,type EffectsCatalog} from '../../lib/voice-api/speech-options';
+const labels:Record<string,string>={old_radio:'Rádio antigo',robot:'Robô',cheap_microphone:'Microfone simples',phone:'Telefone',low_quality_phone:'Telefone abafado',bright_phone:'Telefone nítido',small_room:'Sala pequena',big_room:'Sala ampla',hall:'Salão',tunnel:'Túnel',street:'Rua',valley:'Vale',forest:'Floresta',call_center:'Central de atendimento',cafe:'Café',city:'Cidade',keyboard:'Teclado'};
+const field='mt-1 min-h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white p-2 text-sm';
+export function VoiceOutputOptions({project,effects,onEffects,format,onFormat,long}:{project:string;effects:SpeechEffects|undefined;onEffects:(v:SpeechEffects|undefined)=>void;format:string;onFormat:(v:string)=>void;long:boolean}){
+ const [catalog,setCatalog]=useState<EffectsCatalog|null>(null),[error,setError]=useState(''),[revision,setRevision]=useState(0);
+ useEffect(()=>{let active=true;fetch(`/api/dashboard/voice/effects?project=${encodeURIComponent(project)}`,{cache:'no-store'}).then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error?.message??'Efeitos indisponíveis.');return data;}).then(data=>{if(active){setCatalog(data);setError('');}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[project,revision]);
+ function change(key:keyof SpeechEffects,value:string|number){const next={...effects};if(value==='')delete next[key];else Object.assign(next,{[key]:value});onEffects(Object.keys(next).length?next:undefined);}
+ return <>
+  <details className="space-y-3 text-sm"><summary className="cursor-pointer font-semibold">Efeitos sobre a fala</summary>
+   <p className="text-xs text-slate-500">Altere o som e o ambiente da voz. A interpretação continua sendo escolhida separadamente.</p>
+   {error&&<p role="alert" className="text-xs text-amber-800">{error} <button type="button" className="underline" onClick={()=>setRevision(v=>v+1)}>Tentar novamente</button></p>}
+   {!catalog&&!error&&<p className="text-xs">Carregando efeitos…</p>}
+   {catalog&&([['filter_preset_id','filter_presets','Filtro'],['environment_id','environments','Ambiente'],['background_noise_id','background_noises','Som de fundo']] as const).map(([key,group,label])=><label className="block" key={key}>{label}<select aria-label={label} className={field} value={effects?.[key]??''} onChange={e=>change(key,e.target.value)}><option value="">Nenhum</option>{effects?.[key]&&!(catalog[group] as unknown as Record<string,string>[]).some(v=>v[key]===effects[key])&&<option value={effects[key]}>Efeito salvo indisponível</option>}{(catalog[group] as unknown as Record<string,string>[]).map(v=><option key={v[key]} value={v[key]}>{labels[v[key]]??v.name}</option>)}</select></label>)}
+   <label className="block">Distância do microfone <span className="text-xs text-slate-500">{Math.round((effects?.distance??0)*100)}%</span><input aria-label="Distância do microfone" className="mt-2 w-full" type="range" min={0} max={1} step={0.1} value={effects?.distance??0} onChange={e=>change('distance',Number(e.target.value))}/></label>
+   {effects?.environment_id&&<label className="block">Reverberação <span className="text-xs text-slate-500">{Math.round((effects.send_level??1)*100)}%</span><input aria-label="Reverberação" className="mt-2 w-full" type="range" min={0} max={1} step={0.1} value={effects.send_level??1} onChange={e=>change('send_level',Number(e.target.value))}/></label>}
+   <label className="block">Posição estéreo <span className="text-xs text-slate-500">{(effects?.pan??0)===0?'Centro':(effects?.pan??0)<0?'Esquerda':'Direita'}</span><input aria-label="Posição estéreo" className="mt-2 w-full" type="range" min={-1} max={1} step={0.1} value={effects?.pan??0} onChange={e=>change('pan',Number(e.target.value))}/></label>
+   {effects&&<button type="button" onClick={()=>onEffects(undefined)} className="text-xs text-blue-700 underline">Remover todos os efeitos</button>}
+   {long&&effects?.environment_id&&<p className="text-xs text-slate-500">Em textos longos, a reverberação é aplicada a cada parte e pode prolongar a transição entre elas. Ouça uma prévia.</p>}
+  </details>
+  <label className="block text-sm font-semibold">Formato de saída<select aria-label="Formato de saída" className={field} value={format} onChange={e=>onFormat(e.target.value)}><option value="">Automático · {long?'MP3 64 kbps':'MP3 128 kbps'}</option>{format&&!studioFormats.some(f=>f.id===format)&&<option value={format}>{format} · formato salvo</option>}{studioFormats.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select><span className="mt-1 block text-xs font-normal text-slate-500">128 kbps: maior qualidade e arquivo maior. Em textos longos, até 120 mil caracteres por volume.</span></label>
+ </>;
+}

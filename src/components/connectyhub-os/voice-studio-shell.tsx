@@ -20,14 +20,15 @@ type Project = { id: string; name: string; status: string; monthly_credit_limit:
 type Summary = { requests: number; completed: number; failed: number; pending: number; credits: number; daily: { day: string; requests: number; credits: number }[]; models: { model_id: string; requests: number; credits: number }[]; operations: { operation: string; requests: number; credits: number }[] };
 type HistoryRow = { id: string; project_id: string; operation: string; status: string; charged_credits: number; reserved_credits: number; created_at: string; error_code: string | null; model_id?: string; characters?: number };
 type Data = { projects: Project[]; wallet?: { balance_credits: number; reserved_credits: number } | null; summary: Summary; history: HistoryRow[] };
-type Section = "tts" | "sfx" | "music" | "tools" | "voices" | "agents" | "history" | "api";
+type Section = "reference" | "tts" | "sfx" | "music" | "tools" | "voices" | "agents" | "history" | "api";
 
 const menu: Array<{ group: string; items: Array<[Section | "generations", string, typeof AudioLines]> }> = [
-  { group: "Criar", items: [["tts", "Texto para fala", AudioLines], ["sfx", "Efeitos sonoros", Sparkles], ["music", "Música", Music], ["tools", "Mais ferramentas", Wand2]] },
+  { group: "Criar", items: [["tts", "Texto para fala", AudioLines], ["reference", "Usar minha interpretação", AudioLines], ["sfx", "Efeitos sonoros", Sparkles], ["music", "Música", Music], ["tools", "Mais ferramentas", Wand2]] },
   { group: "Vozes", items: [["voices", "Vozes", Library], ["agents", "Agentes de voz", Bot]] },
   { group: "Conta", items: [["generations", "Histórico", History], ["history", "Uso e créditos", Coins], ["api", "API e desenvolvedores", Code2]] },
 ];
 const titles: Record<Section, [string, string]> = {
+  reference: ["Usar minha interpretação", "Grave ou envie sua atuação e transforme na voz escolhida, incluindo vozes clonadas."],
   tts: ["Texto para fala", "Transforme qualquer texto em fala realista, de uma frase a um livro inteiro."],
   sfx: ["Efeitos sonoros", "Descreva o som e receba o efeito pronto para usar."],
   music: ["Música", "Crie trilhas originais a partir de uma descrição."],
@@ -126,9 +127,10 @@ export function VoiceStudioShell() {
               <VoiceStudioComposer key={project} project={project} voices={ready.voices} models={ready.models} dictionaryId="" resourceRevision={catalogRevision} availableCredits={available}
                 sidePanel={sidePanel} onSidePanelChange={setSidePanel} selectedVoice={voiceId} onVoiceChange={setVoiceId} onDone={() => { void refresh(); }} />
             </div>
+            {section === "reference" && <StudioTools key={`${project}-reference`} project={project} voices={ready.voices} only="voice_change" onChanged={reloadCatalog} />}
             {section === "sfx" && <StudioTools key={`${project}-sfx`} project={project} voices={ready.voices} only="sound_effects" onChanged={reloadCatalog} />}
             {section === "music" && <StudioTools key={`${project}-music`} project={project} voices={ready.voices} only="music" onChanged={reloadCatalog} />}
-            {section === "tools" && <StudioTools key={`${project}-tools`} project={project} voices={ready.voices} exclude={["sound_effects", "music"]} onChanged={reloadCatalog} />}
+            {section === "tools" && <StudioTools key={`${project}-tools`} project={project} voices={ready.voices} exclude={["sound_effects", "music", "voice_change"]} onChanged={reloadCatalog} />}
             {section === "voices" && <VoicesPage key={project} project={project} voices={ready.voices} cloning={ready.cloning} onUse={id => { setVoiceId(id); go("tts"); }} onChanged={reloadCatalog} />}
             {section === "agents" && <VoiceAgentsPanel voices={ready.voices} />}
             {section === "history" && <HistoryPage data={data} days={days} onDays={value => { setData(null); setDays(value); }} />}

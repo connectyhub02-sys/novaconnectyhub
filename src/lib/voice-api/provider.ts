@@ -26,7 +26,7 @@ export async function timestampedVoiceAudio(response:Response) {
 }
 
 function body(input:VoiceInput,dictionaries:DictionaryLocator[]) {
-  return JSON.stringify({text:input.text,model_id:input.model_id,voice_settings:input.voice_settings,
+  return JSON.stringify({...(input.audio_effects?{audio_effects:input.audio_effects}:{}),text:input.text,model_id:input.model_id,voice_settings:input.voice_settings,
     ...(input.language_code?{language_code:input.language_code}:{}),
     ...(input.seed!==undefined?{seed:input.seed}:{}),
     ...(input.previous_text?{previous_text:input.previous_text}:{}),
