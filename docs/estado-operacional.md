@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## Voz: interpretação, prévia e roteiros recuperáveis — 17/10/2026
+
+Primeira entrega publicada às 10h41 BRT: `ed4d0640`, slot a/3130; versão anterior
+`d63e71ae` preservada no b/3131. Editor com pausas/emoções no cursor, perfis de
+interpretação no v3 (incluindo clones), prévia paga de até 600 caracteres com
+cotação, rascunho pessoal versionado e histórico paginado com roteiro e ajustes
+das novas gerações. Recibos antigos continuam acessíveis sem inventar texto;
+repetições anteriores preservam idempotência e jobs antigos preservam divisão.
+
+Migration aditiva `0208` aplicada às 10h24 BRT com backup privado em
+`/var/backups/connectyhub/manual/pre-0208-20261017T132453Z`. Preservados 159 recibos
+e 72 operações. RLS/grants/trigger, REST do serviço e bloqueio anônimo conferidos.
+56 testes, ESLint, TypeScript, UI simulada em 1920/1366/390 px e build de 120 páginas
+aprovados. Candidata e HTTPS público: saúde/SHA, 19 assets, bundle, autenticação
+e Inngest assinado com 58 funções aprovados. Builder parado.
+
+Nenhuma geração paga nos testes; qualidade emocional e semelhança do clone do
+André ainda dependem de escuta real. Não habilitados v4, efeitos/novos formatos
+nem atuação por áudio de referência. Antes de rollback, concluir novos jobs
+longos com script ou manter worker compatível; não restaurar o banco.
+[Implementação, evidências e limites](voz-interpretacao-editor-2026-10-17.md).
+
 ## Histórico de voz em aba separada — 17/10/2026
 
 Após aprovar a largura/layout, o titular pediu um histórico discreto como na
