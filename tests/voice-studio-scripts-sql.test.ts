@@ -1,0 +1,25 @@
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+import {it,expect} from 'vitest';
+
+it('stores long scripts atomically, isolates drafts, and detects competing saves',async()=>{
+  const db=new PGlite();
+  await db.exec(`create role anon;create role authenticated;create role service_role;
+    create schema auth;create table auth.users(id uuid primary key);
+    create table organizations(id uuid primary key);create table voice_projects(id uuid primary key);
+    create table voice_generations(id uuid primary key,project_id uuid,organization_id uuid,operation text default 'studio',created_at timestamptz default now());
+    create table studio_operations(id uuid references voice_generations(id),operation text,input jsonb);
+    insert into auth.users values('11111111-1111-1111-1111-111111111111');
+    insert into organizations values('22222222-2222-2222-2222-222222222222');
+    insert into voice_projects values('33333333-3333-3333-3333-333333333333');`);
+  await db.exec(readFileSync('supabase/migrations/0208_voice_studio_scripts.sql','utf8'));
+  await db.exec(`insert into voice_generations(id) values('44444444-4444-4444-4444-444444444444');
+    insert into studio_operations values('44444444-4444-4444-4444-444444444444','long_tts','{"script":{"text":"Roteiro privado"}}');`);
+  expect((await db.query<{studio_script:{text:string}}>('select studio_script from voice_generations')).rows[0].studio_script.text).toBe('Roteiro privado');
+  await db.exec(`insert into voice_studio_drafts(project_id,organization_id,user_id,script) values('33333333-3333-3333-3333-333333333333','22222222-2222-2222-2222-222222222222','11111111-1111-1111-1111-111111111111','{"text":"draft"}');`);
+  expect((await db.query('update voice_studio_drafts set version=2 where version=1 returning version')).rows).toHaveLength(1);
+  expect((await db.query('update voice_studio_drafts set version=2 where version=1 returning version')).rows).toHaveLength(0);
+  await db.exec('set role authenticated');
+  await expect(db.query('select * from voice_studio_drafts')).rejects.toThrow(/permission denied/);
+  await db.exec('reset role');await db.close();
+},30000);

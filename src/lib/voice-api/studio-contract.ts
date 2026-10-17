@@ -1,4 +1,5 @@
 import {parseDictionaryIds} from './studio-dictionaries';
+import {prepareSpeech,splitSpeechText,performancePrefix,type SpeechScript} from './performance';
 import {VoiceError} from './contract';
 export const studioDefinitions={
  transcription:{name:'Transcrição',model:'scribe_v2',provider:'elevenlabs',feature:'studio_transcription',unit:'minute',audio:true},
@@ -23,7 +24,7 @@ export const longTextMaxCharacters=240000;
 export type VoiceSettings={stability?:number;similarity_boost?:number;style?:number;speed?:number;use_speaker_boost?:boolean};
 export type StudioOperation=keyof typeof studioDefinitions;
 type Rule={type:'alias';string_to_replace:string;alias:string}|{type:'phoneme';string_to_replace:string;phoneme:string;alphabet:'ipa'|'cmu-arpabet'};
-export type StudioInput={operation:StudioOperation;model_id:string;voice_settings?:VoiceSettings;language_code?:string;duration_seconds?:number;prompt_influence?:number;prompt?:string;music_length_ms?:number;asset_id?:string;voice_id?:string;text?:string;language?:string;diarize?:boolean;turns?:Array<{text:string;voice_id:string}>;description?:string;sample_text?:string;preview_id?:string;name?:string;rules?:Rule[];parent_dictionary_id?:string;target_language?:string;dictionary_ids?:string[]};
+export type StudioInput={script?:SpeechScript;operation:StudioOperation;model_id:string;voice_settings?:VoiceSettings;language_code?:string;duration_seconds?:number;prompt_influence?:number;prompt?:string;music_length_ms?:number;asset_id?:string;voice_id?:string;text?:string;language?:string;diarize?:boolean;turns?:Array<{text:string;voice_id:string}>;description?:string;sample_text?:string;preview_id?:string;name?:string;rules?:Rule[];parent_dictionary_id?:string;target_language?:string;dictionary_ids?:string[]};
 const fail=(message='Parâmetros da operação inválidos.')=>new VoiceError('invalid_operation',422,message);
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw fail();return v as Record<string,unknown>;}
 function text(v:unknown,min:number,max:number){if(typeof v!=='string'||v.trim().length<min||v.length>max)throw fail(`Texto deve ter entre ${min} e ${max} caracteres.`);return v.trim();}
@@ -58,12 +59,20 @@ export function parseStudioInput(raw:unknown):StudioInput{
   case 'forced_alignment':allowed.push('text');result.text=text(b.text,1,4800);break;
   case 'dubbing':allowed.push('target_language');result.target_language=language(b.target_language);break;
   case 'long_tts':{
-   allowed.push('voice_id','text','voice_settings','language_code','dictionary_ids');result.voice_id=identifier(b.voice_id);
+   allowed.push('voice_id','text','voice_settings','language_code','dictionary_ids','performance');result.voice_id=identifier(b.voice_id);
    const normalized=typeof b.text==='string'?b.text.replace(/\r\n/g,'\n').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim():'';
    if(normalized.length<1||normalized.length>longTextMaxCharacters)throw fail(`O texto deve ter entre 1 e ${longTextMaxCharacters.toLocaleString('pt-BR')} caracteres. Divida livros maiores em volumes.`);
    result.text=normalized;if(b.language_code!==undefined)result.language_code=language(b.language_code);
    if(b.voice_settings!==undefined)result.voice_settings=parseVoiceSettings(b.voice_settings);
-   const dictionaries=parseDictionaryIds(b.dictionary_ids);if(dictionaries.length)result.dictionary_ids=dictionaries;break;
+   const dictionaries=parseDictionaryIds(b.dictionary_ids);if(dictionaries.length)result.dictionary_ids=dictionaries;
+   try {
+    const prepared=prepareSpeech(normalized,result.model_id,result.voice_settings,b.performance);
+    result.script={text:normalized,voice_id:result.voice_id!,model_id:result.model_id,voice_settings:result.voice_settings,language_code:result.language_code,dictionary_ids:dictionaries,performance:prepared.performance};
+    result.text=prepared.text;
+    if(result.voice_settings||Object.keys(prepared.voiceSettings).length)result.voice_settings=prepared.voiceSettings;
+    if(result.text.length>longTextMaxCharacters)throw new Error('Texto e interpretação excedem o limite. Divida em volumes.');
+   } catch(e) {throw fail((e as Error).message);}
+   break;
   }
   case 'sound_effects':{
    allowed.push('text','duration_seconds','prompt_influence');result.text=text(b.text,3,450);
@@ -105,7 +114,7 @@ export function studioInputUnits(input:StudioInput,duration?:number){
   return {minutes:Math.ceil(duration)/60};
  }
  if(input.operation==='dialogue')return {characters:input.turns!.reduce((n,t)=>n+t.text.length,0)};
- if(input.operation==='long_tts')return {characters:input.text!.length};
+ if(input.operation==='long_tts')return {characters:splitSpeechText(input.text!,input.model_id==='eleven_v3'?2400:4000,input.script?performancePrefix(input.script.performance):'').reduce((sum,part)=>sum+part.length,0)};
  // Generated length is chosen up front, so the quote is exact: billed per minute of output.
  if(input.operation==='sound_effects')return {minutes:input.duration_seconds!/60};
  if(input.operation==='music')return {minutes:input.music_length_ms!/60000};

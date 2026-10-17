@@ -9,7 +9,7 @@ import {VoiceError} from './contract';
 export const voiceHash=(value:string)=>createHash('sha256').update(value).digest('hex');
 export function createVoiceSecret() {const secret=`ch_voice_${randomBytes(32).toString('hex')}`;return {secret,key_hash:voiceHash(secret),key_prefix:secret.slice(0,18)};}
 export type VoiceProject={id:string;organization_id:string;name:string;status:string;monthly_credit_limit:number|null};
-export type VoiceAuth={client:SupabaseClient;project:VoiceProject;keyId:string|null;planCode:string|null;billingOrg:string;studio:boolean};
+export type VoiceAuth={client:SupabaseClient;project:VoiceProject;keyId:string|null;planCode:string|null;billingOrg:string;studio:boolean;userId?:string};
 export async function voiceAccess(client:SupabaseClient,project:VoiceProject,keyId:string|null,studio=false):Promise<VoiceAuth> {
   if(project.status!=='active') throw new VoiceError('project_paused',403,'Este projeto está pausado.');
   const billing=await assertOrganizationOperationalAccess({organizationId:project.organization_id,client});
@@ -35,10 +35,10 @@ export async function voiceWorkspace() {
   return {w,client,org:w.organization.id,billingOrg:contract.billing_organization_id,planCode:contract.plan_code};
 }
 export async function authenticateVoiceStudio(request:Request) {
-  const {client,org}=await voiceWorkspace();
+  const {client,org,w}=await voiceWorkspace();
   const id=new URL(request.url).searchParams.get('project');
   if(!id || !/^[a-f0-9-]{36}$/i.test(id)) throw new VoiceError('project_required',422,'Escolha um projeto de Voz.');
   const {data:project,error}=await client.from('voice_projects').select('*').eq('id',id).eq('organization_id',org).maybeSingle<VoiceProject>();
   if(error || !project) throw new VoiceError('not_found',404,'Projeto não encontrado nesta conta.');
-  return voiceAccess(client,project,null,true);
+  return {...await voiceAccess(client,project,null,true),userId:w.user.id};
 }

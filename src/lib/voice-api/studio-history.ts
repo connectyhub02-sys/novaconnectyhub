@@ -1,14 +1,15 @@
 // Presentation of authenticated receipts. Audio stays on the server; never keep
 // customer recordings in localStorage or depend on page-lifetime blob URLs.
+import type {SpeechScript} from './performance';
 export type StudioJob = {
   id: string; kind: "short" | "long"; status: string; credits: number;
-  text?: string; voice: string; model: string; createdAt: string; audioUrl?: string;
+  script?: SpeechScript; text?: string; voice: string; model: string; createdAt: string; audioUrl?: string;
 };
 
 export type StudioHistoryReceipt = {
   id: string; operation: string; status: string; model_id: string; voice_id?: string;
   created_at: string; usage: { credits: number; reserved_credits: number };
-  audio?: unknown; result?: unknown;
+  audio?: unknown; result?: unknown; script?: SpeechScript | null;
 };
 
 export function studioHistoryJobs(project: string, receipts: StudioHistoryReceipt[]): StudioJob[] {
@@ -18,7 +19,7 @@ export function studioHistoryJobs(project: string, receipts: StudioHistoryReceip
     return {
       id: row.id, kind: long ? "long" : "short", status: row.status,
       credits: Number(row.status === "completed" ? row.usage.credits : row.usage.reserved_credits || row.usage.credits),
-      voice: row.voice_id ?? "", model: row.model_id, createdAt: row.created_at,
+      text:row.script?.text,script:row.script??undefined,voice: row.voice_id ?? row.script?.voice_id ?? "", model: row.model_id, createdAt: row.created_at,
       ...(playable ? { audioUrl: `/api/dashboard/voice/${long ? "operations" : "generations"}/${encodeURIComponent(row.id)}/${long ? "result" : "audio"}?project=${encodeURIComponent(project)}` } : {}),
     };
   });
@@ -30,7 +31,7 @@ export function mergeStudioHistory(current: StudioJob[], saved: StudioJob[]): St
     const local = byId.get(job.id);
     // Old receipts do not contain the submitted text. Preserve it only when it
     // is still available in this session; do not invent a reusable transcript.
-    byId.set(job.id, { ...job, text: job.text ?? local?.text, voice: job.voice || local?.voice || "" });
+    byId.set(job.id, { ...job, text: job.text ?? local?.text, script:job.script??local?.script, voice: job.voice || local?.voice || "" });
   }
-  return [...byId.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 50);
+  return [...byId.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }

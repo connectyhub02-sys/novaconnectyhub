@@ -1,3 +1,4 @@
+import {splitSpeechText} from '../src/lib/voice-api/performance';
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { serverModuleHarness } from "./helpers/server-module-harness";
@@ -45,7 +46,7 @@ describe("long text contract", () => {
     const text = "a ".repeat(longTextMaxCharacters / 2).trim();
     const input = parseStudioInput({ operation: "long_tts", voice_id: "v", text });
     expect(input.model_id).toBe("eleven_multilingual_v2");
-    expect(studioInputUnits(input)).toEqual({ characters: text.length });
+    expect(studioInputUnits(input)).toEqual({ characters: splitSpeechText(text,4000).reduce((n,part)=>n+part.length,0) });
     expect(() => parseStudioInput({ operation: "long_tts", voice_id: "v", text: "a".repeat(longTextMaxCharacters + 1) })).toThrow("volumes");
   });
 

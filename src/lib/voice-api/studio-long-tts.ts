@@ -1,3 +1,4 @@
+import {splitSpeechText,performancePrefix} from './performance';
 import 'server-only';
 import {createHash} from 'node:crypto';
 import type {SupabaseClient} from '@supabase/supabase-js';
@@ -41,6 +42,8 @@ export function splitLongText(text:string,limit:number){
  }
  return parts;
 }
+
+export const longTextParts=(input:StudioInput)=>input.script?splitSpeechText(input.text!,longTextPartLimit(input.model_id),performancePrefix(input.script.performance)):splitLongText(input.text!,longTextPartLimit(input.model_id));
 
 export function longTextRequestBody(input:StudioInput,parts:string[],index:number,dictionaries:unknown[]=[]){
  const stitched=input.model_id!=='eleven_v3';
@@ -101,13 +104,13 @@ export async function prepareLongText(client:SupabaseClient,id:string){
    if(JSON.stringify(current.rates)!==JSON.stringify(r.rate_snapshot))throw new VoiceError('pricing_changed',409,'Tarifa alterada antes do processamento.');
    await rpc(client,'start_voice_generation',{p_id:id});
   }catch(error){
-   if(error instanceof VoiceError&&error.code==='voice_dispatch_state')return {status:'processing',parts:splitLongText(s.input.text!,longTextPartLimit(s.input.model_id)).length};
+   if(error instanceof VoiceError&&error.code==='voice_dispatch_state')return {status:'processing',parts:longTextParts(s.input).length};
    const stopped=await rpc(client,'fail_reserved_studio_operation',{p_id:id,p_error:error instanceof VoiceError?error.code:'prepare_failed'}).catch(()=>null);
    return {status:stopped?.status??'failed',parts:0};
   }
   ({r,s}=await load(client,id));
  }
- return {status:'processing',parts:splitLongText(s.input.text!,longTextPartLimit(s.input.model_id)).length};
+ return {status:'processing',parts:longTextParts(s.input).length};
 }
 
 /** Idempotent: an existing stored part is reused, never generated again. */
@@ -117,7 +120,7 @@ export async function generateLongTextPart(client:SupabaseClient,id:string,index
  const path=partPath(r,index);
  const existing=await client.storage.from(studioBucket).download(path);
  if(!existing.error){const bytes=Buffer.from(await existing.data.arrayBuffer());return {path,bytes:bytes.length,sha256:sha(bytes)};}
- const parts=splitLongText(s.input.text!,longTextPartLimit(s.input.model_id));
+ const parts=longTextParts(s.input);
  if(index<0||index>=parts.length)return stop(client,id,true,'part_out_of_range');
  // Heartbeat: the recovery sweeper only requeues receipts idle for 5 minutes.
  await client.from('voice_generations').update({updated_at:new Date().toISOString()}).eq('id',id).eq('status','processing');
@@ -147,11 +150,11 @@ export async function generateLongTextPart(client:SupabaseClient,id:string,index
 export async function assembleLongText(client:SupabaseClient,id:string,parts:ResultPart[]){
  const {r,s,auth}=await load(client,id);
  if(r.status!=='processing')return {status:r.status};
- const expected=splitLongText(s.input.text!,longTextPartLimit(s.input.model_id)).length;
+ const expected=longTextParts(s.input).length;
  if(parts.length!==expected)return stop(client,id,true,'parts_missing');
  const bytes=parts.reduce((total,part)=>total+part.bytes,0);
  if(bytes>s.storage_reserved_bytes)return stop(client,id,true,'result_limit');
- const units={characters:s.input.text!.length};
+ const units={characters:s.input.script?longTextParts(s.input).reduce((sum,part)=>sum+part.length,0):s.input.text!.length};
  const receipt:SavedResult={mime:'audio/mpeg',bytes,main_bytes:bytes,sha256:sha(Buffer.from(parts.map(part=>part.sha256).join(':'))),files:1,units,parts};
  const saved=await client.from('studio_operations').update({result_manifest:receipt}).eq('id',id);
  if(saved.error)throw new VoiceError('storage_pending',503,'Medição aguardando confirmação.');

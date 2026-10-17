@@ -6,7 +6,6 @@ import { AudioLines, BookOpen, Bot, Code2, History, Coins, KeyRound, Library, Lo
 import { CreditExplainer } from "./credit-explainer";
 import { VoiceUsageCharts } from "./voice-usage-charts";
 import { StudioTools } from "./studio-tools";
-import { VoiceDictionarySelect } from "./voice-dictionary-select";
 import { VoiceAvatar, VoiceLibrary, VoiceStudioComposer, voiceMeta, type StudioModel, type StudioVoice } from "./voice-studio-composer";
 import { VoiceDeveloperTools } from "./voice-developer-tools";
 import { VoiceAgentsPanel } from "./voice-agents-panel";
@@ -61,7 +60,6 @@ export function VoiceStudioShell() {
   const [catalog, setCatalog] = useState<{ project: string; voices: StudioVoice[]; models: StudioModel[]; cloning: { available: boolean; credits?: number } } | null>(null);
   const [catalogRevision, setCatalogRevision] = useState(0);
   const [voiceId, setVoiceId] = useState<string | undefined>(undefined);
-  const [dictionary, setDictionary] = useState("");
   const [message, setMessage] = useState("");
 
   const url = `/api/dashboard/voice?days=${days}`;
@@ -125,8 +123,7 @@ export function VoiceStudioShell() {
           {!data || !ready ? <p role="status" className="rounded-2xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500">{message ? "Não foi possível abrir o Estúdio. Atualize a página." : "Preparando seu Estúdio…"}</p> : <>
             {/* Kept mounted so the text survives a visit to another page of the Studio. */}
             <div className={section === "tts" ? "space-y-3" : "hidden"}>
-              <VoiceDictionarySelect project={project} revision={catalogRevision} value={dictionary} onChange={setDictionary} />
-              <VoiceStudioComposer key={project} project={project} voices={ready.voices} models={ready.models} dictionaryId={dictionary} availableCredits={available}
+              <VoiceStudioComposer key={project} project={project} voices={ready.voices} models={ready.models} dictionaryId="" resourceRevision={catalogRevision} availableCredits={available}
                 sidePanel={sidePanel} onSidePanelChange={setSidePanel} selectedVoice={voiceId} onVoiceChange={setVoiceId} onDone={() => { void refresh(); }} />
             </div>
             {section === "sfx" && <StudioTools key={`${project}-sfx`} project={project} voices={ready.voices} only="sound_effects" onChanged={reloadCatalog} />}

@@ -1,5 +1,6 @@
 import {resolveStudioDictionaries,type DictionaryLocator} from './studio-dictionaries';
 import 'server-only';
+import type {SpeechScript} from './performance';
 import {voiceHash,type VoiceAuth} from './auth';
 import {parseVoiceInput,voiceFormats,voiceIdempotency,VoiceError,voiceLimits,isVoiceFormat,type VoiceFormat,type VoiceInput} from './contract';
 import {voiceCatalog,quoteVoice} from './catalog';
@@ -8,7 +9,7 @@ import {assertStorageUploadAllowed} from '@/lib/storage/quotas';
 import {requestVoiceAudio,retrieveVoiceAudio,boundedVoiceAudio,streamVoiceAudio,timestampedVoiceAudio} from './provider';
 export const voiceBucket='connectyhub-voice';
 export type VoiceRow={id:string;project_id:string;organization_id:string;billing_organization_id:string;operation:string;status:string;voice_id:string;model_id:string;characters:number;quoted_credits:number;reserved_credits:number;charged_credits:number;error_code:string|null;provider_history_id:string|null;object_path:string|null;bytes_size:number|null;input_hash:string;created_at:string;updated_at:string;claimed?:boolean;output_format?:string|null;alignment_path?:string|null};
-type Row=VoiceRow;
+type Row=VoiceRow & {studio_script?:SpeechScript|null};
 const formatOf=(r:Row):VoiceFormat=>isVoiceFormat(r.output_format)?r.output_format:'mp3_44100_128';
 const audioPath=(r:Row)=>`${r.organization_id}/${r.project_id}/${r.id}.${voiceFormats[formatOf(r)].ext}`;
 export function publicVoiceGeneration(r:Row,replayed=false) {
@@ -17,7 +18,7 @@ export function publicVoiceGeneration(r:Row,replayed=false) {
     usage:{characters:r.characters,credits:Number(r.charged_credits),reserved_credits:Number(r.reserved_credits),quoted_credits:Number(r.quoted_credits)},
     audio:r.status==='completed'&&r.operation!=='voice_clone'?{path:`/api/v1/voice/generations/${r.id}/audio`,content_type:voiceFormats[format].mime,output_format:format,bytes:r.bytes_size}:null,
     alignment:r.status==='completed'&&r.alignment_path?{path:`/api/v1/voice/generations/${r.id}/alignment`}:null,
-    error:r.error_code?{code:r.error_code}:null,replayed,created_at:r.created_at};
+    script:r.studio_script??null,error:r.error_code?{code:r.error_code}:null,replayed,created_at:r.created_at};
 }
 export async function voiceRpc(auth:VoiceAuth,name:string,args:Record<string,unknown>):Promise<Row> {
   const {data,error}=await auth.client.rpc(name,args);
@@ -87,11 +88,16 @@ async function reserveVoice(auth:VoiceAuth,request:Request,raw:unknown,includedP
   if(!catalog.voices.some(v=>v.voice_id===input.voice_id && v.status==='ready'))throw new VoiceError('voice_unavailable',404,'Voz não disponível neste projeto.');
   const dictionaries=await resolveStudioDictionaries(auth,input.dictionary_ids??[]);
   const {rates,price}=await quoteVoice(auth,input.model_id,input.text.length);
+  const ceiling=request.headers.get('X-Max-Credits');
+  if(ceiling!==null&&(!Number.isFinite(Number(ceiling))||Number(ceiling)<0||(!includedPreview&&price.chargeCredits>Number(ceiling)+1e-9)))throw new VoiceError('quote_changed',409,'A estimativa mudou. Atualize o custo antes de gerar.');
   const {mime,ext}=voiceFormats[input.output_format];
   await assertStorageUploadAllowed({client:auth.client,organizationId:auth.project.organization_id,category:'generated_media',files:[{fileName:`voz.${ext}`,contentType:mime,sizeBytes:voiceLimits.audioBytes}]});
   const credentials=await loadElevenLabsCredentials(auth.client);
   const r=await voiceRpc(auth,'reserve_voice_generation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_voice:input.voice_id,p_model:input.model_id,p_characters:input.text.length,p_charge:includedPreview?0:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_operation:includedPreview?'voice_clone_preview':'text_to_speech'});
   if(!r.claimed)return {kind:'replay',row:await recoverVoice(auth,r)};
+  const scriptSaved=await auth.client.from('voice_generations').update({studio_script:input.script}).eq('id',r.id).eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).eq('status','reserved');
+  if(scriptSaved.error){await voiceRpc(auth,'finish_voice_generation',{p_id:r.id,p_status:'failed',p_error:'script_pending'}).catch(()=>{});throw new VoiceError('service_unavailable',503,'Não foi possível salvar o roteiro. Nenhum áudio foi solicitado.',r.id);}
+  r.studio_script=input.script;
   if(input.output_format!=='mp3_44100_128'){
     const saved=await auth.client.from('voice_generations').update({output_format:input.output_format}).eq('id',r.id).eq('status','reserved');
     if(saved.error){await voiceRpc(auth,'finish_voice_generation',{p_id:r.id,p_status:'failed',p_error:'format_pending'}).catch(()=>{});throw new VoiceError('service_unavailable',503,'Não foi possível registrar o formato.',r.id);}

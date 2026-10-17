@@ -1,3 +1,4 @@
+import * as speechPerformance from '../../src/lib/voice-api/performance';
 import * as fixedSchedule from "../../src/lib/whatsapp/fixed-schedule";
 import * as responsibleAttendance from "../../src/lib/whatsapp/responsible-attendance";
 import * as foodComposition from "../../src/lib/sales-catalog/food-composition";
@@ -22,6 +23,7 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
   runInNewContext(compiled, {
     module: loadedModule, exports: loadedModule.exports, require: (name: string) => {
       if (name === "server-only") return {};
+      if (name === "./performance") return speechPerformance;
       if (name === "@/lib/whatsapp/fixed-schedule") return fixedSchedule;
       // Pure helpers: a partial mock of this module keeps the real thinking config.
       if (name === "@/lib/gemini/models") return { ...geminiModels, ...(imports[name] as object | undefined) };

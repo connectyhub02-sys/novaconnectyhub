@@ -82,4 +82,4 @@ export async function studioAssetCommand(client:SupabaseClient,raw:unknown){
  if(b.status==='ready'&&(typeof b.duration_seconds!=='number'||!Number.isFinite(b.duration_seconds)||b.duration_seconds<=0||b.duration_seconds>1800||typeof b.sha256!=='string'||!/^[a-f0-9]{64}$/.test(b.sha256)))throw new VoiceError('invalid_asset',422,'Medição inválida.');
  return publicStudioAsset(await assetRpc(client,'finish_studio_asset',{p_id:id,p_status:b.status,p_duration:b.status==='ready'?Number(Number(b.duration_seconds).toFixed(6)):null,p_sha256:b.status==='ready'?b.sha256:null}));
 }
-export async function readStudioJson(request:Request){try{return JSON.parse(new TextDecoder().decode(await voiceBody(request,40000)));}catch(error){if(error instanceof VoiceError)throw error;throw new VoiceError('invalid_json',422,'JSON inválido.');}}
+export async function readStudioJson(request:Request){try{return JSON.parse(new TextDecoder().decode(await voiceBody(request,1200000)));}catch(error){if(error instanceof VoiceError)throw error;throw new VoiceError('invalid_json',422,'JSON inválido.');}}
