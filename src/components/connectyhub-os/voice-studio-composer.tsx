@@ -199,7 +199,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
     try{
       const excerpt=previewExcerpt(text,textArea.current?.selectionStart??0,textArea.current?.selectionEnd??0);
       if(!excerpt)throw new Error('Selecione um trecho com fala para ouvir.');
-      const snapshot={...script,text:excerpt,performance:{...performance,preview:true}};
+      const snapshot={...script,output_format:script.output_format??(long?'mp3_44100_64':'mp3_44100_128'),text:excerpt,performance:{...performance,preview:true}};
       setPreview({script:snapshot,credits:null,error:''});
       const quote=await fetch(endpoint('generations/quote'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot)}).then(read);
       setPreview(current=>current?.script===snapshot?{...current,credits:quote.credits}:current);
