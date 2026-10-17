@@ -56,9 +56,12 @@ export async function validateResources(auth:VoiceAuth,input:StudioInput){
 }
 export async function createStudioOperation(auth:VoiceAuth,request:Request,raw:unknown){
  const input=parseStudioInput(raw),idempotency=voiceIdempotency(request),hash=voiceHash(JSON.stringify(input));
+ const {script,...legacyInput}=input;
+ if(script){legacyInput.text=script.text;if(script.voice_settings)legacyInput.voice_settings=script.voice_settings;}
+ const legacyHash=input.operation==='long_tts'&&(raw as {performance?:unknown}).performance===undefined?voiceHash(JSON.stringify(legacyInput)):null;
  const {data:old,error}=await auth.client.from('voice_generations').select('id,input_hash,operation').eq('project_id',auth.project.id).eq('idempotency_key',idempotency).maybeSingle();
  if(error)throw new VoiceError('service_unavailable',503,'Não foi possível conferir a solicitação.');
- if(old){if(old.input_hash!==hash||old.operation!=='studio')throw new VoiceError('idempotency_conflict',409,'Chave já utilizada com outro conteúdo.');const existing=await ownedStudioOperation(auth,old.id);return {...publicStudioOperation(existing.r,existing.s),replayed:true};}
+ if(old){if((old.input_hash!==hash&&old.input_hash!==legacyHash)||old.operation!=='studio')throw new VoiceError('idempotency_conflict',409,'Chave já utilizada com outro conteúdo.');const existing=await ownedStudioOperation(auth,old.id);return {...publicStudioOperation(existing.r,existing.s),replayed:true};}
  if(process.env.STUDIO_OPERATIONS_ENABLED!=='true')throw new VoiceError('capability_unavailable',422,'Operações do Estúdio ainda indisponíveis.');
  const duration=await validateResources(auth,input),units=studioInputUnits(input,duration),{rates,price}=await studioPrice(auth,input,units);
  studioCreditCeiling(request,price.chargeCredits);

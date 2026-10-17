@@ -81,9 +81,15 @@ async function reserveVoice(auth:VoiceAuth,request:Request,raw:unknown,includedP
   const input=parseVoiceInput(raw),idempotency=voiceIdempotency(request);
   if(stream&&input.with_timestamps)throw new VoiceError('invalid_timestamps',422,'Marcação de tempo não está disponível no streaming; use POST /generations.');
   const hash=voiceHash(JSON.stringify({operation:includedPreview?'voice_clone_preview':'text_to_speech',...input,...(stream?{stream:true}:{})}));
+  // Existing API keys may retry receipts created before scripts were stored.
+  // Accept that old fingerprint only for a request without new performance options.
+  const {script,...legacyInput}=input;
+  legacyInput.text=script.text.replace(/\s+/g,' ').trim();
+  legacyInput.voice_settings={...script.voice_settings,...(input.model_id==='eleven_v3'&&(raw as {voice_settings?:{stability?:number}}).voice_settings?.stability===undefined?{stability:.48}:{})};
+  const legacyHash=(raw as {performance?:unknown}).performance===undefined?voiceHash(JSON.stringify({operation:includedPreview?'voice_clone_preview':'text_to_speech',...legacyInput,...(stream?{stream:true}:{})})):null;
   const existing=await auth.client.from('voice_generations').select('*').eq('project_id',auth.project.id).eq('idempotency_key',idempotency).maybeSingle<Row>();
   if(existing.error)throw new VoiceError('service_unavailable',503,'Não foi possível conferir a solicitação.');
-  if(existing.data){if(existing.data.input_hash!==hash||existing.data.operation==='studio')throw new VoiceError('idempotency_conflict',409,'Esta chave já foi usada com outro conteúdo.');return {kind:'replay',row:await recoverVoice(auth,existing.data)};}
+  if(existing.data){if((existing.data.input_hash!==hash&&existing.data.input_hash!==legacyHash)||existing.data.operation==='studio')throw new VoiceError('idempotency_conflict',409,'Esta chave já foi usada com outro conteúdo.');return {kind:'replay',row:await recoverVoice(auth,existing.data)};}
   const catalog=await voiceCatalog(auth);
   if(!catalog.voices.some(v=>v.voice_id===input.voice_id && v.status==='ready'))throw new VoiceError('voice_unavailable',404,'Voz não disponível neste projeto.');
   const dictionaries=await resolveStudioDictionaries(auth,input.dictionary_ids??[]);
