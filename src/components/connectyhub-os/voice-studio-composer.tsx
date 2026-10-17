@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { ChevronRight, Download, FileText, Pause, Play, RotateCcw, Search, Sparkles, X } from "lucide-react";
 import { mergeStudioHistory, studioHistoryJobs, type StudioJob as Job, type StudioHistoryReceipt } from "../../lib/voice-api/studio-history";
+import { VoiceGenerationHistory } from "./voice-generation-history";
 import { voiceModelName } from "../../lib/voice-api/model-presentation";
 
 // Text-to-speech composer in the spirit of the ElevenLabs studio: voice library with
@@ -41,10 +42,11 @@ async function read(response: Response) {
   return data;
 }
 
-export function VoiceStudioComposer({ project, voices, models, dictionaryId, availableCredits, onDone, selectedVoice, onVoiceChange }: {
+export function VoiceStudioComposer({ project, voices, models, dictionaryId, availableCredits, onDone, selectedVoice, onVoiceChange, sidePanel, onSidePanelChange }: {
   project: string; voices: StudioVoice[]; models: StudioModel[]; dictionaryId: string; availableCredits: number | null; onDone: () => void;
   // Optional controlled voice, so the voice library page can send a voice to the composer.
   selectedVoice?: string; onVoiceChange?: (voiceId: string) => void;
+  sidePanel: "settings" | "history"; onSidePanelChange: (panel: "settings" | "history") => void;
 }) {
   const base = "/api/dashboard/voice";
   const endpoint = (path: string) => `${base}/${path}?project=${encodeURIComponent(project)}`;
@@ -61,6 +63,10 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
   const [message, setMessage] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [library, setLibrary] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const activeJob = jobs.find(job => job.id === activeJobId);
+  const panelId = useId();
+  const resultRef = useRef<HTMLElement>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState("");
@@ -174,6 +180,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
         const job: Job = { id: receipt.id, kind: "short", status: receipt.status, credits: Number(receipt.usage?.credits || receipt.usage?.reserved_credits || 0), text: clean, voice: voiceId, model: modelId, createdAt: receipt.created_at ?? new Date().toISOString(),
           ...(receipt.status === "completed" && receipt.audio ? { audioUrl: endpoint(`generations/${receipt.id}/audio`) } : {}) };
         setJobs(current => mergeStudioHistory(current, [job]));
+        setActiveJobId(job.id);
       } else {
         const body = JSON.stringify({ operation: "long_tts", ...payload });
         const receipt = await fetch(endpoint("operations"), {
@@ -181,6 +188,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
         }).then(read);
         const job: Job = { id: receipt.id, kind: "long", status: receipt.status, credits: Number(receipt.usage?.reserved_credits ?? 0), text: clean, voice: voiceId, model: modelId, createdAt: new Date().toISOString() };
         setJobs(current => [job, ...current.filter(item => item.id !== job.id)].slice(0, 50));
+        setActiveJobId(job.id);
       }
       idempotency.current = null;
       onDone();
@@ -229,22 +237,35 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
             </div>
             {message && <p role="status" className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">{message}</p>}
           </section>
-          <section aria-label="Seus áudios" className="order-3 min-w-0 xl:order-none rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-bold">Seus áudios</h3>
-              <button type="button" className={ghost} onClick={() => setHistoryRevision(value => value + 1)}><RotateCcw size={13} />Atualizar histórico</button>
+          {activeJob && <section ref={resultRef} aria-label="Áudio selecionado" className="order-1 min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:order-none">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Áudio selecionado</h3>
+              <button type="button" aria-label="Fechar áudio selecionado" className="grid size-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100" onClick={() => setActiveJobId(null)}><X size={15} /></button>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Áudios recentes deste projeto, salvos na sua conta.</p>
-            {historyLoading && <p role="status" className="mt-3 text-sm text-slate-500">Carregando histórico…</p>}
-            {historyError && <p role="alert" className="mt-3 text-sm text-amber-800">{historyError}</p>}
-            {!historyLoading && !historyError && !jobs.length && <p className="mt-3 text-sm text-slate-500">Seus áudios aparecerão aqui depois da primeira geração.</p>}
-            <ul className="mt-3 space-y-2">
-              {jobs.map(job => <JobRow key={job.id} job={job} voiceName={voices.find(item => item.voice_id === job.voice)?.name} onReuse={() => reuse(job)} />)}
-            </ul>
-          </section>
+            <ul><JobRow job={activeJob} voiceName={voices.find(item => item.voice_id === activeJob.voice)?.name} onReuse={() => reuse(activeJob)} /></ul>
+          </section>}
         </div>
 
         <aside className="order-2 min-w-0 space-y-5 xl:order-none rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div role="tablist" aria-label="Painel de voz" className="flex gap-5 border-b border-slate-200">
+            {([["settings", "Configurações"], ["history", "Histórico"]] as const).map(([value, label]) => <button
+              key={value} id={`${panelId}-${value}-tab`} type="button" role="tab" aria-selected={sidePanel === value} aria-controls={`${panelId}-${value}`} tabIndex={sidePanel === value ? 0 : -1}
+              className={`min-h-10 border-b-2 pb-2 text-sm ${sidePanel === value ? "border-blue-700 font-semibold text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+              onClick={() => onSidePanelChange(value)} onKeyDown={event => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? "settings" : event.key === "End" ? "history" : value === "settings" ? "history" : "settings";
+                onSidePanelChange(next); document.getElementById(`${panelId}-${next}-tab`)?.focus();
+              }}>{label}</button>)}
+          </div>
+          <div id={`${panelId}-history`} role="tabpanel" aria-labelledby={`${panelId}-history-tab`} hidden={sidePanel !== "history"}>
+            <VoiceGenerationHistory jobs={jobs} voices={voices} loading={historyLoading} error={historyError} selectedId={activeJobId}
+              onRefresh={() => setHistoryRevision(value => value + 1)} onSelect={job => {
+                setActiveJobId(job.id);
+                window.requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+              }} />
+          </div>
+          <div id={`${panelId}-settings`} role="tabpanel" aria-labelledby={`${panelId}-settings-tab`} hidden={sidePanel !== "settings"} className="space-y-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Voz</p>
             <button type="button" onClick={() => setLibrary(true)} className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-200 p-2.5 text-left hover:border-slate-300 hover:bg-slate-50">
@@ -289,6 +310,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
           </div>
 
           {balanceMinutes !== null && <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">Seu saldo rende cerca de <strong>{number(Math.floor(balanceMinutes))} min</strong> de áudio com este modelo.</p>}
+          </div>
         </aside>
       </div>
 

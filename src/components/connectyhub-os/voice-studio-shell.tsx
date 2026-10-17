@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AudioLines, BookOpen, Bot, Code2, History, KeyRound, Library, LoaderCircle, Music, Plus, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { AudioLines, BookOpen, Bot, Code2, History, Coins, KeyRound, Library, LoaderCircle, Music, Plus, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { CreditExplainer } from "./credit-explainer";
 import { VoiceUsageCharts } from "./voice-usage-charts";
 import { StudioTools } from "./studio-tools";
@@ -23,10 +23,10 @@ type HistoryRow = { id: string; project_id: string; operation: string; status: s
 type Data = { projects: Project[]; wallet?: { balance_credits: number; reserved_credits: number } | null; summary: Summary; history: HistoryRow[] };
 type Section = "tts" | "sfx" | "music" | "tools" | "voices" | "agents" | "history" | "api";
 
-const menu: Array<{ group: string; items: Array<[Section, string, typeof AudioLines]> }> = [
+const menu: Array<{ group: string; items: Array<[Section | "generations", string, typeof AudioLines]> }> = [
   { group: "Criar", items: [["tts", "Texto para fala", AudioLines], ["sfx", "Efeitos sonoros", Sparkles], ["music", "Música", Music], ["tools", "Mais ferramentas", Wand2]] },
   { group: "Vozes", items: [["voices", "Vozes", Library], ["agents", "Agentes de voz", Bot]] },
-  { group: "Conta", items: [["history", "Histórico e uso", History], ["api", "API e desenvolvedores", Code2]] },
+  { group: "Conta", items: [["generations", "Histórico", History], ["history", "Uso e créditos", Coins], ["api", "API e desenvolvedores", Code2]] },
 ];
 const titles: Record<Section, [string, string]> = {
   tts: ["Texto para fala", "Transforme qualquer texto em fala realista, de uma frase a um livro inteiro."],
@@ -35,7 +35,7 @@ const titles: Record<Section, [string, string]> = {
   tools: ["Mais ferramentas", "Transcrição, dublagem, limpeza de áudio, troca de voz, legendas, diálogos e criação de vozes."],
   voices: ["Vozes", "Ouça, escolha e clone vozes. Suas vozes clonadas são só da sua empresa."],
   agents: ["Agentes de voz", "Seus atendentes do WhatsApp também falam, em tempo real."],
-  history: ["Histórico e uso", "Tudo o que foi gerado e quanto custou."],
+  history: ["Uso e créditos", "Tudo o que foi gerado e quanto custou."],
   api: ["API e desenvolvedores", "Chaves, webhooks e exemplos para integrar o Estúdio ao seu aplicativo."],
 };
 const statusLabels: Record<string, string> = { completed: "Concluído", failed: "Não concluído", reserved: "Em andamento", processing: "Em andamento", uncertain: "Em conferência", ready: "Pronta", active: "Ativo", paused: "Pausado" };
@@ -54,6 +54,7 @@ async function read(response: Response) {
 
 export function VoiceStudioShell() {
   const [section, setSection] = useState<Section>("tts");
+  const [sidePanel, setSidePanel] = useState<"settings" | "history">("settings");
   const [days, setDays] = useState("30");
   const [data, setData] = useState<Data | null>(null);
   const [chosenProject, setChosenProject] = useState("");
@@ -85,7 +86,8 @@ export function VoiceStudioShell() {
   const ready = catalog?.project === project ? catalog : null;
   const available = data?.wallet ? Number(data.wallet.balance_credits) - Number(data.wallet.reserved_credits ?? 0) : null;
   const reloadCatalog = async () => { setCatalogRevision(value => value + 1); await refresh(); };
-  const go = (next: Section) => { setSection(next); setMessage(""); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const activeMenu = section === "tts" && sidePanel === "history" ? "generations" : section;
+  const go = (next: Section | "generations") => { setSection(next === "generations" ? "tts" : next); if (next === "generations" || next === "tts") setSidePanel(next === "generations" ? "history" : "settings"); setMessage(""); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
   return (
     <div className="w-full min-w-0 text-slate-900">
@@ -109,8 +111,8 @@ export function VoiceStudioShell() {
             <div key={group.group} className="flex shrink-0 gap-1 lg:mb-4 lg:flex-col">
               <p className="hidden px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 lg:block">{group.group}</p>
               {group.items.map(([value, label, Icon]) => (
-                <button key={value} type="button" onClick={() => go(value)} aria-current={section === value ? "page" : undefined}
-                  className={`inline-flex min-h-10 shrink-0 items-center gap-2.5 rounded-xl px-3 text-sm ${section === value ? "bg-slate-900 font-semibold text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>
+                <button key={value} type="button" onClick={() => go(value)} aria-current={activeMenu === value ? "page" : undefined}
+                  className={`inline-flex min-h-10 shrink-0 items-center gap-2.5 rounded-xl px-3 text-sm ${activeMenu === value ? "bg-slate-900 font-semibold text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>
                   <Icon size={16} />{label}
                 </button>
               ))}
@@ -125,7 +127,7 @@ export function VoiceStudioShell() {
             <div className={section === "tts" ? "space-y-3" : "hidden"}>
               <VoiceDictionarySelect project={project} revision={catalogRevision} value={dictionary} onChange={setDictionary} />
               <VoiceStudioComposer key={project} project={project} voices={ready.voices} models={ready.models} dictionaryId={dictionary} availableCredits={available}
-                selectedVoice={voiceId} onVoiceChange={setVoiceId} onDone={() => { void refresh(); }} />
+                sidePanel={sidePanel} onSidePanelChange={setSidePanel} selectedVoice={voiceId} onVoiceChange={setVoiceId} onDone={() => { void refresh(); }} />
             </div>
             {section === "sfx" && <StudioTools key={`${project}-sfx`} project={project} voices={ready.voices} only="sound_effects" onChanged={reloadCatalog} />}
             {section === "music" && <StudioTools key={`${project}-music`} project={project} voices={ready.voices} only="music" onChanged={reloadCatalog} />}

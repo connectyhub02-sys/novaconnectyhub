@@ -1,5 +1,17 @@
 # Estado operacional da ConnectyHub
 
+## Histórico de voz em aba separada — 17/10/2026
+
+Após aprovar a largura/layout, o titular pediu um histórico discreto como na
+referência enviada. Implementadas abas Configurações/Histórico, acesso por Conta,
+busca/filtros e lista de até 50 registros com rolagem interna. Abaixo do editor
+fica somente o áudio gerado ou selecionado. Uso e créditos preserva os gráficos.
+
+ESLint, TypeScript, 20 testes e navegador desktop/mobile com 50 registros
+simulados aprovados. Sem geração paga, migration ou mudança de cobrança.
+Build/publicação e confirmação pelo titular pendentes.
+[Detalhes e evidências](voz-historico-abas-2026-10-17.md).
+
 ## Estúdio de Voz: histórico recuperado e tela mais ampla — 17/10/2026
 
 Publicado `ad9f4662` às 09h25 BRT no slot a/3130; rollback `40182900` no b/3131.
