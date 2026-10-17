@@ -88,7 +88,7 @@ export function VoiceStudioShell() {
   const go = (next: Section) => { setSection(next); setMessage(""); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
   return (
-    <div className="mx-auto min-w-0 max-w-7xl text-slate-900">
+    <div className="w-full min-w-0 text-slate-900">
       <header className="flex flex-wrap items-center gap-3">
         <div className="mr-auto min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">{titles[section][0]}</h1>

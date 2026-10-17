@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { ChevronRight, Download, FileText, Pause, Play, RotateCcw, Search, Sparkles, X } from "lucide-react";
+import { mergeStudioHistory, studioHistoryJobs, type StudioJob as Job, type StudioHistoryReceipt } from "../../lib/voice-api/studio-history";
 import { voiceModelName } from "../../lib/voice-api/model-presentation";
 
 // Text-to-speech composer in the spirit of the ElevenLabs studio: voice library with
@@ -15,7 +16,6 @@ export type StudioVoice = {
   language?: string | null; gender?: string | null; accent?: string | null; use_case?: string | null;
 };
 export type StudioModel = { model_id: string; name: string; available: boolean; credits_per_character?: number; minimum_credits?: number };
-type Job = { id: string; kind: "short" | "long"; status: string; credits: number; text: string; voice: string; model: string; createdAt: string; audioUrl?: string };
 type Settings = { stability: number; similarity_boost: number; style: number; speed: number; use_speaker_boost: boolean };
 
 const SHORT_LIMIT = 4800;
@@ -61,8 +61,12 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
   const [message, setMessage] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [library, setLibrary] = useState(false);
-  const [books, setBooks] = useState<Array<{ id: string; status: string; model_id: string; usage: { credits: number; reserved_credits: number; units?: { characters?: number } | null }; created_at?: string }>>([]);
-  const [booksRevision, setBooksRevision] = useState(0);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState("");
+  const inFlight = useRef(false);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
   const textArea = useRef<HTMLTextAreaElement>(null);
   const idempotency = useRef<{ body: string; key: string } | null>(null);
 
@@ -103,14 +107,32 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
     return () => { active = false; window.clearTimeout(timer); };
   }, [long, voiceId, chars, payload, project, quoteKey]);
 
-  // E-books of this project survive page reloads: listed from the server receipts.
+  // Restore both short speech and audiobooks from project-scoped server receipts.
+  // Poll only while work is pending, and discard responses after leaving a project.
   useEffect(() => {
     let active = true;
-    fetch(`/api/dashboard/voice/operations?project=${encodeURIComponent(project)}`).then(read)
-      .then(data => { if (active) setBooks((data.operations ?? []).filter((item: { operation: string }) => item.operation === "long_tts").slice(0, 10)); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [project, booksRevision]);
+    let timer: number | undefined;
+    let previous: Map<string, string> | undefined;
+    async function loadHistory() {
+      const results = await Promise.allSettled([
+        fetch(`/api/dashboard/voice/generations?project=${encodeURIComponent(project)}`, { cache: "no-store" }).then(read),
+        fetch(`/api/dashboard/voice/operations?project=${encodeURIComponent(project)}`, { cache: "no-store" }).then(read),
+      ]);
+      if (!active) return;
+      const receipts: StudioHistoryReceipt[] = results.flatMap((result, index) => result.status === "fulfilled"
+        ? result.value[index === 0 ? "generations" : "operations"] ?? [] : []);
+      const saved = studioHistoryJobs(project, receipts);
+      setJobs(current => mergeStudioHistory(current, saved));
+      setHistoryLoading(false);
+      setHistoryError(results.some(result => result.status === "rejected")
+        ? "Não foi possível carregar todo o histórico. Tente atualizar a lista." : "");
+      if (saved.some(job => previous?.has(job.id) && previous.get(job.id) !== job.status && ["completed", "failed"].includes(job.status))) onDoneRef.current();
+      previous = new Map(saved.map(job => [job.id, job.status]));
+      if (saved.some(job => ["reserved", "processing"].includes(job.status))) timer = window.setTimeout(() => void loadHistory(), 5000);
+    }
+    void loadHistory();
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [project, historyRevision]);
 
   useEffect(() => {
     if (!library) return;
@@ -142,23 +164,23 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
   }
 
   async function generate() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true); setMessage("");
     try {
       if (!long) {
         const body = JSON.stringify(payload);
         const receipt = await fetch(endpoint("generations"), { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key(body) }, body }).then(read);
-        const audio = await fetch(endpoint(`generations/${receipt.id}/audio`));
-        if (!audio.ok) throw new Error("O áudio ainda está sendo preparado. Consulte o histórico em instantes.");
-        const url = URL.createObjectURL(await audio.blob());
-        setJobs(current => [{ id: receipt.id, kind: "short" as const, status: receipt.status, credits: Number(receipt.usage?.credits ?? 0), text: clean, voice: voiceId, model: modelId, createdAt: new Date().toISOString(), audioUrl: url }, ...current].slice(0, 20));
+        const job: Job = { id: receipt.id, kind: "short", status: receipt.status, credits: Number(receipt.usage?.credits || receipt.usage?.reserved_credits || 0), text: clean, voice: voiceId, model: modelId, createdAt: receipt.created_at ?? new Date().toISOString(),
+          ...(receipt.status === "completed" && receipt.audio ? { audioUrl: endpoint(`generations/${receipt.id}/audio`) } : {}) };
+        setJobs(current => mergeStudioHistory(current, [job]));
       } else {
         const body = JSON.stringify({ operation: "long_tts", ...payload });
         const receipt = await fetch(endpoint("operations"), {
           method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key(body), ...(quote !== null ? { "X-Max-Credits": String(quote) } : {}) }, body,
         }).then(read);
         const job: Job = { id: receipt.id, kind: "long", status: receipt.status, credits: Number(receipt.usage?.reserved_credits ?? 0), text: clean, voice: voiceId, model: modelId, createdAt: new Date().toISOString() };
-        setJobs(current => [job, ...current].slice(0, 20));
-        void follow(job.id);
+        setJobs(current => [job, ...current.filter(item => item.id !== job.id)].slice(0, 50));
       }
       idempotency.current = null;
       onDone();
@@ -167,21 +189,11 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
       setMessage(code === "voice_insufficient_credits" || code === "insufficient_credits"
         ? `Saldo insuficiente para este texto${shownQuote !== null ? `: precisa de ${number(shownQuote, 2)} créditos` : ""}${availableCredits !== null ? ` e há ${number(availableCredits, 2)} disponíveis` : ""}.`
         : (error as Error).message);
-    } finally { setBusy(false); }
-  }
-
-  async function follow(id: string) {
-    for (let attempt = 0; attempt < 720; attempt++) {
-      await new Promise(resolve => window.setTimeout(resolve, 5000));
-      const receipt = await fetch(endpoint(`operations/${id}`)).then(read).catch(() => null);
-      if (!receipt) continue;
-      setJobs(current => current.map(job => job.id === id ? { ...job, status: receipt.status, credits: Number(receipt.usage?.credits || receipt.usage?.reserved_credits || 0),
-        ...(receipt.status === "completed" ? { audioUrl: endpoint(`operations/${id}/result`) } : {}) } : job));
-      if (["completed", "failed", "uncertain"].includes(receipt.status)) { onDone(); setBooksRevision(value => value + 1); return; }
-    }
+    } finally { inFlight.current = false; setBusy(false); setHistoryRevision(value => value + 1); }
   }
 
   function reuse(job: Job) {
+    if (!job.text) return;
     setText(job.text); setVoiceId(job.voice); setModelId(job.model); idempotency.current = null;
     textArea.current?.focus();
   }
@@ -190,34 +202,49 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
   const available = models.filter(item => item.available);
   return (
     <div className="min-w-0 space-y-5">
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {isV3 && (
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-3">
-              <span className="mr-1 text-xs font-medium text-slate-500"><Sparkles size={12} className="mr-1 inline" />Emoções</span>
-              {v3Tags.map(item => <button key={item.tag} type="button" className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-violet-100 hover:text-violet-800" onClick={() => insertTag(item.tag)} title={item.tag}>{item.label}</button>)}
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="contents xl:block xl:min-w-0 xl:space-y-5">
+          <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {isV3 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-3">
+                <span className="mr-1 text-xs font-medium text-slate-500"><Sparkles size={12} className="mr-1 inline" />Emoções</span>
+                {v3Tags.map(item => <button key={item.tag} type="button" className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-violet-100 hover:text-violet-800" onClick={() => insertTag(item.tag)} title={item.tag}>{item.label}</button>)}
+              </div>
+            )}
+            <textarea ref={textArea} aria-label="Texto para transformar em voz" value={text} onChange={event => setText(event.target.value)}
+              className="h-[clamp(16rem,36dvh,30rem)] min-h-48 w-full resize-y border-0 bg-transparent px-6 py-5 text-base leading-8 text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              placeholder={"Comece a digitar aqui ou cole qualquer texto que você queira transformar em fala realista.\n\nDe uma frase a um livro inteiro: textos longos viram um único arquivo de áudio."} />
+            <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+              <span className="text-xs text-slate-500">{number(chars)} / {number(LONG_LIMIT)}{chars ? ` · ≈ ${number(minutes, 1)} min` : ""}{long ? " · audiolivro" : ""}</span>
+              <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"><FileText size={13} />Importar .txt<input type="file" accept=".txt,text/plain" className="hidden" onChange={importFile} /></label>
+              <span className={`ml-auto text-sm ${insufficient ? "font-medium text-rose-700" : "text-slate-600"}`}>
+                {chars > LONG_LIMIT ? "Divida o texto em volumes de até 240 mil caracteres."
+                  : shownQuote !== null ? `${insufficient ? "Saldo insuficiente · " : ""}${number(shownQuote, 2)} créditos`
+                  : chars && long ? "Calculando…" : ""}
+              </span>
+              <button className="ch-action inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-blue-700 px-6 py-2 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={() => void generate()}
+                disabled={busy || !project || !voiceId || !chars || chars > LONG_LIMIT || !model?.available || insufficient || (long && quote === null)}>
+                <Play size={16} aria-hidden="true" />{busy ? "Gerando…" : long ? "Gerar audiolivro" : "Gerar fala"}
+              </button>
             </div>
-          )}
-          <textarea ref={textArea} aria-label="Texto para transformar em voz" value={text} onChange={event => setText(event.target.value)}
-            className="min-h-[22rem] w-full flex-1 resize-y border-0 bg-transparent px-6 py-5 text-base leading-8 text-slate-900 placeholder:text-slate-400 focus:outline-none lg:min-h-[28rem]"
-            placeholder={"Comece a digitar aqui ou cole qualquer texto que você queira transformar em fala realista.\n\nDe uma frase a um livro inteiro: textos longos viram um único arquivo de áudio."} />
-          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
-            <span className="text-xs text-slate-500">{number(chars)} / {number(LONG_LIMIT)}{chars ? ` · ≈ ${number(minutes, 1)} min` : ""}{long ? " · audiolivro" : ""}</span>
-            <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"><FileText size={13} />Importar .txt<input type="file" accept=".txt,text/plain" className="hidden" onChange={importFile} /></label>
-            <span className={`ml-auto text-sm ${insufficient ? "font-medium text-rose-700" : "text-slate-600"}`}>
-              {chars > LONG_LIMIT ? "Divida o texto em volumes de até 240 mil caracteres."
-                : shownQuote !== null ? `${insufficient ? "Saldo insuficiente · " : ""}${number(shownQuote, 2)} créditos`
-                : chars && long ? "Calculando…" : ""}
-            </span>
-            <button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-40" type="button" onClick={() => void generate()}
-              disabled={busy || !project || !voiceId || !chars || chars > LONG_LIMIT || !model?.available || insufficient || (long && quote === null)}>
-              {busy ? "Gerando…" : long ? "Gerar audiolivro" : "Gerar fala"}
-            </button>
-          </div>
-          {message && <p role="status" className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">{message}</p>}
-        </section>
+            {message && <p role="status" className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">{message}</p>}
+          </section>
+          <section aria-label="Seus áudios" className="order-3 min-w-0 xl:order-none rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold">Seus áudios</h3>
+              <button type="button" className={ghost} onClick={() => setHistoryRevision(value => value + 1)}><RotateCcw size={13} />Atualizar histórico</button>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Áudios recentes deste projeto, salvos na sua conta.</p>
+            {historyLoading && <p role="status" className="mt-3 text-sm text-slate-500">Carregando histórico…</p>}
+            {historyError && <p role="alert" className="mt-3 text-sm text-amber-800">{historyError}</p>}
+            {!historyLoading && !historyError && !jobs.length && <p className="mt-3 text-sm text-slate-500">Seus áudios aparecerão aqui depois da primeira geração.</p>}
+            <ul className="mt-3 space-y-2">
+              {jobs.map(job => <JobRow key={job.id} job={job} voiceName={voices.find(item => item.voice_id === job.voice)?.name} onReuse={() => reuse(job)} />)}
+            </ul>
+          </section>
+        </div>
 
-        <aside className="min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <aside className="order-2 min-w-0 space-y-5 xl:order-none rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Voz</p>
             <button type="button" onClick={() => setLibrary(true)} className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-200 p-2.5 text-left hover:border-slate-300 hover:bg-slate-50">
@@ -273,21 +300,6 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
           </div>
         </div>
       )}
-
-      {(jobs.length > 0 || books.length > 0) && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold">Seus áudios</h3>
-          <ul className="mt-3 space-y-2">
-            {jobs.map(job => <JobRow key={job.id} job={job} voiceName={voices.find(item => item.voice_id === job.voice)?.name} onReuse={() => reuse(job)} />)}
-            {books.filter(book => !jobs.some(job => job.id === book.id)).map(book => (
-              <li key={book.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 p-3 text-sm">
-                <span><strong>Audiolivro</strong> · {voiceModelName(book.model_id)} · {number(book.usage.units?.characters ?? 0)} caracteres · {book.status === "completed" ? `${number(book.usage.credits, 2)} créditos` : book.status === "failed" ? "não concluído" : "gerando…"}</span>
-                {book.status === "completed" && <a className={ghost} href={`/api/dashboard/voice/operations/${book.id}/result?project=${encodeURIComponent(project)}`}><Download size={13} />Baixar</a>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }
@@ -326,15 +338,15 @@ function JobRow({ job, voiceName, onReuse }: { job: Job; voiceName?: string; onR
       <div className="flex flex-wrap items-center gap-3">
         <VoiceAvatar id={job.voice} size="size-8" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{job.text.slice(0, 120)}</p>
+          <p className="truncate font-medium">{job.text?.slice(0, 120) || `${job.kind === "long" ? "Audiolivro" : "Áudio"} · ${new Date(job.createdAt).toLocaleString("pt-BR")}`}</p>
           <p className="text-xs text-slate-500">{voiceName ?? "Voz"} · {voiceModelName(job.model)} · {labels[job.status] ?? job.status} · {number(job.credits, 2)} créditos</p>
         </div>
         <div className="flex gap-2">
           {job.audioUrl && <a className={ghost} href={job.audioUrl} download={job.kind === "long" ? "audiolivro.mp3" : "connectyhub-voz.mp3"}><Download size={13} />Baixar</a>}
-          <button type="button" className={ghost} onClick={onReuse}><RotateCcw size={13} />Reusar</button>
+          {job.text && <button type="button" className={ghost} onClick={onReuse}><RotateCcw size={13} />Reusar</button>}
         </div>
       </div>
-      {job.audioUrl && <audio className="mt-2 h-9 w-full" controls preload="none" src={job.audioUrl} />}
+      {job.audioUrl && <audio aria-label="Ouvir áudio gerado" className="mt-2 h-9 w-full" controls preload="none" src={job.audioUrl} />}
     </li>
   );
 }

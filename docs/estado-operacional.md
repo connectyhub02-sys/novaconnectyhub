@@ -1,5 +1,18 @@
 # Estado operacional da ConnectyHub
 
+## Estúdio de Voz: histórico recuperado e tela mais ampla — 17/10/2026
+
+Correção implementada: falas curtas e audiolivros recuperados dos recibos do
+projeto ao abrir a página; player/download autenticados, atualização de andamento
+e aviso de falha na consulta. Largura do Estúdio ampliada, editor independente da
+altura dos ajustes e botão Gerar fala azul/visível.
+
+Os três MP3 mais recentes da Vision foram lidos do Storage (HTTP 200, tamanhos e
+assinatura conferidos). Nenhum áudio novo ou débito de teste. 20 testes,
+ESLint, TypeScript e navegador desktop/mobile aprovados. Build/publicação ainda
+pendentes; reuso do texto antigo não é possível porque os recibos não o guardam.
+[Correção, evidências e limites](voz-historico-layout-2026-10-17.md).
+
 ## Clonagem de voz: botão e gravações visíveis — 15/10/2026
 
 Publicado `40182900` no slot b/3131; rollback `2e3f3ef8` no a/3130.
