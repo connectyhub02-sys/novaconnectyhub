@@ -1,6 +1,7 @@
 'use client';
 import {useId, useRef, type RefObject} from 'react';
 import {LockKeyhole} from 'lucide-react';
+import {VoiceHelp} from './voice-help';
 import {directionMarkers,markerText,speechCapabilities} from '../../lib/voice-api/performance';
 
 export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPreview,expressiveAvailable,onSwitchToExpressive}: {
@@ -22,16 +23,20 @@ export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPrevie
   const markers=[...text.matchAll(/⟦([^⟦⟧]+)⟧/g)];
   return <>
     <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-      {(['Pausas','Emoções','Reações'] as const).map((label,index)=><label key={label} className="text-xs font-medium text-slate-600">
+      {(['Pausas','Emoções','Reações'] as const).map((label,index)=><div key={label} className="inline-flex items-center text-xs font-medium text-slate-600">
         <span className="sr-only">{label}</span><select aria-label={label} aria-describedby={index>0&&!capability?.emotions?blockedNoticeId:undefined} disabled={disabled||(index>0&&!capability?.emotions)} value="" className="min-h-9 max-w-44 rounded-lg border border-slate-200 bg-white px-2 disabled:opacity-50" onChange={e=>insert(e.target.value)}>
           <option value="" disabled>{label}</option>
           {directionMarkers.filter(m=>index===0?(capability?.timedPauses?m.kind==='timed':m.kind==='pause'):m.kind===(index===1?'emotion':'reaction')).map(m=><option key={m.label} value={markerText(m.label)}>{m.label}</option>)}
           {index===0&&<option value="...">Reticências · hesitação</option>}
         </select>
-      </label>)}
+        <VoiceHelp title={label}>{index===0
+          ?'Posicione o cursor no roteiro e escolha uma pausa. Nos modelos v2, as marcações vão de 0,5 a 3 segundos; no v3, use pausa curta ou longa, sem tempo exato. Reticências sugerem hesitação ou suspense, não uma duração fixa.'
+          :index===1?'No v3, insere uma indicação de atuação no ponto do cursor: Sussurrar, Animado, Curioso ou Triste. Oriente o trecho desejado e ouça uma prévia; a reação às marcações depende da voz e do contexto.'
+          :'No v3, insere Rir, Suspirar ou Expirar no ponto do cursor. São pedidos de sons da própria voz, não trilhas ou efeitos de ambiente. O modelo pode variar a intensidade e a duração.'}</VoiceHelp>
+      </div>)}
       <button type="button" disabled={disabled} onClick={()=>travel(true)} className="min-h-9 px-2 text-xs text-slate-600">Desfazer</button>
       <button type="button" disabled={disabled} onClick={()=>travel(false)} className="min-h-9 px-2 text-xs text-slate-600">Refazer</button>
-      <button type="button" disabled={disabled||!text.trim()} onClick={onPreview} className="ml-auto min-h-9 rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-700 disabled:opacity-50">Ouvir trecho</button>
+      <span className="ml-auto inline-flex items-center"><button type="button" disabled={disabled||!text.trim()} onClick={onPreview} className="min-h-9 rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-700 disabled:opacity-50">Ouvir trecho</button><VoiceHelp title="Ouvir trecho">Selecione uma parte do roteiro para testar a voz e os ajustes. Sem seleção, usamos o início, até 600 caracteres. A prévia é paga: o custo aparece antes de confirmar Gerar prévia. O roteiro completo fica no editor.</VoiceHelp></span>
     </div>
     {!capability?.emotions&&<div id={blockedNoticeId} role="note" className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
       <LockKeyhole size={20} className="shrink-0 self-start" aria-hidden="true" />

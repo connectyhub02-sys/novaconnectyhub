@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { AudioLines, RotateCcw, Search } from "lucide-react";
 import { voiceModelName } from "../../lib/voice-api/model-presentation";
 import type { StudioJob } from "../../lib/voice-api/studio-history";
+import {VoiceHelpLabel} from './voice-help';
 
 const statusLabels: Record<string, string> = { reserved: "Na fila", processing: "Gerando…", completed: "Pronto", failed: "Não concluído", uncertain: "Em conferência" };
 const dateKey = (value: string | Date) => new Date(value).toLocaleDateString("pt-BR");
@@ -31,6 +32,7 @@ export function VoiceGenerationHistory({ jobs, voices, loading, error, selectedI
   const selectClass = "min-h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700";
 
   return <div className="space-y-3">
+    <div className="text-sm font-semibold"><VoiceHelpLabel title="Histórico de gerações">Reúne os áudios deste projeto, inclusive prévias. Use busca e filtros para encontrar um resultado; clique nele para ouvir ou baixar. Reusar recupera o roteiro e os ajustes quando foram salvos. Ouvir um áudio pronto não gera outro débito; gerar novamente usa créditos.</VoiceHelpLabel></div>
     <div className="flex items-center gap-2">
       <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 focus-within:border-blue-500">
         <Search size={14} className="shrink-0 text-slate-400" />

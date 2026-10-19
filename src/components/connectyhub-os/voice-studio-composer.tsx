@@ -22,6 +22,7 @@ type Settings = { stability: number; similarity_boost: number; style: number; sp
 import {VoiceOutputOptions} from './voice-output-options';
 import {validateEffectsFormat,validateLongFormat,type SpeechEffects} from '../../lib/voice-api/speech-options';
 import { VoiceDirectionEditor } from './voice-direction-editor';
+import {VoiceHelp,VoiceHelpLabel,voiceModelHelp,voiceStyleHelp,voiceAdjustmentHelp} from './voice-help';
 import { useVoiceDraft } from './use-voice-draft';
 import { defaultPerformance, interpretations, normalizeSpeech, prepareSpeech, previewExcerpt, speechCapabilities, type Performance, type SpeechScript } from '../../lib/voice-api/performance';
 const SHORT_LIMIT = 4800;
@@ -88,6 +89,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   const onDoneRef = useRef(onDone);
   useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
   const textArea = useRef<HTMLTextAreaElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
   const idempotency = useRef<{ body: string; key: string } | null>(null);
 
   // Never silently replace a restored clone that is no longer available.
@@ -263,7 +265,11 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
             {preparation.error&&!!text.trim()&&<p role="alert" className="bg-amber-50 px-5 py-2 text-sm text-amber-900">{preparation.error}</p>}
             <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
               <span className="text-xs text-slate-500">{number(chars)} / {number(LONG_LIMIT)}{chars ? ` · ≈ ${number(minutes, 1)} min` : ""}{long ? " · audiolivro" : ""}</span>
-              <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"><FileText size={13} />Importar .txt<input type="file" disabled={busy||!draft.ready} accept=".txt,text/plain" className="hidden" onChange={importFile} /></label>
+              <span className="inline-flex items-center gap-1">
+                <button type="button" disabled={busy||!draft.ready} onClick={()=>importInput.current?.click()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 shadow-sm hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} aria-hidden="true" />Importar TXT</button>
+                <input ref={importInput} aria-label="Arquivo TXT" type="file" disabled={busy||!draft.ready} accept=".txt,text/plain" className="hidden" onChange={importFile} />
+                <VoiceHelp title="Importar TXT">Abre um arquivo de texto simples (.txt) e substitui o roteiro atual pelo conteúdo dele, até 240 mil caracteres. Importar não gera áudio nem consome créditos. Guarde seu texto atual antes de substituir.</VoiceHelp>
+              </span>
               <span className={`ml-auto text-sm ${insufficient ? "font-medium text-rose-700" : "text-slate-600"}`}>
                 {chars > LONG_LIMIT ? "Divida o texto em volumes de até 240 mil caracteres."
                   : shownQuote !== null ? `${insufficient ? "Saldo insuficiente · " : ""}${number(shownQuote, 2)} créditos`
@@ -306,7 +312,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
           </div>
           <div id={`${panelId}-settings`} role="tabpanel" aria-labelledby={`${panelId}-settings-tab`} hidden={sidePanel !== "settings"} className="space-y-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Voz</p>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500"><VoiceHelpLabel title="Voz">Escolhe quem vai falar: uma voz da biblioteca ou um clone da sua empresa. O modelo define como o áudio é gerado; o estilo orienta como essa voz interpreta o roteiro. Trocar o estilo não cria outro clone.</VoiceHelpLabel></div>
             <button type="button" onClick={() => setLibrary(true)} className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-200 p-2.5 text-left hover:border-slate-300 hover:bg-slate-50">
               {voice ? <VoiceAvatar id={voice.voice_id} /> : <span className="size-10 rounded-full bg-slate-100" />}
               <span className="min-w-0 flex-1">
@@ -319,33 +325,43 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Modelo</p>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500"><VoiceHelpLabel title="Modelo">
+              <p>Escolha o modo de geração conforme a leitura desejada. A voz selecionada continua a mesma; recursos e custo podem variar.</p>
+              {available.map(item=><p key={item.model_id}><strong>{voiceModelName(item.model_id)}: </strong>{voiceModelHelp[item.model_id]?.description}</p>)}
+            </VoiceHelpLabel></div>
             <select aria-label="Modelo de voz" className={`${field} mt-2`} value={modelId} disabled={busy||!draft.ready} onChange={e=>setModelId(e.target.value)}>
               {!available.some(m=>m.model_id===modelId)&&<option value={modelId}>Modelo indisponível</option>}
               {available.map(item=><option key={item.model_id} value={item.model_id}>{voiceModelName(item.model_id)}</option>)}
             </select>
             <p className="mt-2 text-xs text-slate-500">{modelHints[modelId]} · {number(pricePerChar*1000)} créditos / mil caracteres</p>
+            <p className="mt-2 text-xs leading-5 text-slate-600">{voiceModelHelp[modelId]?.description}</p>
           </div>
-          <label className="block text-sm font-medium">Estilo de interpretação
+          <div className="text-sm font-medium"><VoiceHelpLabel title="Estilo de interpretação">
+            <p>É uma orientação para a atuação da voz, inclusive clonada. Natural funciona em todos os modelos; os demais estilos precisam de Voz Expressiva v3.</p>
+            {interpretations.map(style=><p key={style.id}><strong>{style.label}: </strong>{voiceStyleHelp[style.id]}</p>)}
+            <p>O roteiro não é reescrito. A emoção varia com a voz e o texto; use Ouvir trecho para comparar.</p>
+          </VoiceHelpLabel>
             <select aria-label="Estilo de interpretação" className={`${field} mt-2`} value={performance.style} disabled={busy||!draft.ready} onChange={e=>setPerformance(p=>({...p,style:e.target.value as Performance['style']}))}>
               {interpretations.map(style=><option key={style.id} value={style.id}>{style.label}{style.id!=='natural'&&!isV3?' · requer v3':''}</option>)}
             </select>
-          </label>
-          {performance.style!=='natural'&&<label className="block text-sm">Intensidade pretendida
+            <p className="mt-2 text-xs font-normal leading-5 text-slate-600">{voiceStyleHelp[performance.style]}</p>
+          </div>
+          {performance.style!=='natural'&&<div className="text-sm"><VoiceHelpLabel title="Intensidade pretendida">Suave busca uma entrega mais estável; Equilibrada permite variação moderada; Marcante dá mais liberdade expressiva. Não é volume nem garantia de uma emoção exata. Compare uma prévia, especialmente com voz clonada.</VoiceHelpLabel>
             <select aria-label="Intensidade pretendida" className={`${field} mt-1`} value={performance.intensity} onChange={e=>setPerformance(p=>({...p,intensity:e.target.value as Performance['intensity']}))}>
               <option value="gentle">Suave</option><option value="balanced">Equilibrada</option><option value="strong">Marcante</option>
             </select><span className="mt-2 block text-xs text-slate-500">Orienta a interpretação, inclusive de clones. Ouça uma prévia para conferir semelhança e emoção.</span>
-          </label>}
+          </div>}
           <details className="space-y-4"><summary className="cursor-pointer text-sm font-semibold">Ajustes da voz</summary>
             <button className="text-xs text-slate-500" type="button" onClick={()=>setSettings(defaults)}>Restaurar ajustes</button>
             <Slider label="Velocidade" left="Mais lenta" right="Mais rápida" value={settings.speed} min={0.7} max={1.2} step={0.05} onChange={value=>setSettings(s=>({...s,speed:value}))} />
             {performance.style==='natural'&&<Slider label="Estabilidade" left="Mais expressiva" right="Mais estável" value={settings.stability} min={0} max={1} step={isV3?0.5:0.05} onChange={value=>setSettings(s=>({...s,stability:value}))} />}
             <Slider label="Semelhança" left="Baixa" right="Alta" value={settings.similarity_boost} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,similarity_boost:value}))} />
             <Slider label="Exagero de estilo" left="Nenhum" right="Exagerado" value={settings.style} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,style:value}))} />
-            {!isV3&&<label className="flex items-center justify-between text-sm">Reforço da voz<input type="checkbox" checked={settings.use_speaker_boost} onChange={e=>setSettings(s=>({...s,use_speaker_boost:e.target.checked}))} /></label>}
-            {speechCapabilities[modelId as keyof typeof speechCapabilities]?.language&&<label className="block text-sm">Idioma<select className={`${field} mt-1`} value={language} onChange={e=>setLanguage(e.target.value)}><option value="">Detectar automaticamente</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option></select></label>}
+            {!isV3&&<div className="flex items-center justify-between text-sm"><VoiceHelpLabel title="Reforço da voz">Busca reforçar a semelhança com a voz original nos modelos compatíveis. Não é um controle de volume e não está disponível no v3.</VoiceHelpLabel><input aria-label="Reforço da voz" type="checkbox" checked={settings.use_speaker_boost} onChange={e=>setSettings(s=>({...s,use_speaker_boost:e.target.checked}))} /></div>}
+            {speechCapabilities[modelId as keyof typeof speechCapabilities]?.language&&<div className="text-sm"><VoiceHelpLabel title="Idioma">Orienta em qual idioma o texto deve ser falado. Automático deixa o modelo detectar pelo roteiro. Esta opção não traduz o texto.</VoiceHelpLabel><select aria-label="Idioma" className={`${field} mt-1`} value={language} onChange={e=>setLanguage(e.target.value)}><option value="">Detectar automaticamente</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option></select></div>}
           </details>
           <details className="text-sm"><summary className="cursor-pointer font-semibold">Pronúncia</summary>
+            <VoiceHelpLabel title="Dicionários de pronúncia">Orientam a leitura de nomes, marcas e termos específicos. Vincule até três dicionários já criados em Mais ferramentas. Não mudam a emoção da voz.</VoiceHelpLabel>
             {dictionaryError&&<p role="alert" className="text-xs text-amber-800">{dictionaryError}</p>}
             {dictionaryOptions.map(d=><label key={d.id} className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={dictionaries.includes(d.id)} disabled={busy||!draft.ready||(!dictionaries.includes(d.id)&&dictionaries.length>=3)} onChange={e=>setRestoredDictionaries({base:dictionaryId,ids:e.target.checked?[...dictionaries,d.id]:dictionaries.filter(id=>id!==d.id)})} />{d.name}</label>)}
             {dictionaries.some(id=>!dictionaryOptions.some(d=>d.id===id))&&<button className="mt-2 text-xs text-amber-800" onClick={()=>setRestoredDictionaries({base:dictionaryId,ids:[]})}>Limpar vínculos de pronúncia indisponíveis</button>}
@@ -396,11 +412,11 @@ export function voiceMeta(voice: StudioVoice) {
 
 function Slider({ label, left, right, value, min, max, step, onChange }: { label: string; left: string; right: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
   return (
-    <label className="block text-sm">
-      <span className="font-medium">{label}</span>
-      <input type="range" className="mt-1 w-full accent-slate-900" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} />
+    <div className="text-sm">
+      <span className="font-medium"><VoiceHelpLabel title={label}>{voiceAdjustmentHelp[label]}</VoiceHelpLabel></span>
+      <input aria-label={label} type="range" className="mt-1 w-full accent-slate-900" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} />
       <span className="flex justify-between text-[11px] text-slate-400"><span>{left}</span><span>{right}</span></span>
-    </label>
+    </div>
   );
 }
 

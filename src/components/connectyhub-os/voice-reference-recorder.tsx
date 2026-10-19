@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import {VoiceHelpLabel} from './voice-help';
 export function VoiceReferenceRecorder({file,onFile,disabled}:{file:File|null;onFile:(f:File|null)=>void;disabled:boolean}){
  const [recording,setRecording]=useState(false),[starting,setStarting]=useState(false),[error,setError]=useState('');
  const audio=useRef<HTMLAudioElement>(null);
@@ -23,6 +24,7 @@ export function VoiceReferenceRecorder({file,onFile,disabled}:{file:File|null;on
   finally{if(alive.current)setStarting(false);}
  }
  return <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+  <div className="text-sm font-semibold"><VoiceHelpLabel title="Usar minha interpretação">Grave ou envie sua atuação para transformar na voz escolhida, incluindo um clone. O áudio orienta ritmo, pausas e emoção; a semelhança pode variar. Grave até 5 minutos aqui, ou envie um arquivo de até 20 MB e 30 minutos. Ouça a gravação, envie a referência e confira o custo antes de Transformar voz.</VoiceHelpLabel></div>
   <p className="text-sm">Grave a frase com o ritmo, as pausas e a emoção desejados. Depois escolha a voz que vai interpretar esse áudio.</p>
   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap"><button type="button" className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm" disabled={disabled||starting} onClick={()=>recording?recorder.current?.stop():void start()}>{recording?'Parar gravação':starting?'Abrindo microfone…':'Gravar minha interpretação'}</button><label className="min-w-0 flex-1 text-sm">Ou enviar áudio<input aria-label="Áudio de referência" type="file" accept="audio/*" disabled={disabled||recording||starting} className="mt-2 w-full min-w-0" onChange={e=>{const f=e.target.files?.[0];if(f&&f.size>20_000_000){setError('Envie um áudio de até 20 MB.');return;}setError('');onFile(f??null);}}/></label></div>
   {recording&&<p role="status" className="text-sm text-red-700">Gravando… limite de 5 minutos. O áudio ainda está apenas neste dispositivo.</p>}
