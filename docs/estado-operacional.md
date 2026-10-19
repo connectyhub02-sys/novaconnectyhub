@@ -1,5 +1,20 @@
 # Estado operacional da ConnectyHub
 
+## Voz: aviso de emoções bloqueadas e troca direta — 19/10/2026
+
+Publicado às 10h49 BRT: `ed4c048e`, slot a/3130; anterior `7abaae00` no b/3131.
+Aviso destacado junto de Emoções/Reações explica a limitação do modelo e oferece
+Trocar para Voz Expressiva v3. Mantém clone/texto, salva a escolha no rascunho e
+respeita indisponibilidade do catálogo e bloqueios de geração/carregamento.
+Pausas em segundos continuam sujeitas à validação do v3, sem alteração silenciosa.
+
+TypeScript, ESLint e navegador com APIs simuladas (1920/390 px) aprovados;
+troca/habilitação, persistência, clone/texto, catálogo indisponível e ausência de
+geração paga conferidos. Build de 120 páginas, candidata e HTTPS público
+aprovados: SHA, 19 assets, novo aviso no bundle, APIs protegidas e Inngest assinado
+(58 funções). Sem migration, tarifa alterada ou áudio gerado. Builder parado.
+[Detalhes e limites](voz-aviso-emocoes-2026-10-19.md).
+
 ## Voz: efeitos e interpretação por áudio — 17/10/2026
 
 Etapas 5 e 6 (parte técnica) publicadas às 11h12 BRT: `7abaae00`, slot b/3131;
