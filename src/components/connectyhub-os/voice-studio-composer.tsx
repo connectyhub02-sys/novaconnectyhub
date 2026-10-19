@@ -256,7 +256,9 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="contents xl:block xl:min-w-0 xl:space-y-5">
           <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <VoiceDirectionEditor text={text} onChange={setText} model={modelId} area={textArea} disabled={busy||!draft.ready} onPreview={()=>void openPreview()} />
+            <VoiceDirectionEditor text={text} onChange={setText} model={modelId} area={textArea} disabled={busy||!draft.ready} onPreview={()=>void openPreview()}
+              expressiveAvailable={available.some(item=>item.model_id==='eleven_v3')}
+              onSwitchToExpressive={()=>{if(!busy&&draft.ready&&available.some(item=>item.model_id==='eleven_v3'))setModelId('eleven_v3');}} />
             <p role="status" className="px-5 pb-2 text-xs text-slate-500">{draft.dirty?'Alterações aguardando salvamento. ':''}{draft.status}</p>
             {preparation.error&&!!text.trim()&&<p role="alert" className="bg-amber-50 px-5 py-2 text-sm text-amber-900">{preparation.error}</p>}
             <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">

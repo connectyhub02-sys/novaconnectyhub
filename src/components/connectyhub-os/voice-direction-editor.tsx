@@ -1,10 +1,13 @@
 'use client';
-import {useRef, type RefObject} from 'react';
+import {useId, useRef, type RefObject} from 'react';
+import {LockKeyhole} from 'lucide-react';
 import {directionMarkers,markerText,speechCapabilities} from '../../lib/voice-api/performance';
 
-export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPreview}: {
+export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPreview,expressiveAvailable,onSwitchToExpressive}: {
   text:string;onChange:(text:string)=>void;model:string;area:RefObject<HTMLTextAreaElement|null>;disabled:boolean;onPreview:()=>void;
+  expressiveAvailable:boolean;onSwitchToExpressive:()=>void;
 }) {
+  const blockedNoticeId=useId();
   const undo=useRef<string[]>([]),redo=useRef<string[]>([]);
   const selection=useRef({start:0,end:0});
   const capability=speechCapabilities[model as keyof typeof speechCapabilities];
@@ -20,7 +23,7 @@ export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPrevie
   return <>
     <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
       {(['Pausas','Emoções','Reações'] as const).map((label,index)=><label key={label} className="text-xs font-medium text-slate-600">
-        <span className="sr-only">{label}</span><select aria-label={label} disabled={disabled||(index>0&&!capability?.emotions)} value="" className="min-h-9 max-w-44 rounded-lg border border-slate-200 bg-white px-2 disabled:opacity-50" onChange={e=>insert(e.target.value)}>
+        <span className="sr-only">{label}</span><select aria-label={label} aria-describedby={index>0&&!capability?.emotions?blockedNoticeId:undefined} disabled={disabled||(index>0&&!capability?.emotions)} value="" className="min-h-9 max-w-44 rounded-lg border border-slate-200 bg-white px-2 disabled:opacity-50" onChange={e=>insert(e.target.value)}>
           <option value="" disabled>{label}</option>
           {directionMarkers.filter(m=>index===0?(capability?.timedPauses?m.kind==='timed':m.kind==='pause'):m.kind===(index===1?'emotion':'reaction')).map(m=><option key={m.label} value={markerText(m.label)}>{m.label}</option>)}
           {index===0&&<option value="...">Reticências · hesitação</option>}
@@ -30,7 +33,16 @@ export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPrevie
       <button type="button" disabled={disabled} onClick={()=>travel(false)} className="min-h-9 px-2 text-xs text-slate-600">Refazer</button>
       <button type="button" disabled={disabled||!text.trim()} onClick={onPreview} className="ml-auto min-h-9 rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-700 disabled:opacity-50">Ouvir trecho</button>
     </div>
-    <p className="px-5 pt-3 text-xs text-slate-500">Posicione o cursor para inserir. {capability?.emotions?'Emoções dependem da voz; pausas expressivas não têm duração exata.':'Pausas de até 3 s. Para emoções e estilos, escolha Voz Expressiva v3.'}</p>
+    {!capability?.emotions&&<div id={blockedNoticeId} role="note" className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+      <LockKeyhole size={20} className="shrink-0 self-start" aria-hidden="true" />
+      <div className="min-w-0 flex-1 basis-56">
+        <p className="text-sm font-semibold">Emoções e reações bloqueadas neste modelo</p>
+        <p className="mt-1 text-sm">Use Voz Expressiva v3 para liberar esses recursos, inclusive com sua voz clonada.</p>
+        {!expressiveAvailable&&<p className="mt-1 text-sm font-medium">Voz Expressiva v3 está indisponível no momento.</p>}
+      </div>
+      <button type="button" disabled={disabled||!expressiveAvailable} onClick={()=>{onSwitchToExpressive();requestAnimationFrame(()=>area.current?.focus());}} className="ch-action min-h-11 w-full rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto">Trocar para Voz Expressiva v3</button>
+    </div>}
+    <p className="px-5 pt-3 text-xs text-slate-500">Posicione o cursor para inserir. {capability?.emotions?'Emoções dependem da voz; pausas expressivas não têm duração exata.':'Pausas de até 3 s.'}</p>
     <textarea ref={area} aria-label="Texto para transformar em voz" disabled={disabled} value={text} maxLength={240000}
       onSelect={e=>{selection.current={start:e.currentTarget.selectionStart,end:e.currentTarget.selectionEnd};}}
       onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();travel(e.key.toLowerCase()==='z'&&!e.shiftKey);}}}
