@@ -1,5 +1,21 @@
 # Estado operacional da ConnectyHub
 
+## Voz: ajuda contextual e importação TXT visível — 19/10/2026
+
+Publicado às 11h16 BRT: `1d6ffdb4`, slot b/3131; anterior `ed4c048e` no a/3130.
+Ícones de interrogação explicam modelos, seis estilos, ajustes, pausas, emoções,
+reações, prévia, efeitos, formato, histórico e atuação por referência. Modelo e
+estilo selecionados também têm descrição visível. Ajuda por mouse/foco/Enter/toque,
+com dicas longas limitadas à tela. Importar TXT é botão real com borda, fundo,
+ícone e suporte a teclado; mantém a importação existente.
+
+TypeScript/ESLint e navegador com APIs simuladas em 1920/1366/390 px aprovados,
+incluindo importação pelo seletor real, textos de ajuda, seis estilos e dicas
+sem transbordamento. Sem geração paga ou envio de áudio. Build de 120 páginas e
+smokes candidata/HTTPS aprovados: SHA, 19 assets, bundle, APIs protegidas e Inngest
+assinado (58 funções). Sem migration ou mudança de tarifa. Builder parado.
+[Detalhes e evidências](voz-ajuda-contextual-2026-10-19.md).
+
 ## Voz: aviso de emoções bloqueadas e troca direta — 19/10/2026
 
 Publicado às 10h49 BRT: `ed4c048e`, slot a/3130; anterior `7abaae00` no b/3131.
