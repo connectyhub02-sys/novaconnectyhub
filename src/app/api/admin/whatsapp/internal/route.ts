@@ -31,6 +31,8 @@ type ActionBody = {
   sectorName?: unknown;
   description?: unknown;
   automationRoles?: unknown;
+  templateId?: unknown;
+  responsibleHumans?: unknown;
   prompt?: unknown;
   agentPrompt?: unknown;
   behavior?: unknown;
@@ -95,6 +97,8 @@ export async function POST(request: NextRequest) {
         description: asString(body?.description) ?? undefined,
         name: asString(body?.name) ?? "",
         roleTitle: asString(body?.roleTitle) ?? undefined,
+        templateId: asString(body?.templateId) ?? undefined,
+        responsibleHumans: body?.responsibleHumans,
         userId: auth.userId,
         client: createServiceClient(),
       });
@@ -113,6 +117,8 @@ export async function POST(request: NextRequest) {
         roleTitle: asString(body?.roleTitle),
         description: typeof body?.description === "string" ? body.description : null,
         automationRoles: body?.automationRoles,
+        responsibleHumans: body?.responsibleHumans,
+        channelConfig: body?.channelConfig,
         userId: auth.userId,
         client: createServiceClient(),
       });

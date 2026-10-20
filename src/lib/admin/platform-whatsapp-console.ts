@@ -1,4 +1,5 @@
 import { validateAgentChannelSelection } from "@/lib/agents/channel-availability-server";
+import { internalAgentBehavior, internalAgentResponsiblePatch } from "@/lib/agents/internal-agent-settings";
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { applyActivityQualification, applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
@@ -288,11 +289,15 @@ export async function createPlatformWhatsappConsoleSectorAgent(input: {
   description?: string;
   name: string;
   roleTitle?: string;
+  templateId?: string;
+  responsibleHumans?: unknown;
   userId: string;
   voiceOrganizationId?: string | null;
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
+  // Validate before creating a sector so an invalid contact cannot leave an orphan.
+  internalAgentResponsiblePatch(input.responsibleHumans, defaultWhatsappBehaviorConfig);
   const sector = await createPlatformWhatsappSector({
     name: input.sectorName,
     description: input.description,
@@ -304,6 +309,8 @@ export async function createPlatformWhatsappConsoleSectorAgent(input: {
     sectorId: sector.id,
     name: input.name,
     roleTitle: input.roleTitle,
+    templateId: input.templateId,
+    responsibleHumans: input.responsibleHumans,
     userId: input.userId,
     client,
   });
@@ -374,6 +381,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
       cloneProfile: nextCloneProfile, qualification: nextQualificationConfig, behavior: nextBehavior });
     nextCloneProfile = setup.cloneProfile; nextQualificationConfig = setup.qualification; nextBehavior = setup.behavior;
   }
+  nextBehavior = internalAgentBehavior(readRecord(agent.metadata) ?? {}, nextBehavior);
   const nextPrompt = nextConfig.mode === "automatic"
     ? buildAgentPromptFromTemplate({ config: nextConfig, agentName: agent.persona_name || agent.name, companyName: sector.name })
     : hasAgentPrompt ? agentPrompt! : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
@@ -449,6 +457,8 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
   roleTitle?: string | null;
   description?: string | null;
   automationRoles?: unknown;
+  responsibleHumans?: unknown;
+  channelConfig?: unknown;
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
@@ -475,9 +485,14 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
         : agent.description),
   );
   const automationRoles = normalizeAgentAutomationRoles(input.automationRoles, readAutomationRoles(agent.metadata));
+  const responsiblePatch = internalAgentResponsiblePatch(input.responsibleHumans, getBehaviorConfig(agent, instance));
+  const channelConfig = input.channelConfig === undefined ? getAgentChannelConfig(agent)
+    : await validateAgentChannelSelection(client, null, input.channelConfig, getAgentChannelConfig(agent));
   const now = new Date().toISOString();
   const baseMetadata = {
     ...(readRecord(agent.metadata) ?? {}),
+    ...responsiblePatch,
+    multichannel_config: channelConfig,
     automation_roles: automationRoles,
     can_send_signup_verification: automationRoles.signup_whatsapp_verification,
     can_send_trial_messages: automationRoles.trial_welcome || automationRoles.trial_conversion,
@@ -488,7 +503,7 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
   const metadata = isElianeAgent
     ? applyElianeAgentDefaultsToMetadata(baseMetadata, {
         force: shouldApplyElianeDefaults,
-        behavior: getBehaviorConfig(agent, instance),
+        behavior: responsiblePatch.whatsapp_behavior_config ?? getBehaviorConfig(agent, instance),
       })
     : baseMetadata;
   const nextPrompt = shouldApplyElianeDefaults
@@ -525,7 +540,7 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
   }
 
   if (instance) {
-    await client
+    const { error: instanceError } = await client
       .from("whatsapp_instances")
       .update({
         metadata: {
@@ -534,9 +549,11 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
           agent_name: personaName,
           sector_id: sector.id,
           sector_name: sector.name,
+          ...(responsiblePatch.whatsapp_behavior_config ? { behavior_config: responsiblePatch.whatsapp_behavior_config } : {}),
         },
       })
       .eq("id", instance.id);
+    if (instanceError) throw new Error("O cadastro foi salvo, mas não foi possível atualizar a conexão. Salve novamente para sincronizar os responsáveis.");
   }
 
   if (isElianeAgent) {
@@ -1192,7 +1209,7 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
     requireSectorWhatsappInstance(client, sector.id),
   ]);
   const behaviorDraft = normalizeWhatsappBehaviorSettings(input.behavior ?? getBehaviorConfig(agent, instance));
-  const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(agent, instance), behaviorDraft);
+  const behavior = internalAgentBehavior(readRecord(agent.metadata) ?? {}, mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(agent, instance), behaviorDraft));
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -1425,6 +1442,7 @@ function buildState(
       ? {
           id: agent.id,
           name: agent.persona_name?.trim() || agent.name,
+          internalName: agent.name,
           avatarUrl: agent.avatar_url,
           avatarAlt: agent.avatar_alt,
           roleTitle: agent.role_title,
@@ -2210,7 +2228,7 @@ function mapSectorEntity(row: SectorRow): PlatformWhatsappConsoleEntity {
 function getBehaviorConfig(agent: AgentRow | null, instance: WhatsappInstanceRow | null) {
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
-  return resolveWhatsappBehaviorSettings({ instance: instanceConfig, agent: agentConfig, global: defaultWhatsappBehaviorConfig });
+  return internalAgentBehavior(readRecord(agent?.metadata) ?? {}, resolveWhatsappBehaviorSettings({ instance: instanceConfig, agent: agentConfig, global: defaultWhatsappBehaviorConfig }));
 }
 
 function getAgentChannelConfig(agent: AgentRow | null) {

@@ -266,6 +266,7 @@ type WhatsappState = {
     sectorCode?: string | null;
     sectorName?: string | null;
     name: string;
+    internalName?: string;
     avatarUrl: string | null;
     avatarAlt: string | null;
     roleTitle?: string | null;
@@ -614,6 +615,10 @@ export function WhatsAppConsole({
   const [internalSectorName, setInternalSectorName] = useState("");
   const [internalSectorDescription, setInternalSectorDescription] = useState("");
   const [internalAgentName, setInternalAgentName] = useState("");
+  const [internalTemplateId, setInternalTemplateId] = useState("");
+  const [internalResponsibles, setInternalResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
+  const [internalEditResponsibles, setInternalEditResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
+  const [internalEditChannels, setInternalEditChannels] = useState<AgentChannelConfig>(defaultAgentChannelConfig);
   const [internalAgentRoleTitle, setInternalAgentRoleTitle] = useState(variant.agentRoleTitle);
   const [creatingInternalAgent, setCreatingInternalAgent] = useState(false);
   const [showInternalAgentEdit, setShowInternalAgentEdit] = useState(false);
@@ -1548,6 +1553,10 @@ export function WhatsAppConsole({
       setNotice({ tone: "warning", message: "Informe o setor interno do novo agente." });
       return;
     }
+    if (!isResponsibleHumansDraftComplete(internalResponsibles)) {
+      setNotice({ tone: "warning", message: "Informe o nome e WhatsApp de pelo menos um responsável humano." });
+      return;
+    }
 
     setCreatingInternalAgent(true);
     setNotice(null);
@@ -1558,6 +1567,8 @@ export function WhatsAppConsole({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create_sector_agent",
+          templateId: internalTemplateId || undefined,
+          responsibleHumans: responsibleHumansToPayload(internalResponsibles),
           sectorName,
           description: internalSectorDescription,
           name,
@@ -1574,6 +1585,8 @@ export function WhatsAppConsole({
       setInternalSectorName("");
       setInternalSectorDescription("");
       setInternalAgentName("");
+      setInternalTemplateId("");
+      setInternalResponsibles([createResponsibleHumanDraft()]);
       setShowInternalAgentForm(false);
       openInternalAgentEdit(data.state.agent);
       setConnectPhone("");
@@ -1594,8 +1607,10 @@ export function WhatsAppConsole({
       return;
     }
 
-    setInternalEditName(agent.name);
+    setInternalEditName(agent.internalName ?? agent.name);
     setInternalEditPersonaName(agent.name);
+    setInternalEditResponsibles(toResponsibleHumanDrafts(agent.responsibleHumans));
+    setInternalEditChannels(normalizeAgentChannelConfig(agent.channelConfig));
     setInternalEditRoleTitle(agent.roleTitle ?? variant.agentRoleTitle);
     setInternalEditDescription(agent.description ?? "");
     setInternalEditAutomationRoles(normalizeAgentAutomationRoles(agent.automationRoles));
@@ -1614,6 +1629,11 @@ export function WhatsAppConsole({
       setNotice({ tone: "warning", message: "Escolha um agente interno antes de salvar." });
       return;
     }
+    const responsiblePayload = responsibleHumansToPayload(internalEditResponsibles);
+    if ((responsiblePayload.length > 0 || state?.agent?.responsibleHumans?.length) && !isResponsibleHumansDraftComplete(internalEditResponsibles)) {
+      setNotice({ tone: "warning", message: "Informe o nome e WhatsApp de pelo menos um responsável humano." });
+      return;
+    }
 
     setEditingInternalAgent(true);
     setNotice(null);
@@ -1630,6 +1650,8 @@ export function WhatsAppConsole({
           roleTitle: internalEditRoleTitle,
           description: internalEditDescription,
           automationRoles: internalEditAutomationRoles,
+          responsibleHumans: responsiblePayload.length ? responsiblePayload : undefined,
+          channelConfig: internalEditChannels,
         }),
       });
       const data = (await response.json().catch(() => null)) as ActionResponse | null;
@@ -1639,6 +1661,11 @@ export function WhatsAppConsole({
       }
 
       applyWhatsappState(data.state, { preserveDrafts: settingsChanged });
+      setChannelConfigDraft(normalizeAgentChannelConfig(data.state.agent?.channelConfig));
+      // Preserve other unsaved preferences, but never restore removed recipients.
+      setBehaviorDraft(current => ({ ...current, humanHandoffNotificationNumbers: data.state!.behavior.humanHandoffNotificationNumbers,
+        ...(!settingsChanged ? { humanHandoffNotifications: data.state!.behavior.humanHandoffNotifications } : {}) }));
+      setShowInternalAgentEdit(false);
       setNotice(data.notice ?? { tone: "success", message: "Agente interno atualizado." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar agente interno." });
@@ -1817,6 +1844,13 @@ export function WhatsAppConsole({
 
         {canManageInternalAgents ? (
           <InternalAgentsManager
+            templateId={internalTemplateId}
+            onTemplateChange={setInternalTemplateId}
+            responsibleHumans={internalResponsibles}
+            onResponsiblesChange={setInternalResponsibles}
+            editResponsibles={internalEditResponsibles}
+            onEditResponsiblesChange={setInternalEditResponsibles}
+            editChannels={<AgentChannelSelector internal companyId={selectedCompanyId} config={internalEditChannels} onChange={setInternalEditChannels} whatsappConnected={isConnected} disabled={editingInternalAgent} />}
             agent={state?.agent ?? null}
             agentName={internalAgentName}
             agentRoleTitle={internalAgentRoleTitle}
@@ -3191,6 +3225,13 @@ function ClientAgentInlineEditor({
 }
 
 function InternalAgentsManager({
+  templateId,
+  onTemplateChange,
+  responsibleHumans,
+  onResponsiblesChange,
+  editResponsibles,
+  onEditResponsiblesChange,
+  editChannels,
   agent,
   agentName,
   agentRoleTitle,
@@ -3232,6 +3273,13 @@ function InternalAgentsManager({
   onStart,
   variant,
 }: {
+  templateId: string;
+  onTemplateChange: (value: string) => void;
+  responsibleHumans: ResponsibleHumanDraft[];
+  onResponsiblesChange: (value: ResponsibleHumanDraft[]) => void;
+  editResponsibles: ResponsibleHumanDraft[];
+  onEditResponsiblesChange: (value: ResponsibleHumanDraft[]) => void;
+  editChannels: ReactNode;
   agent: WhatsappState["agent"];
   agentName: string;
   agentRoleTitle: string;
@@ -3405,6 +3453,11 @@ function InternalAgentsManager({
             </label>
           </div>
 
+          <div className="mt-4 space-y-4">
+            <AgentResponsiblesEditor drafts={editResponsibles} onChange={onEditResponsiblesChange} disabled={busy || editing} />
+            {editChannels}
+            <p className="text-xs text-slate-500">Atividade, instruções, qualificação, voz e comportamento ficam nas abas deste agente, abaixo do cadastro.</p>
+          </div>
           <div className="mt-4 grid gap-2 md:grid-cols-3">
             <AutomationRoleToggle
               checked={editAutomationRoles.signup_whatsapp_verification}
@@ -3440,6 +3493,13 @@ function InternalAgentsManager({
         <AgentSetupDialog title="Novo agente interno" busy={creating || busy} notice={notice} onClose={onCancel}>
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <fieldset disabled={creating || busy} className="min-w-0">
+          <label className="mb-4 block text-xs font-semibold">
+            Atividade do agente
+            <select className="mt-2 h-11 w-full rounded-lg border px-3 text-sm" value={templateId} onChange={event => onTemplateChange(event.target.value)}>
+              <option value="">Atendimento interno da ConnectyHub</option>
+              {agentPromptTemplates.map(template => <option key={template.id} value={template.id}>{template.label}</option>)}
+            </select>
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor interno</span>
@@ -3474,11 +3534,12 @@ function InternalAgentsManager({
             <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Função</span>
             <input className="h-11 w-full rounded-lg border px-3 text-[13px]" value={agentRoleTitle} onChange={(event) => onAgentRoleTitleChange(event.target.value)} />
           </label>
+          <AgentResponsiblesEditor className="mt-4" drafts={responsibleHumans} onChange={onResponsiblesChange} disabled={creating || busy} />
           <div className="mt-4 flex flex-wrap gap-2">
             {companies.length > 0 ? (
               <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
             ) : null}
-            <ActionButton icon={Wand2} label="Salvar agente e continuar" disabled={creating || !sectorName.trim()} loading={creating} onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Salvar agente e continuar" disabled={creating || !sectorName.trim() || !isResponsibleHumansDraftComplete(responsibleHumans)} loading={creating} onClick={onCreate} />
           </div>
         </fieldset>
         <PendingAgentConnection />

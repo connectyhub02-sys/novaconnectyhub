@@ -246,6 +246,7 @@ export type ClientWhatsappState = {
     sectorCode?: string | null;
     sectorName?: string | null;
     name: string;
+    internalName?: string;
     avatarUrl: string | null;
     avatarAlt: string | null;
     roleTitle?: string | null;

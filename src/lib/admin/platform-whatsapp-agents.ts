@@ -1,6 +1,9 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { internalAgentResponsiblePatch } from "@/lib/agents/internal-agent-settings";
+import { createActivitySetup } from "@/lib/whatsapp/activity-setup";
+import { buildAgentPromptFromTemplate, promptBuilderMetadataKey } from "@/lib/whatsapp/agent-prompt-templates";
 import { defaultAgentChannelConfig } from "@/lib/agents/multichannel";
 import { defaultGeminiModel } from "@/lib/gemini/models";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
@@ -149,6 +152,8 @@ export async function createPlatformWhatsappAgent(input: {
   name: string;
   roleTitle?: string;
   prompt?: string;
+  templateId?: string;
+  responsibleHumans?: unknown;
   userId: string;
   client?: SupabaseClient;
 }) {
@@ -157,7 +162,9 @@ export async function createPlatformWhatsappAgent(input: {
   const name = normalizeAgentName(input.name);
   const isElianeAgent = isElianeAgentName(name);
   const roleTitle = normalizeRoleTitle(input.roleTitle, isElianeAgent);
-  const prompt = normalizePrompt(input.prompt, sector, isElianeAgent);
+  const setup = input.templateId ? createActivitySetup(input.templateId, name) : null;
+  const prompt = input.prompt || !setup ? normalizePrompt(input.prompt, sector, isElianeAgent)
+    : buildAgentPromptFromTemplate({ config: setup.config, companyName: sector.name, agentName: name });
   const agentCode = createAgentCode(name, sector.sectorCode);
   const baseMetadata = {
     admin_created: true,
@@ -179,6 +186,13 @@ export async function createPlatformWhatsappAgent(input: {
   const metadata = isElianeAgent
     ? applyElianeAgentDefaultsToMetadata(baseMetadata, { force: true, behavior: defaultWhatsappBehaviorConfig })
     : baseMetadata;
+  if (setup) Object.assign(metadata, {
+    [promptBuilderMetadataKey]: setup.config,
+    whatsapp_clone_profile: setup.cloneProfile,
+    [leadQualificationConfigKey]: setup.qualification,
+    whatsapp_behavior_config: setup.behavior,
+  });
+  Object.assign(metadata, internalAgentResponsiblePatch(input.responsibleHumans, metadata.whatsapp_behavior_config));
 
   const { data, error } = await client
     .from("agent_registry")
