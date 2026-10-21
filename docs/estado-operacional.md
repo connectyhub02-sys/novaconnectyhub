@@ -1,5 +1,22 @@
 # Estado operacional da ConnectyHub
 
+## Configuração dos agentes WhatsApp internos alinhada — 20/10/2026
+
+Publicado às 20h55 BRT: `5a0c0c2f`, slot a/3130; anterior `1d6ffdb4` no b.
+Cadastro interno oferece atividade e responsáveis humanos com os controles
+compartilhados do cliente. Edição preserva nome interno/persona separados,
+sincroniza responsáveis no agente e conexão e impede recuperar contatos antigos
+por rascunhos. Seletor de canais expõe a restrição real: Meta exige agente de
+empresa. Prompt, qualificação, personalidade, voz e comportamento já eram comuns.
+
+241 testes, TypeScript/ESLint, build de 120 páginas e navegador local com APIs
+simuladas em 1366/390 px aprovados. Candidata e HTTPS público: saúde/SHA, 19
+assets, APIs protegidas, bundle e Inngest assinado com 58 funções. Builder parado.
+Sem migration, alteração em massa, mensagens ou geração paga de teste. Registro
+do agente ativo preservado. Conferência visual autenticada em produção não
+concluída porque a conexão do Chrome ficou indisponível; interação conferida
+localmente. [Alterações, evidências e limites](agentes-internos-configuracao-2026-10-20.md).
+
 ## Voz: ajuda contextual e importação TXT visível — 19/10/2026
 
 Publicado às 11h16 BRT: `1d6ffdb4`, slot b/3131; anterior `ed4c048e` no a/3130.

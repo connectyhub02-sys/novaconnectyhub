@@ -32,5 +32,28 @@ registros, dados legados, contatos inválidos, preservação de preferências e
 restrição Meta. Cadastro verifica o perfil de atividade persistido.
 
 Sem migration, alteração em massa de agentes existentes, envio de WhatsApp,
-geração de voz ou consumo de IA de teste. Verificação visual/publicação ainda
-em andamento no momento deste registro; completar após evidência real.
+geração de voz ou consumo de IA de teste.
+
+## Publicação e conferência final
+
+Publicado em 20/10 às 20h55 BRT: `5a0c0c2f`, slot a/3130. Código enviado ao
+GitHub `master`; anterior `1d6ffdb4` preservado no slot b para retorno. Build de
+produção, TypeScript e 120 páginas aprovados. Candidata e HTTPS público:
+saúde/SHA, 19 assets, bundle dos novos controles, APIs de agentes protegidas
+(401 sem sessão), páginas protegidas (307), Inngest assinado com 58 funções.
+Fixture de teste ausente da publicação (404). Builder parado ao concluir.
+
+Navegador local com componentes reais e APIs simuladas validou em 1366 e 390 px:
+edição/persistência do payload de responsáveis, nomes distintos, canais Meta
+indisponíveis, atividade na criação e bloqueio de cadastro incompleto. Sem erros
+de JavaScript ou transbordamento horizontal. Capturas em `.codex-screens/internal-*`.
+O fixture usa as variáveis e atributos do tema real do painel. Servidor e fixture
+locais removidos/parados após o teste. Dependências locais estavam incompletas e
+foram reinstaladas pelo lockfile, sem alteração de versões ou arquivo de lock.
+Rodada final: 241 testes aprovados. Não se gravaram dados de teste em produção.
+
+A leitura agregada da produção encontrou um agente interno ativo, sem lista
+explícita `responsible_humans`; seu registro foi preservado. A sessão Chrome
+desconectou da ferramenta, portanto não houve confirmação visual autenticada
+em produção. A interação foi comprovada no navegador local; a publicação,
+proteção das rotas e funcionamento do serviço foram comprovados na VPS.
