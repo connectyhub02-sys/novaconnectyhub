@@ -25,10 +25,10 @@ export function VoiceHelpLabel({title,children}:{title:string;children:ReactNode
 }
 
 export const voiceModelHelp:Record<string,{name:string;description:string}>= {
-  eleven_multilingual_v2:{name:'Voz Multilíngue v2',description:'Prioriza uma leitura natural e consistente, útil para narrações longas. Aceita pausas em segundos; os botões de emoções, reações e estilos expressivos ficam indisponíveis neste painel.'},
-  eleven_flash_v2_5:{name:'Voz Rápida v2.5',description:'Prioriza rapidez na geração. Útil para falas do dia a dia e testes de roteiro. Aceita pausas em segundos, sem os comandos de emoções e reações do v3. Confira o custo mostrado no painel.'},
-  eleven_turbo_v2_5:{name:'Voz Expressa v2.5',description:'Alternativa de geração rápida para leitura comum, com pausas em segundos. Apesar do nome Expressa, não libera emoções e reações: esses comandos usam Voz Expressiva v3.'},
-  eleven_v3:{name:'Voz Expressiva v3',description:'Libera estilos de interpretação, emoções e reações, inclusive com clones. Use para uma atuação mais expressiva. As pausas são curtas ou longas, sem duração exata; confira o resultado em Ouvir trecho.'},
+  eleven_multilingual_v2:{name:'Voz Multilíngue v2',description:'Prioriza uma leitura natural e consistente, útil para narrações longas. Aceita pausas em segundos; oferece velocidade, estabilidade, semelhança, exagero de estilo e reforço da voz. Emoções, reações e estilos expressivos exigem v3.'},
+  eleven_flash_v2_5:{name:'Voz Rápida v2.5',description:'Prioriza rapidez na geração. Útil para falas do dia a dia e testes de roteiro. Aceita pausas em segundos, sem os comandos de emoções e reações do v3. Oferece velocidade, estabilidade e semelhança, sem exagero de estilo ou reforço da voz. Confira o custo mostrado no painel.'},
+  eleven_turbo_v2_5:{name:'Voz Expressa v2.5',description:'Alternativa de geração rápida para leitura comum, com pausas em segundos. Apesar do nome Expressa, não libera emoções e reações: esses comandos usam Voz Expressiva v3. Oferece velocidade, estabilidade e semelhança, sem exagero de estilo ou reforço da voz.'},
+  eleven_v3:{name:'Voz Expressiva v3',description:'Libera estilos de interpretação, emoções e reações, inclusive com clones. Use para uma atuação mais expressiva, guiada por estabilidade e marcações no texto. Não oferece os controles de velocidade, semelhança, exagero de estilo ou reforço da voz. As pausas são curtas ou longas, sem duração exata; confira o resultado em Ouvir trecho.'},
 };
 
 export const voiceStyleHelp:Record<string,string>={
@@ -41,8 +41,8 @@ export const voiceStyleHelp:Record<string,string>={
 };
 
 export const voiceAdjustmentHelp:Record<string,string>={
-  Velocidade:'Muda a rapidez da fala: abaixo de 1 fica mais lenta; acima de 1, mais rápida. O valor 1 é a velocidade padrão. Não determina a emoção.',
-  Estabilidade:'Valores mais altos favorecem uma entrega consistente; mais baixos permitem maior variação de entonação. Variação demais pode deixar a fala menos previsível. Com um estilo expressivo, a Intensidade pretendida orienta este ajuste.',
-  Semelhança:'Orienta a proximidade com a voz escolhida, inclusive o clone. Aumentar não garante uma cópia perfeita; a gravação de origem e o modelo também influenciam. Compare pela prévia.',
-  'Exagero de estilo':'Orienta o quanto acentuar o estilo próprio da voz, nos modelos que aceitam esse ajuste. Não escolhe uma emoção nem substitui o Estilo de interpretação. Comece baixo e compare a prévia.',
+  Velocidade:'Muda a rapidez da fala: abaixo de 1 fica mais lenta; acima de 1, mais rápida. O valor 1 é a velocidade padrão. Disponível nos modelos v2 e v2.5 deste painel; não determina emoção nem sotaque.',
+  Estabilidade:'Valores mais altos favorecem uma entrega consistente; mais baixos permitem maior variação de entonação. Variação demais pode deixar a fala menos previsível. Este ajuste não seleciona uma emoção nem garante a preservação do sotaque.',
+  Semelhança:'Orienta a proximidade com a voz escolhida, inclusive o clone, nos modelos v2 e v2.5. O percentual representa o ajuste, não uma medição de fidelidade. Aumentar não garante a preservação do sotaque; a gravação e o modelo também influenciam. Compare pela prévia.',
+  'Exagero de estilo':'Disponível no Multilíngue v2. Acentua o estilo próprio da voz de referência; não escolhe uma emoção nem equivale à interpretação cinematográfica. A recomendação é manter em zero: aumentar pode reduzir a estabilidade e tornar a geração mais lenta.',
 };

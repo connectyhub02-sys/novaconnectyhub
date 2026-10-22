@@ -11,7 +11,7 @@ export function VoiceOutputOptions({project,effects,onEffects,format,onFormat,lo
  function change(key:keyof SpeechEffects,value:string|number){const next={...effects};if(value==='')delete next[key];else Object.assign(next,{[key]:value});onEffects(Object.keys(next).length?next:undefined);}
  return <>
   <details className="space-y-3 text-sm"><summary className="cursor-pointer font-semibold">Efeitos sobre a fala</summary>
-   <p className="text-xs text-slate-500">Altere o som e o ambiente da voz. A interpretação continua sendo escolhida separadamente.</p>
+   <p className="text-xs text-slate-500">Altere o som e o ambiente do áudio gerado. Estes efeitos não recuperam nem escolhem sotaques. A interpretação é escolhida separadamente.</p>
    {error&&<p role="alert" className="text-xs text-amber-800">{error} <button type="button" className="underline" onClick={()=>setRevision(v=>v+1)}>Tentar novamente</button></p>}
    {!catalog&&!error&&<p className="text-xs">Carregando efeitos…</p>}
    {catalog&&([['filter_preset_id','filter_presets','Filtro'],['environment_id','environments','Ambiente'],['background_noise_id','background_noises','Som de fundo']] as const).map(([key,group,label])=><div key={key}><VoiceHelpLabel title={label}>{effectHelp[label]}</VoiceHelpLabel><select aria-label={label} className={field} value={effects?.[key]??''} onChange={e=>change(key,e.target.value)}><option value="">Nenhum</option>{effects?.[key]&&!(catalog[group] as unknown as Record<string,string>[]).some(v=>v[key]===effects[key])&&<option value={effects[key]}>Efeito salvo indisponível</option>}{(catalog[group] as unknown as Record<string,string>[]).map(v=><option key={v[key]} value={v[key]}>{labels[v[key]]??v.name}</option>)}</select></div>)}

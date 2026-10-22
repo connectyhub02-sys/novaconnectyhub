@@ -23,6 +23,7 @@ import {VoiceOutputOptions} from './voice-output-options';
 import {validateEffectsFormat,validateLongFormat,type SpeechEffects} from '../../lib/voice-api/speech-options';
 import { VoiceDirectionEditor } from './voice-direction-editor';
 import {VoiceHelp,VoiceHelpLabel,voiceModelHelp,voiceStyleHelp,voiceAdjustmentHelp} from './voice-help';
+import {speechControls,studioVoiceSettings} from '../../lib/voice-api/model-controls';
 import { useVoiceDraft } from './use-voice-draft';
 import { defaultPerformance, interpretations, normalizeSpeech, prepareSpeech, previewExcerpt, speechCapabilities, type Performance, type SpeechScript } from '../../lib/voice-api/performance';
 const SHORT_LIMIT = 4800;
@@ -98,12 +99,13 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   const model = models.find(item => item.model_id === modelId);
   const clean = normalize(text);
   const preparation=useMemo(()=>{
-    try{validateEffectsFormat(effects,outputFormat||'mp3_44100_128');if(normalize(text).length>SHORT_LIMIT)validateLongFormat(outputFormat||undefined,normalize(text).length);return {...prepareSpeech(text,modelId,{...settings,...(modelId==='eleven_v3'?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance),error:''};}
+    try{validateEffectsFormat(effects,outputFormat||'mp3_44100_128');if(normalize(text).length>SHORT_LIMIT)validateLongFormat(outputFormat||undefined,normalize(text).length);return {...prepareSpeech(text,modelId,studioVoiceSettings(modelId,settings),performance),error:''};}
     catch(e){return {text:normalize(text),voiceSettings:settings,performance,error:(e as Error).message};}
   },[text,modelId,settings,performance,effects,outputFormat]);
   const chars = preparation.text.length;
   const long = chars > SHORT_LIMIT || clean.length > SHORT_LIMIT;
   const isV3 = modelId === "eleven_v3";
+  const controls = speechControls[modelId as keyof typeof speechControls];
   const pricePerChar = model?.credits_per_character ?? 0;
   const localQuote = model?.available && chars ? Math.max(model.minimum_credits ?? 0, chars * pricePerChar) : null;
   const minutes = chars ? chars / CHARS_PER_MINUTE : 0;
@@ -118,9 +120,9 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
   }
   const draft=useVoiceDraft(project,script,restoreScript);
   const payload = useMemo(() => ({
-    ...(effects?{audio_effects:effects}:{}),...(outputFormat?{output_format:outputFormat}:{}),text: clean, voice_id: voiceId, model_id: modelId, voice_settings: {...settings,...(isV3?{stability:[0,0.5,1].reduce((best,v)=>Math.abs(v-settings.stability)<Math.abs(best-settings.stability)?v:best,0.5)}:{})},performance,
+    ...(effects?{audio_effects:effects}:{}),...(outputFormat?{output_format:outputFormat}:{}),text: clean, voice_id: voiceId, model_id: modelId, voice_settings: studioVoiceSettings(modelId,settings),performance,
     ...(language&&speechCapabilities[modelId as keyof typeof speechCapabilities]?.language ? { language_code: language } : {}), ...(dictionaries.length ? { dictionary_ids: dictionaries } : {}),
-  }), [clean, voiceId, modelId, settings, isV3, performance, language, dictionaries, effects, outputFormat]);
+  }), [clean, voiceId, modelId, settings, performance, language, dictionaries, effects, outputFormat]);
 
   // Long texts are quoted by the server with the same rules used to reserve them.
   const quoteKey = `${project}:${JSON.stringify(payload)}`;
@@ -201,7 +203,7 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
     try{
       const excerpt=previewExcerpt(text,textArea.current?.selectionStart??0,textArea.current?.selectionEnd??0);
       if(!excerpt)throw new Error('Selecione um trecho com fala para ouvir.');
-      const snapshot={...script,output_format:script.output_format??(long?'mp3_44100_64':'mp3_44100_128'),text:excerpt,performance:{...performance,preview:true}};
+      const snapshot={...script,voice_settings:studioVoiceSettings(modelId,settings),output_format:script.output_format??(long?'mp3_44100_64':'mp3_44100_128'),text:excerpt,performance:{...performance,preview:true}};
       setPreview({script:snapshot,credits:null,error:''});
       const quote=await fetch(endpoint('generations/quote'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot)}).then(read);
       setPreview(current=>current?.script===snapshot?{...current,credits:quote.credits}:current);
@@ -346,18 +348,20 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, res
             </select>
             <p className="mt-2 text-xs font-normal leading-5 text-slate-600">{voiceStyleHelp[performance.style]}</p>
           </div>
-          {performance.style!=='natural'&&<div className="text-sm"><VoiceHelpLabel title="Intensidade pretendida">Suave busca uma entrega mais estável; Equilibrada permite variação moderada; Marcante dá mais liberdade expressiva. Não é volume nem garantia de uma emoção exata. Compare uma prévia, especialmente com voz clonada.</VoiceHelpLabel>
+          {isV3&&performance.style!=='natural'&&<div className="text-sm"><VoiceHelpLabel title="Intensidade pretendida">Controla a estabilidade da atuação no v3: Suave favorece consistência, Equilibrada permite variação moderada e Marcante dá mais liberdade expressiva. Marcante pode se afastar mais da referência. Não é volume, semelhança nem controle de sotaque. Compare uma prévia.</VoiceHelpLabel>
             <select aria-label="Intensidade pretendida" className={`${field} mt-1`} value={performance.intensity} onChange={e=>setPerformance(p=>({...p,intensity:e.target.value as Performance['intensity']}))}>
               <option value="gentle">Suave</option><option value="balanced">Equilibrada</option><option value="strong">Marcante</option>
             </select><span className="mt-2 block text-xs text-slate-500">Orienta a interpretação, inclusive de clones. Ouça uma prévia para conferir semelhança e emoção.</span>
           </div>}
           <details className="space-y-4"><summary className="cursor-pointer text-sm font-semibold">Ajustes da voz</summary>
             <button className="text-xs text-slate-500" type="button" onClick={()=>setSettings(defaults)}>Restaurar ajustes</button>
-            <Slider label="Velocidade" left="Mais lenta" right="Mais rápida" value={settings.speed} min={0.7} max={1.2} step={0.05} onChange={value=>setSettings(s=>({...s,speed:value}))} />
-            {performance.style==='natural'&&<Slider label="Estabilidade" left="Mais expressiva" right="Mais estável" value={settings.stability} min={0} max={1} step={isV3?0.5:0.05} onChange={value=>setSettings(s=>({...s,stability:value}))} />}
-            <Slider label="Semelhança" left="Baixa" right="Alta" value={settings.similarity_boost} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,similarity_boost:value}))} />
-            <Slider label="Exagero de estilo" left="Nenhum" right="Exagerado" value={settings.style} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,style:value}))} />
-            {!isV3&&<div className="flex items-center justify-between text-sm"><VoiceHelpLabel title="Reforço da voz">Busca reforçar a semelhança com a voz original nos modelos compatíveis. Não é um controle de volume e não está disponível no v3.</VoiceHelpLabel><input aria-label="Reforço da voz" type="checkbox" checked={settings.use_speaker_boost} onChange={e=>setSettings(s=>({...s,use_speaker_boost:e.target.checked}))} /></div>}
+            <p className="text-xs leading-5 text-slate-500">{isV3?'No v3, a atuação é guiada por estabilidade, estilo e marcações no texto. Velocidade, semelhança, exagero de estilo e reforço da voz não são oferecidos neste modelo.':controls?.style?'Ajustes disponíveis para Voz Multilíngue v2. Exagero de estilo em zero é o ponto de partida recomendado.':'Este modelo oferece velocidade, estabilidade e semelhança, sem exagero de estilo ou reforço da voz.'}</p>
+            {controls?.speed&&<Slider label="Velocidade" left="Mais lenta" right="Mais rápida" value={settings.speed} min={0.7} max={1.2} step={0.05} onChange={value=>setSettings(s=>({...s,speed:value}))} />}
+            {(!isV3||performance.style==='natural')&&(isV3?<div className="text-sm"><VoiceHelpLabel title="Estabilidade">No v3 há três níveis: Criativa permite maior variação; Equilibrada é intermediária; Robusta favorece consistência e pode responder menos às marcações. Não garante a preservação do sotaque. Com um estilo expressivo, use Intensidade pretendida.</VoiceHelpLabel><select aria-label="Estabilidade" className={`${field} mt-1`} value={studioVoiceSettings(modelId,settings).stability} disabled={busy||!draft.ready} onChange={e=>setSettings(s=>({...s,stability:Number(e.target.value)}))}><option value={0}>Criativa</option><option value={0.5}>Equilibrada</option><option value={1}>Robusta</option></select></div>:<Slider label="Estabilidade" left="Mais expressiva" right="Mais estável" value={settings.stability} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,stability:value}))} />)}
+            {isV3&&performance.style!=='natural'&&<p className="text-xs text-slate-500">A estabilidade está sendo definida em Intensidade pretendida, acima.</p>}
+            {controls?.similarity&&<Slider label="Semelhança" left="Baixa" right="Alta" value={settings.similarity_boost} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,similarity_boost:value}))} />}
+            {controls?.style&&<Slider label="Exagero de estilo" left="Nenhum" right="Exagerado" value={settings.style} min={0} max={1} step={0.05} onChange={value=>setSettings(s=>({...s,style:value}))} />}
+            {controls?.speakerBoost&&<div className="flex items-center justify-between text-sm"><VoiceHelpLabel title="Reforço da voz">Reforça a semelhança no Multilíngue v2, com possível aumento do tempo de geração. O efeito pode ser sutil. Não é volume nem ajuste de sotaque.</VoiceHelpLabel><input aria-label="Reforço da voz" type="checkbox" checked={settings.use_speaker_boost} onChange={e=>setSettings(s=>({...s,use_speaker_boost:e.target.checked}))} /></div>}
             {speechCapabilities[modelId as keyof typeof speechCapabilities]?.language&&<div className="text-sm"><VoiceHelpLabel title="Idioma">Orienta em qual idioma o texto deve ser falado. Automático deixa o modelo detectar pelo roteiro. Esta opção não traduz o texto.</VoiceHelpLabel><select aria-label="Idioma" className={`${field} mt-1`} value={language} onChange={e=>setLanguage(e.target.value)}><option value="">Detectar automaticamente</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option></select></div>}
           </details>
           <details className="text-sm"><summary className="cursor-pointer font-semibold">Pronúncia</summary>
