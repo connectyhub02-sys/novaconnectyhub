@@ -1,4 +1,5 @@
 import * as speechOptions from '../../src/lib/voice-api/speech-options';
+import * as messageText from '../../src/lib/whatsapp/message-text';
 import * as speechPerformance from '../../src/lib/voice-api/performance';
 import * as fixedSchedule from "../../src/lib/whatsapp/fixed-schedule";
 import * as responsibleAttendance from "../../src/lib/whatsapp/responsible-attendance";
@@ -24,6 +25,7 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
   runInNewContext(compiled, {
     module: loadedModule, exports: loadedModule.exports, require: (name: string) => {
       if (name === "server-only") return {};
+      if (name === './message-text' || name === '@/lib/whatsapp/message-text') return messageText;
       if (name === "./speech-options") return speechOptions;
       if (name === "./speech-effects" && !(name in imports)) return {validateSpeechEffects:async (_auth:unknown,effects:unknown)=>{if(effects)throw new Error("Explicit effects catalog mock required");}};
       if (name === "./performance") return speechPerformance;

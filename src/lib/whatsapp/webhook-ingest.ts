@@ -1,4 +1,5 @@
 import "server-only";
+import { readHumanMessageText, readProviderMessageText, readSerializedMediaRecord } from './message-text';
 import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import { isExplicitLeadOptOut, leadOptOutButtonReply } from "@/lib/automations/lead-contact-message";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
@@ -1606,8 +1607,8 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     || false;
   const textContent =
     leadOptOutButtonReply(messageRecord)
-    ?? findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
-    ?? findNestedString(messageRecord, ["conversation", "text", "caption"]);
+    ?? readProviderMessageText(messageRecord)
+    ?? readHumanMessageText(findNestedString(messageRecord, ["conversation", "text", "caption"]));
   const outbound = typeof fromMe === "boolean" ? fromMe : sentByApi === true ? true : null;
   const messageType = resolveMessageType(messageRecord);
   const occurredAt = parseOccurredAt(findUnknown(messageRecord, ["timestamp", "messageTimestamp", "date", "created", "createdAt"]));
@@ -1990,7 +1991,7 @@ function resolveMessageType(messageRecord: JsonRecord) {
 }
 
 function inferMessageTypeFromContent(messageRecord: JsonRecord) {
-  const content = isRecord(messageRecord.content) ? messageRecord.content : null;
+  const content = isRecord(messageRecord.content) ? messageRecord.content : readSerializedMediaRecord(messageRecord.content);
   const signature = normalizeMessageSignature(messageRecord);
   const mimeType = [
     findString(messageRecord, ["mimetype", "mimeType"]),

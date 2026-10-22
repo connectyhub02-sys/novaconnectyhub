@@ -1,4 +1,5 @@
 "use client";
+import { readHumanMessageText } from '@/lib/whatsapp/message-text';
 import { whatsappConversationBackgroundUrl } from "@/lib/whatsapp/chat-appearance";
 import { LeadFinancialArchive } from "./lead-financial-archive";
 import { LeadReturnsPanel } from "./lead-returns-panel";
@@ -4216,7 +4217,7 @@ function formatPublicSource(value: string | null | undefined) {
 }
 
 function isGenericMediaPlaceholder(value: string | null | undefined) {
-  const normalized = normalizePlainText(value ?? "");
+  const normalized = normalizePlainText(readHumanMessageText(value) ?? "");
 
   return !normalized
     || normalized === "audio recebido"
@@ -4669,7 +4670,7 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
           <div key={message.id} className={cn("flex", isSystem ? "justify-center" : isOutbound ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[88%] rounded-2xl border px-3 py-2.5 text-[13px] leading-5 shadow-sm sm:max-w-[72%] sm:px-3.5",
+                "min-w-0 max-w-[88%] rounded-2xl border px-3 py-2.5 text-[13px] leading-5 shadow-sm [overflow-wrap:anywhere] sm:max-w-[72%] sm:px-3.5",
                 isSystem && "max-w-[82%] text-center",
               )}
               style={isSticker ? { ...bubbleStyle, backgroundColor: "transparent", borderColor: "transparent", boxShadow: "none" } : bubbleStyle}
@@ -4852,9 +4853,11 @@ function ChatMediaImage({ message, sticker }: { message: ClientLeadMessage; stic
 }
 
 function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; message: ClientLeadMessage }) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const transcript = isGenericMediaPlaceholder(message.text)
     ? null
-    : redactInternalProviderNames(message.text);
+    : redactInternalProviderNames(readHumanMessageText(message.text) ?? "");
   const audioLabel = isOutbound
     ? "Áudio do atendimento"
     : "Áudio do lead";
@@ -4880,8 +4883,11 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
         </div>
         {message.mediaUrl ? (
           <audio
-            className="h-9 w-full min-w-[220px] max-w-full"
+            key={attempt}
+            className="h-9 w-full min-w-0 max-w-full"
             controls
+            aria-label={audioLabel}
+            onError={() => setFailed(true)}
             preload="none"
             src={message.mediaUrl}
           />
@@ -4889,7 +4895,8 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
           <p className="text-[12px] font-medium text-slate-600">Áudio indisponível para reprodução.</p>
         )}
       </div>
-      <div
+      {failed && <p role="status" className="text-xs text-slate-600">Não foi possível carregar este áudio. <button type="button" className="font-semibold underline" onClick={() => {setFailed(false);setAttempt(value => value + 1);}}>Tentar novamente</button></p>}
+      {transcript ? <div
         className={cn(
           "rounded-xl border-l-2 px-2.5 py-2",
           isOutbound ? "border-[#25D366] bg-white/45" : "border-[#25D366] bg-[#f0fdf4]",
@@ -4898,10 +4905,10 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
         <span className="font-mono text-[11px] font-bold uppercase tracking-wide text-[#128C7E]">
           Transcrição
         </span>
-        <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-slate-700">
-          {transcript ?? "Transcrição ainda não disponível."}
+        <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-slate-700 [overflow-wrap:anywhere]">
+          {transcript}
         </p>
-      </div>
+      </div> : <p className="text-xs text-slate-500">Sem transcrição disponível.</p>}
     </div>
   );
 }

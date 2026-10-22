@@ -1,4 +1,5 @@
 import "server-only";
+import { readHumanMessageText, readProviderMessageText, readSerializedMediaRecord } from '@/lib/whatsapp/message-text';
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveLeadTechnicalTracking } from "./lead-technical-profile";
@@ -1329,8 +1330,8 @@ function mapLeadRecord(input: {
     ?? readString(metadata.cnpj);
   const summary = readString(metadata.ai_summary)
     ?? readString(metadata.summary)
-    ?? input.lead.last_event_summary
-    ?? activeConversation?.last_message_preview
+    ?? readHumanMessageText(input.lead.last_event_summary)
+    ?? readHumanMessageText(activeConversation?.last_message_preview)
     ?? "Ainda sem resumo automatico.";
   const conversationFiles = buildConversationFiles({
     agentById: input.agentById,
@@ -1593,10 +1594,9 @@ function readDisplayText(row: MessageRow, payload: JsonRecord, mediaUrl: string 
 }
 
 function readMessageText(row: MessageRow, payload = readRecord(row.payload) ?? {}, mediaUrl: string | null = null, mediaKind: WhatsappMessageMediaKind = "unknown") {
-  return readString(row.text_content)
-    ?? readString(payload.text)
-    ?? readString(payload.body)
-    ?? readString(payload.caption)
+  return readHumanMessageText(row.text_content)
+    ?? readProviderMessageText(payload)
+    ?? readProviderMessageText(payload.message ?? payload.msg ?? (Array.isArray(payload.messages) ? payload.messages[0] : null))
     ?? (mediaUrl ? `${formatMessageMediaKind(mediaKind, row.message_type)} recebido.` : null);
 }
 
@@ -1684,12 +1684,7 @@ function describeQuotedMessageContext(value: JsonRecord): string | null {
 }
 
 function readQuotedMessageText(value: JsonRecord): string | null {
-  const text =
-    readString(value.text) ??
-    readString(value.body) ??
-    readString(value.caption) ??
-    readString(value.conversation) ??
-    readString(value.content);
+  const text = readProviderMessageText(value);
 
   if (text) return text;
 
@@ -1697,11 +1692,7 @@ function readQuotedMessageText(value: JsonRecord): string | null {
     const innerRecord = readRecord(inner);
     if (!innerRecord) continue;
 
-    const innerText =
-      readString(innerRecord.text) ??
-      readString(innerRecord.body) ??
-      readString(innerRecord.caption) ??
-      readString(innerRecord.conversation);
+    const innerText = readProviderMessageText(innerRecord);
 
     if (innerText) return innerText;
   }
@@ -1738,7 +1729,7 @@ function collectQuotedPayloadSignature(value: unknown, depth = 0): string[] {
     return value.flatMap((item) => collectQuotedPayloadSignature(item, depth + 1));
   }
 
-  const record = readRecord(value);
+  const record = readRecord(value) ?? readSerializedMediaRecord(value);
   if (!record) {
     return [];
   }
@@ -1748,7 +1739,9 @@ function collectQuotedPayloadSignature(value: unknown, depth = 0): string[] {
   for (const [key, item] of Object.entries(record)) {
     parts.push(key);
 
-    if (typeof item === "string") {
+    if (readSerializedMediaRecord(item)) {
+      parts.push(...collectQuotedPayloadSignature(item, depth + 1));
+    } else if (typeof item === "string") {
       const normalizedKey = normalizeSearch(key);
       if (/\b(type|kind|mimetype|mime type|media type|message type|caption|filename|file name|url)\b/.test(normalizedKey)) {
         parts.push(item);
@@ -2139,7 +2132,7 @@ function buildConversationFiles(input: {
         provider: conversation.provider,
         providerChatId: conversation.provider_chat_id,
         status: conversation.status,
-        preview: latestMessage?.text ?? conversation.last_message_preview,
+        preview: latestMessage?.text ?? readHumanMessageText(conversation.last_message_preview),
         messageCount: messages.length,
         messages,
         humanIntervention,
@@ -2199,7 +2192,7 @@ function buildActivities(
     activities.push({
       id: `${conversation.id}-conversation`,
       title: "Conversa aberta",
-      summary: conversation.last_message_preview ?? "Primeira conversa vinculada ao lead.",
+      summary: readHumanMessageText(conversation.last_message_preview) ?? "Primeira conversa vinculada ao lead.",
       type: "conversation.opened",
       occurredAt: conversation.created_at,
       tone: "green",

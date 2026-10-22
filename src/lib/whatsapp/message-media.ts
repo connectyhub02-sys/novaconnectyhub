@@ -1,4 +1,5 @@
 import "server-only";
+import { readSerializedMediaRecord } from './message-text';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -223,7 +224,7 @@ export function extractMimeType(value: unknown) {
 export function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as JsonRecord
-    : null;
+    : readSerializedMediaRecord(value);
 }
 
 export function readProviderError(value: unknown) {
