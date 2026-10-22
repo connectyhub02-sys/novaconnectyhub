@@ -1,5 +1,23 @@
 # Estado operacional da ConnectyHub
 
+## Chat: áudio sem JSON técnico na transcrição — 22/10/2026
+
+Publicado às 15h39 BRT: `77265430`, slot a/3130; anterior `3c5bfb17` no b.
+Registro do print confirmado em leitura: descritor de arquivo serializado em
+texto/content, sem transcrição. Consulta direcionada encontrou 23 áudios nesse
+formato em cinco organizações, incluindo clientes. Admin e cliente compartilham
+o mesmo componente/mapeamento corrigido. Histórico é saneado na leitura,
+novas entradas separam texto de metadados e MIME/URL do formato antigo são
+interpretados. Player mostra ausência de transcrição e erro/retry; balões quebram
+texto sem alargar a conversa. Registros originais preservados.
+
+86 testes de regressão, TypeScript/ESLint e navegador 1366/390 px aprovados,
+com reprodução simulada e conferência em memória do registro real. Build de
+120 páginas; candidata/HTTPS com SHA/saúde, 19 assets, APIs admin/cliente e mídia
+protegidas, Inngest assinado (58 funções). Builder parado. Sem migration,
+mensagens enviadas, exclusões ou transcrição paga. Arquivo antigo não baixado;
+reprodução real ainda depende de sua disponibilidade. [Evidências e limites](chat-audio-metadados-2026-10-22.md).
+
 ## Voz: controles compatíveis com cada modelo — 22/10/2026
 
 Publicado às 12h14 BRT: `3c5bfb17`, slot b/3131; anterior `5a0c0c2f` no a.
