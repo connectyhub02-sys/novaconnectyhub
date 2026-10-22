@@ -1,5 +1,21 @@
 # Estado operacional da ConnectyHub
 
+## Voz: controles compatíveis com cada modelo — 22/10/2026
+
+Publicado às 12h14 BRT: `3c5bfb17`, slot b/3131; anterior `5a0c0c2f` no a.
+Multilíngue v2 mantém todos os ajustes; Rápida/Expressa v2.5 mostram velocidade,
+estabilidade e semelhança; v3 mostra estabilidade de três níveis ou intensidade
+do estilo expressivo. Ajustes ocultos são omitidos nas requisições do painel,
+com valores preservados no rascunho para voltar ao modelo. Ajuda distingue
+atuação, fidelidade e filtros; exagero de estilo em zero recomendado. Sem
+implementação de sotaques nem alteração dos contratos legados do backend.
+
+Catálogo real `/v1/models` consultado somente em leitura. 22 testes, TypeScript,
+ESLint e navegador com APIs simuladas em 1366/390 px aprovados. Build de 120
+páginas; candidata/HTTPS com saúde/SHA, 19 assets, APIs protegidas e Inngest
+assinado (58 funções). Builder parado. Sem migration ou áudio pago. Teste
+auditivo fica para o titular. [Evidências e limites](voz-controles-modelos-2026-10-22.md).
+
 ## Configuração dos agentes WhatsApp internos alinhada — 20/10/2026
 
 Publicado às 20h55 BRT: `5a0c0c2f`, slot a/3130; anterior `1d6ffdb4` no b.
