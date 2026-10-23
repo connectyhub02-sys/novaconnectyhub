@@ -1,3 +1,4 @@
+import { normalizeAgentVoiceSettings, type AgentVoiceSettings } from "@/lib/voice/agent-settings";
 import { outboundLanguageQualityPromptLines } from "./outbound-language";
 
 export type WhatsappResponseMode = "text" | "audio" | "mirror";
@@ -56,6 +57,7 @@ export type WhatsappBehaviorConfig = {
   audioVoiceSource: string;
   audioVoicePublicOwnerId: string;
   audioModelId: string;
+  audioStudioSettings: AgentVoiceSettings | null;
   adaptiveRapportMode: WhatsappRapportMode;
   audioTranscription: boolean;
   humanIntervention: boolean;
@@ -291,6 +293,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   audioVoiceSource: "",
   audioVoicePublicOwnerId: "",
   audioModelId: "",
+  audioStudioSettings: null,
   adaptiveRapportMode: "soft",
   audioTranscription: true,
   humanIntervention: true,
@@ -417,7 +420,9 @@ export function normalizeWhatsappBehaviorConfig(value: unknown, options?: { pres
     const current = merged[key];
     const next = input[key];
 
-    if (typeof current === "boolean") {
+    if (key === "audioStudioSettings") {
+      merged.audioStudioSettings = normalizeAgentVoiceSettings(next);
+    } else if (typeof current === "boolean") {
       (merged[key] as boolean) = readBoolean(next, current);
     } else if (typeof current === "number") {
       (merged[key] as number) = readNumber(next, current, key);

@@ -62,6 +62,8 @@ type AgentRunUsageRow = {
 };
 
 export type MeteredUsageInput = {
+  /** Server-only snapshot quoted by the shared Studio tariff resolver. */
+  quotedRates?: Awaited<ReturnType<typeof resolveActiveBillingRates>>;
   organizationId?: string | null;
   userId?: string | null;
   provider: BillingProvider;
@@ -190,7 +192,7 @@ export async function meterUsageEvent(
   const billingMode = input.billingMode ?? resolveBillingMode(billingOrganization, agentScope);
   const status = input.status ?? "completed";
   const normalizedModelId = normalizeProviderModelId(input.modelId);
-  let rates = await resolveActiveBillingRates(client, {
+  let rates = input.quotedRates ?? await resolveActiveBillingRates(client, {
     provider: input.provider,
     featureCode: input.featureCode,
     modelId: normalizedModelId,

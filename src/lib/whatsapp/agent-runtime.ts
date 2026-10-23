@@ -9525,12 +9525,13 @@ async function sendAudioOutboundChunk(input: {
     const generatedAudio = await generateConnectyVoiceAudio({
       organizationId: context.organization.id,
       userId: null,
-      text: sanitizeTextForTts(messageText),
+      text: sanitizeTextForTts(messageText, Boolean(context.behavior.audioStudioSettings)),
       voiceId: context.behavior.audioVoiceId || null,
       voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
       voiceName: context.behavior.audioVoiceName || null,
       voiceSource: context.behavior.audioVoiceSource || null,
       modelId: context.behavior.audioModelId || null,
+      studioSettings: context.behavior.audioStudioSettings,
       source: "whatsapp_agent",
       metadata: {
         agentId: context.agent.id,
@@ -21719,7 +21720,7 @@ function removeIncompleteTrailingLine(value: string) {
   return /[.!?]$/.test(repaired) ? repaired : `${repaired}.`;
 }
 
-function sanitizeTextForTts(value: string) {
+function sanitizeTextForTts(value: string, preservePacing = false) {
   return normalizeOutboundSpeechText(value)
     .replace(linkButtonTagRegex, "")
     .replace(/https?:\/\/\S+/gi, "o link")
@@ -21732,8 +21733,8 @@ function sanitizeTextForTts(value: string) {
     .replace(/\bBRL\b/gi, "reais")
     .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
     .replace(/(?<![a-zA-ZÀ-ÿ])(?:rs+|k{2,}|ha{2,}|he{2,}|hi{2,}|hu{2,}|kkkk*|hahaha*|hehehe*|rsrs+)(?![a-zA-ZÀ-ÿ])/gi, "")
-    .replace(/\.{2,}/g, ".")
-    .replace(/\s{2,}/g, " ")
+    .replace(/\.{2,}/g, match => preservePacing ? match : ".")
+    .replace(preservePacing ? /[ \t]{2,}/g : /\s{2,}/g, " ")
     .trim();
 }
 

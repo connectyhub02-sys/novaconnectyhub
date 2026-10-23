@@ -1,4 +1,5 @@
 "use client";
+import { AgentVoiceControls } from "./agent-voice-controls";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AgentChannelSelector } from "./agent-channel-selector";
@@ -2093,6 +2094,7 @@ export function WhatsAppConsole({
                   voices={state.audio.voices}
                   onCloned={applyClonedVoice}
                   onSelect={selectAudioVoice}
+                  onSettingsChange={(value) => updateBehavior("audioStudioSettings", value)}
                 />
               </BehaviorSection>
 
@@ -4451,6 +4453,7 @@ function VoiceSelector({
   voices,
   onCloned,
   onSelect,
+  onSettingsChange,
 }: {
   behavior: WhatsappBehaviorConfig;
   companyId: string;
@@ -4462,6 +4465,7 @@ function VoiceSelector({
   voices: AudioVoiceOption[];
   onCloned: (audio: WhatsappState["audio"], voiceId: string, notice?: Notice) => void;
   onSelect: (voice: AudioVoiceOption) => void;
+  onSettingsChange: (value: WhatsappBehaviorConfig["audioStudioSettings"]) => void;
 }) {
   const [voiceSearch, setVoiceSearch] = useState("");
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -4635,6 +4639,8 @@ function VoiceSelector({
           onClick={() => premiumVoice && onSelect(premiumVoice)}
         />
       </div>
+
+      {activeVoiceTier === "premium" && <AgentVoiceControls key={`${companyId}:${selectedVoiceId}`} value={behavior.audioStudioSettings} onChange={onSettingsChange} voiceId={selectedVoiceId} endpoint={endpoint} scopeId={companyId} scopeKey={entityIdKey} />}
 
       {cloneEnabled && activeVoiceTier === "premium" ? (
       <div className="mt-3">

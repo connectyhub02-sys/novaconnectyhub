@@ -25,7 +25,7 @@ export async function voiceCatalog(auth:VoiceAuth) {
     ...designed,
   ],partial:!!state.errorMessage};
 }
-export async function voiceRates(auth:VoiceAuth,model:string) {
+export async function voiceRates(auth:Pick<VoiceAuth,"client"|"planCode">,model:string) {
   if(!speechModels.includes(model as typeof speechModels[number]))throw new VoiceError('model_unavailable',422,'Modelo não disponível. Consulte o catálogo.');
   const {data:enabled,error}=await auth.client.from('provider_models').select('id,provider_cost_centers!inner(provider,enabled)').eq('provider_model_id',model).eq('enabled',true).eq('provider_cost_centers.provider','elevenlabs').eq('provider_cost_centers.enabled',true).maybeSingle();
   if(error || !enabled) throw new VoiceError('model_unavailable',422,'Modelo não disponível. Consulte o catálogo.');
@@ -33,7 +33,7 @@ export async function voiceRates(auth:VoiceAuth,model:string) {
   if(!rates.some(r=>r.unit==='character' && r.connectyPricePerUnit>0)) throw new VoiceError('pricing_unavailable',503,'Tarifa de geração avulsa indisponível para este modelo.');
   return rates;
 }
-export async function voiceModels(auth:VoiceAuth) {
+export async function voiceModelPrices(auth:Pick<VoiceAuth,"client"|"planCode">) {
   const {data,error}=await auth.client.from('provider_models').select('provider_model_id,display_name,provider_cost_centers!inner(provider,enabled)').in('provider_model_id',speechModels).eq('enabled',true).eq('provider_cost_centers.provider','elevenlabs').eq('provider_cost_centers.enabled',true);
   if(error) throw new VoiceError('models_unavailable',503,'Não foi possível consultar os modelos.');
   const models=[];
@@ -42,6 +42,10 @@ export async function voiceModels(auth:VoiceAuth) {
       models.push({model_id:row.provider_model_id,name:voiceModelName(row.provider_model_id),available:true,credits_per_character:rate.connectyPricePerUnit,minimum_credits:rate.minimumChargeCredits});
     } catch(e) {if(!(e instanceof VoiceError) || e.code!=='pricing_unavailable') throw e;models.push({model_id:row.provider_model_id,name:voiceModelName(row.provider_model_id),available:false,reason:e.code});}
   }
+  return models;
+}
+export async function voiceModels(auth:VoiceAuth) {
+  const models=await voiceModelPrices(auth);
   let cloning:{available:boolean;credits?:number;preview_included?:boolean}={available:false};
   try {const {price}=await quoteClone(auth);cloning={available:true,credits:price.chargeCredits,preview_included:true};}catch(e){if(!(e instanceof VoiceError))throw e;}
   return {project_id:auth.project.id,billing_organization_id:auth.billingOrg,models,cloning};
@@ -53,7 +57,7 @@ export async function quoteClone(auth:VoiceAuth) {
   if(!Number.isFinite(price.chargeCredits)||price.chargeCredits<0)throw new VoiceError('pricing_unavailable',503,'Tarifa de clonagem inválida.');
   return {rates,price};
 }
-export async function quoteVoice(auth:VoiceAuth,model:string,characters:number) {
+export async function quoteVoice(auth:Pick<VoiceAuth,"client"|"planCode">,model:string,characters:number) {
   const rates=await voiceRates(auth,model);
   const price=calculateMeteredUsageCharge({rates,units:{characters}});
   if(price.chargeCredits<=0 || !Number.isFinite(price.chargeCredits)) throw new VoiceError('pricing_unavailable',503,'Tarifa indisponível.');

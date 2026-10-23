@@ -933,6 +933,7 @@ export async function sendClientWhatsappTest(input: {
       voiceName: behavior.audioVoiceName || null,
       voiceSource: behavior.audioVoiceSource || null,
       modelId: behavior.audioModelId || null,
+      studioSettings: behavior.audioStudioSettings,
       source: "whatsapp_test",
       metadata: {
         agentId: agent.id,

@@ -1,3 +1,5 @@
+import { normalizeAgentVoiceSettings, type AgentVoiceSettings } from "./agent-settings";
+import { generateConfiguredAgentVoice } from "./agent-generation";
 import "server-only";
 import { normalizeOutboundSpeechText } from "@/lib/whatsapp/outbound-language";
 
@@ -13,6 +15,9 @@ type JsonRecord = Record<string, unknown>;
 export type GenerateConnectyVoiceAudioInput = {
   organizationId: string;
   text: string;
+  studioSettings?: AgentVoiceSettings | null;
+  idempotencyKey?: string;
+  maxCredits?: number;
   userId?: string | null;
   voiceId?: string | null;
   voicePublicOwnerId?: string | null;
@@ -32,6 +37,10 @@ export type GeneratedConnectyVoiceAudio = (GeneratedElevenLabsAudio | Omit<Gener
 };
 
 export async function generateConnectyVoiceAudio(input: GenerateConnectyVoiceAudioInput): Promise<GeneratedConnectyVoiceAudio> {
+  const config = input.studioSettings ? normalizeAgentVoiceSettings(input.studioSettings) : null;
+  if (config && resolveVoiceProvider(input.voiceSource, input.voiceId) === "elevenlabs") {
+    return generateConfiguredAgentVoice({ ...input, studioSettings: config });
+  }
   input = { ...input, text: normalizeOutboundSpeechText(input.text) };
   const provider = resolveVoiceProvider(input.voiceSource, input.voiceId);
   const client = input.client ?? createServiceClient();

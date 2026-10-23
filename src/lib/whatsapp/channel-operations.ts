@@ -2600,6 +2600,8 @@ async function prepareCampaignAudio(
     voiceName: context.behavior.audioVoiceName || null,
     voiceSource: context.behavior.audioVoiceSource || null,
     modelId: context.behavior.audioModelId || null,
+    studioSettings: context.behavior.audioStudioSettings,
+    idempotencyKey: `campaign-voice:${item.id}`,
     source: "whatsapp_campaign",
     metadata: {
       whatsappInstanceId: context.instance.id,

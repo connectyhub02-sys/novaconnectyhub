@@ -1130,6 +1130,7 @@ export async function sendPlatformWhatsappConsoleTest(input: {
       voiceName: behavior.audioVoiceName || null,
       voiceSource: behavior.audioVoiceSource || null,
       modelId: behavior.audioModelId || null,
+      studioSettings: behavior.audioStudioSettings,
       source: "whatsapp_internal_test",
       metadata: {
         agentId: agent.id,

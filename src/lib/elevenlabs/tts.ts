@@ -1,3 +1,4 @@
+import { prepareAgentSpeech, type AgentVoiceSettings } from "@/lib/voice/agent-settings";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ type JsonRecord = Record<string, unknown>;
 export type GenerateElevenLabsAudioInput = {
   organizationId: string;
   text: string;
+  studioSettings?: AgentVoiceSettings;
   userId?: string | null;
   voiceId?: string | null;
   voicePublicOwnerId?: string | null;
@@ -37,7 +39,8 @@ export type GeneratedElevenLabsAudio = {
 const maxAudioTextLength = 4800;
 
 export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInput): Promise<GeneratedElevenLabsAudio> {
-  const text = normalizeAudioText(input.text);
+  const prepared = input.studioSettings ? prepareAgentSpeech(input.text, input.studioSettings) : null;
+  const text = prepared?.text ?? normalizeAudioText(input.text);
 
   if (!text) {
     throw new Error("Escreva a mensagem antes de gerar audio.");
@@ -52,7 +55,7 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
   }
 
   const voiceId = input.voiceId?.trim() || credentials.defaultVoiceId;
-  const modelId = input.modelId?.trim() || credentials.defaultModelId;
+  const modelId = input.studioSettings?.model || input.modelId?.trim() || credentials.defaultModelId;
   const elevenLabs = new ElevenLabsClient({ apiKey: credentials.apiKey });
 
   await ensureSharedVoiceAvailable(elevenLabs, {
@@ -65,13 +68,19 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
     text,
     modelId,
     outputFormat: credentials.outputFormat,
-    voiceSettings: {
+    voiceSettings: prepared ? {
+      stability: prepared.settings.stability,
+      similarityBoost: prepared.settings.similarity_boost,
+      style: prepared.settings.style,
+      speed: prepared.settings.speed,
+      useSpeakerBoost: prepared.settings.use_speaker_boost,
+    } : {
       stability: 0.48,
       similarityBoost: 0.78,
       style: 0.22,
       useSpeakerBoost: true,
     },
-  });
+  }, input.studioSettings ? { maxRetries: 0 } : undefined);
   const audioBytes = await readableStreamToBytes(audioStream);
   const now = new Date();
   const objectKey = `generated-media/elevenlabs/audio/${input.organizationId}/${now.getTime()}-${randomUUID()}.mp3`;
@@ -120,13 +129,14 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
     storageUrl: upload.publicUrl,
     objectKey: upload.objectKey,
     bytesSize: upload.bytesSize,
-    transcript: text,
+    transcript: prepared?.transcript ?? text,
     metadata: {
       ...(input.metadata ?? {}),
       provider: "elevenlabs",
       source: input.source ?? "whatsapp_agent",
       voiceId,
       modelId,
+      ...(input.studioSettings ? { studioSettings: input.studioSettings } : {}),
       outputFormat: credentials.outputFormat,
       generatedBy: input.userId ?? null,
       generatedAt: now.toISOString(),

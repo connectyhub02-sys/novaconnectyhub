@@ -249,3 +249,16 @@ describe("usage billing integrity", () => {
     } finally { await f.db.close(); }
   },30000);
 });
+
+
+it("uses the frozen Studio tariff for an opted-in agent, retaining WhatsApp attribution and wallet ownership", async () => {
+  const debit=vi.fn().mockResolvedValue({id:"usage"});
+  const db=commerceDatabase({organizations:[{id:"child",plan_code:"starter",billing_organization_id:"owner"},{id:"owner",plan_code:"pro",status:"active"}]});
+  const rates=[{id:"studio-v3",unit:"character",connectyPricePerUnit:.24,providerCostPerUnit:.0001,minimumChargeCredits:5}];
+  const meter=meteringHarness({recordUsageAndDebitCredits:debit});
+  for(const [characters,expected] of [[1000,240],[3,5]]) {
+    const result=await meter.meterUsageEvent(db.client as never,{organizationId:"child",provider:"elevenlabs",featureCode:"voice_reply_whatsapp",modelId:"eleven_v3",characters,quotedRates:rates});
+    expect(result.chargeCredits).toBe(expected);
+    expect(debit.mock.calls.at(-1)?.[1]).toMatchObject({organizationId:"child",featureCode:"voice_reply_whatsapp",connectyChargeCredits:expected,metadata:{metering:{billingOrganizationId:"owner"}}});
+  }
+});
