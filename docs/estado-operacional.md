@@ -1,5 +1,26 @@
 # Estado operacional da ConnectyHub
 
+## Efeitos completos e ambientação automática dos agentes — 23/10/2026
+
+Publicado às 16h50 BRT: `094d167d`, slot b/3131; anterior `469f91cb` no a,
+ambos saudáveis. Filtro, ambiente, fundo, distância, reverberação e pan em Voz do
+agente; ambiente/fundo fixos ou automáticos entre opções marcadas, por conversa,
+período local de seis horas ou resposta. Prévia mostra a combinação; sorteio não
+gera áudio. Tudo desligado até escolha e salvamento, sem atualização de agentes.
+Mesmo cálculo/tarifas do Estúdio; seleção e preço persistidos antes do provedor,
+com replay sem regeneração. Sem migration ou mudança de tarifas.
+
+141 testes, TypeScript, ESLint, UI simulada em 1366/390 px e build de 120 páginas
+aprovados. Catálogo real HTTP 200. Duas amostras reais v2/v3 na organização interna:
+recibos e consumo concluídos, replay idêntico, zero débitos de carteira. MP3 estéreo
+válidos e conversão local para Opus aprovada; sem envio a leads. Avaliação auditiva
+após conversão do WhatsApp/clone específico ainda não homologada.
+
+Candidata e HTTPS público: saúde/SHA, 19 assets, bundle, APIs protegidas e Inngest
+assinado/58 funções. Builder parado. Disco com 6,1 GiB livres (98% ocupado),
+pendência de capacidade preservada; nenhuma limpeza manual nesta entrega.
+[Implementação, evidências e limites](efeitos-voz-agentes-2026-10-23.md).
+
 ## Voz expressiva e custo do Estúdio nos agentes — 23/10/2026
 
 Publicado às 14h38 BRT: `469f91cb`, slot a/3130; anterior `910dbe12` no b.

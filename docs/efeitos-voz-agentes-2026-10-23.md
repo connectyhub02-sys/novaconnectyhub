@@ -61,4 +61,23 @@ carteira de cliente, com mídia e uso persistidos. Repetição de cada chave ret
 exatamente o mesmo áudio e evento; duas gerações, sem regeneração no replay.
 Nenhum agente/configuração foi atualizado e nenhuma mensagem foi enviada.
 
-Publicação: pendente de registrar ao concluir esta entrega.
+## Publicação e limites
+
+Publicado às 16h50 BRT: `094d167d8e45c7a37842753dc273dca22ee96bfd`,
+slot b/3131. Anterior `469f91cb` permanece saudável em a/3130 para rollback.
+Build Linux: webpack, TypeScript e 120 páginas aprovados. Candidata e HTTPS
+público: saúde/SHA, 19 assets, bundle dos controles completos, GET/POST protegidos
+(inclusive catálogo de efeitos), rota de fixture ausente e Inngest assinado com
+58 funções. Builder parado ao concluir. Sem migration ou alteração de tarifas.
+
+Auditoria SQL dos testes: dois recibos completed, dois eventos internal_shadow
+completed (30,48 créditos equivalentes), zero lançamentos de carteira vinculados.
+FFprobe: ambas MP3 44,1 kHz estéreo, durações 4,57 s e 4,75 s; decodificação e
+conversão local para Opus mono sem erros. São testes reais de síntese, armazenamento,
+consumo e replay. Não houve envio para lead/WhatsApp; avaliação auditiva do fundo
+após a conversão do transportador e homologação de voz clonada específica continuam
+pendentes de teste escolhido pelo cliente. Catálogo indisponível/ID removido bloqueia
+a geração configurada, sem sorteio de sons não autorizados.
+
+Disco da VPS: cerca de 6,1 GiB livres, 98% ocupado ao concluir. Continua pendência
+operacional separada; não houve limpeza manual de imagens, dados ou filas.
