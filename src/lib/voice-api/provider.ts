@@ -1,6 +1,7 @@
 import type {DictionaryLocator} from './studio-dictionaries';
 import 'server-only';
 import {voiceLimits,VoiceError,type VoiceInput} from './contract';
+type ProviderVoiceInput = Omit<VoiceInput,'script'|'output_format'> & {output_format:string;script?:VoiceInput['script']};
 
 // Raw PCM and μ-law may come without an audio/* type; JSON is the timestamps endpoint.
 const audioType=(type:string)=>type.startsWith('audio/')||type.startsWith('application/octet-stream');
@@ -25,7 +26,7 @@ export async function timestampedVoiceAudio(response:Response) {
   return {bytes,alignment:{alignment:data.alignment??null,normalized_alignment:data.normalized_alignment??null}};
 }
 
-function body(input:VoiceInput,dictionaries:DictionaryLocator[]) {
+function body(input:ProviderVoiceInput,dictionaries:DictionaryLocator[]) {
   return JSON.stringify({...(input.audio_effects?{audio_effects:input.audio_effects}:{}),text:input.text,model_id:input.model_id,voice_settings:input.voice_settings,
     ...(input.language_code?{language_code:input.language_code}:{}),
     ...(input.seed!==undefined?{seed:input.seed}:{}),
@@ -35,7 +36,7 @@ function body(input:VoiceInput,dictionaries:DictionaryLocator[]) {
     ...(dictionaries.length?{pronunciation_dictionary_locators:dictionaries}:{})});
 }
 
-export function requestVoiceAudio(apiKey:string,input:VoiceInput,dictionaries:DictionaryLocator[]=[]) {
+export function requestVoiceAudio(apiKey:string,input:ProviderVoiceInput,dictionaries:DictionaryLocator[]=[]) {
   // No SDK retry: a network timeout can happen after the provider charges.
   const path=input.with_timestamps?'/with-timestamps':'';
   return fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(input.voice_id)}${path}?output_format=${input.output_format}`,{

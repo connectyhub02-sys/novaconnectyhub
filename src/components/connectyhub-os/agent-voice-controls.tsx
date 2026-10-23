@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { interpretations, type SpeechSettings } from '@/lib/voice-api/performance';
 import { speechControls } from '@/lib/voice-api/model-controls';
 import { newAgentVoiceSettings, type AgentVoiceSettings } from '@/lib/voice/agent-settings';
+import { AgentVoiceEffects } from './agent-voice-effects';
+import type { SpeechEffects } from '@/lib/voice-api/speech-options';
 
 type Model = { model_id: AgentVoiceSettings['model']; name: string; available: boolean; credits_per_character?: number; minimum_credits?: number };
 const number = (value: number) => value.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -20,14 +22,15 @@ export function AgentVoiceControls({ value, onChange, voiceId, endpoint, scopeId
   const [models, setModels] = useState<Model[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const [text, setText] = useState('Olá! Vou te explicar com calma e ajudar a encontrar a melhor opção para você.');
-  const [quote, setQuote] = useState<{ key: string; credits: number } | null>(null);
-  const [quoteError, setQuoteError] = useState('');
+  const [quote, setQuote] = useState<{ key: string; credits: number; audioEffects?: SpeechEffects } | null>(null);
+  const [effectSample, setEffectSample] = useState('initial');
+  const [quoteError, setQuoteError] = useState<{key:string;message:string} | null>(null);
   const [result, setResult] = useState<{ key: string; audioUrl: string; credits: number } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const requestKey = useRef<{ input: string; id: string } | null>(null);
   const url = `${endpoint}/settings?${scopeKey}=${encodeURIComponent(scopeId)}`;
-  const key = JSON.stringify([url, voiceId, value, text]);
+  const key = JSON.stringify([url, voiceId, value, text, effectSample]);
   const currentKey = useRef(key);
   useEffect(() => { currentKey.current = key; }, [key]);
 
@@ -45,15 +48,15 @@ export function AgentVoiceControls({ value, onChange, voiceId, endpoint, scopeId
     if (!value || !voiceId || !text.trim()) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      fetch(url, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'quote', settings: value, voiceId, text }) })
+      fetch(url, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'quote', settings: value, voiceId, text, effectSample }) })
         .then(async response => {
           const data = await response.json();
           if (!response.ok) throw new Error(data.error ?? 'Estimativa indisponível.');
-          if (!controller.signal.aborted) { setQuote({ key, credits: data.credits }); setQuoteError(''); }
-        }).catch(error => { if (!controller.signal.aborted) setQuoteError(error.message); });
+          if (!controller.signal.aborted) { setQuote({ key, credits: data.credits, audioEffects: data.audioEffects }); setQuoteError(null); }
+        }).catch(error => { if (!controller.signal.aborted) { setQuote(null); setQuoteError({key,message:error.message}); } });
     }, 450);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [key, url, value, voiceId, text]);
+  }, [key, url, value, voiceId, text, effectSample]);
 
   const model = models.find(model => model.model_id === value?.model);
   const controls = value ? speechControls[value.model] : null;
@@ -68,7 +71,7 @@ export function AgentVoiceControls({ value, onChange, voiceId, endpoint, scopeId
     if (!requestKey.current || requestKey.current.input !== key) requestKey.current = { input: key, id: crypto.randomUUID() };
     setBusy(true); setError('');
     try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey.current.id }, body: JSON.stringify({ action: 'generate', settings: value, voiceId, text, maxCredits: currentQuote.credits }) });
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey.current.id }, body: JSON.stringify({ action: 'generate', settings: value, voiceId, text, effectSample, maxCredits: currentQuote.credits }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'A prévia aguarda confirmação. Reutilize esta solicitação.');
       if (currentKey.current === key) setResult({ key, audioUrl: data.audioUrl, credits: data.credits });
@@ -120,10 +123,11 @@ export function AgentVoiceControls({ value, onChange, voiceId, endpoint, scopeId
           <p className="text-xs leading-5">Somente ajustes compatíveis com este modelo são aplicados. Semelhança não é uma medição de fidelidade. Valores extremos podem alterar a naturalidade.</p>
         </div>
       </details>
+      <AgentVoiceEffects value={value.effects} onChange={effects => onChange({ ...value, effects })} url={url} resolved={currentQuote?.audioEffects} busy={busy} onSample={() => setEffectSample(crypto.randomUUID())} />
       <label className="block">Frase para ouvir o teste
         <textarea className={inputClass} value={text} maxLength={600} rows={3} onChange={event => setText(event.target.value)} />
       </label>
-      <p className="text-xs">{currentQuote ? `Prévia: ${number(currentQuote.credits)} créditos. Inclui os caracteres de interpretação, como no Estúdio.` : quoteError || 'Calculando estimativa…'}</p>
+      <p className="text-xs">{currentQuote ? `Prévia: ${number(currentQuote.credits)} créditos. Inclui os caracteres de interpretação, como no Estúdio.` : (quoteError?.key === key ? quoteError.message : 'Calculando estimativa…')}</p>
       {!currentResult && <button type="button" onClick={preview} disabled={busy || !currentQuote || !model?.available} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Gerando prévia…' : 'Ouvir teste'}</button>}
       {error && !currentResult && <p role="alert" className="text-xs text-rose-700">{error}</p>}
       {currentResult && <div><audio controls src={currentResult.audioUrl} className="w-full" /><p className="mt-1 text-xs">Consumo: {number(currentResult.credits)} créditos. Reproduzir este áudio novamente não cobra créditos.</p></div>}

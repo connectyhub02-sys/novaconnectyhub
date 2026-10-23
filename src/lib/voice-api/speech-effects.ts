@@ -4,7 +4,7 @@ import type {VoiceAuth} from './auth';
 import {VoiceError,voiceBody} from './contract';
 import type {EffectsCatalog,SpeechEffects} from './speech-options';
 let cached:{expires:number;value:EffectsCatalog}|undefined;
-export async function speechEffectsCatalog(auth:VoiceAuth):Promise<EffectsCatalog>{
+export async function speechEffectsCatalog(auth:Pick<VoiceAuth,'client'>):Promise<EffectsCatalog>{
   if(process.env.VOICE_EFFECTS_ENABLED==='false')throw new VoiceError('effects_unavailable',503,'Efeitos temporariamente indisponíveis. Você pode gerar sem efeitos.');
   if(cached&&cached.expires>Date.now())return cached.value;
   const {apiKey}=await loadElevenLabsCredentials(auth.client);

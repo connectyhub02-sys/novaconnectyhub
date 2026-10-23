@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {studioFormats,type SpeechEffects,type EffectsCatalog} from '../../lib/voice-api/speech-options';
 import {VoiceHelpLabel} from './voice-help';
 const effectHelp:Record<string,string>={Filtro:'Muda a textura do som, como telefone, rádio antigo ou robô. Não escolhe uma emoção e pode deixar a voz menos parecida com a gravação original.',Ambiente:'Simula o espaço onde a voz soa, como sala, salão ou túnel. Ao escolher um ambiente, ajuste a Reverberação para dosar esse efeito.','Som de fundo':'Acrescenta um som do catálogo, como café, cidade ou teclado. Não gera música nem uma trilha personalizada.'};
-const labels:Record<string,string>={old_radio:'Rádio antigo',robot:'Robô',cheap_microphone:'Microfone simples',phone:'Telefone',low_quality_phone:'Telefone abafado',bright_phone:'Telefone nítido',small_room:'Sala pequena',big_room:'Sala ampla',hall:'Salão',tunnel:'Túnel',street:'Rua',valley:'Vale',forest:'Floresta',call_center:'Central de atendimento',cafe:'Café',city:'Cidade',keyboard:'Teclado'};
+import {effectLabels as labels} from '../../lib/voice-api/effect-labels';
 const field='mt-1 min-h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white p-2 text-sm';
 export function VoiceOutputOptions({project,effects,onEffects,format,onFormat,long}:{project:string;effects:SpeechEffects|undefined;onEffects:(v:SpeechEffects|undefined)=>void;format:string;onFormat:(v:string)=>void;long:boolean}){
  const [catalog,setCatalog]=useState<EffectsCatalog|null>(null),[error,setError]=useState(''),[revision,setRevision]=useState(0);

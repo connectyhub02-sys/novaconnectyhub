@@ -226,6 +226,7 @@ const danglingCustomerVisibleInternalTagRegex = /[ \t]*\{\{\s*(?:link|checkout|p
 
 type AgentRunRow = {
   id: string;
+  created_at?: string;
   agent_id: string;
   organization_id: string | null;
   run_status: string;
@@ -1447,7 +1448,7 @@ async function loadBirthdayQuestion(client: SupabaseClient, organizationId: stri
 async function loadRunContext(client: SupabaseClient, runId: string) {
   const { data: run, error: runError } = await client
     .from("agent_runs")
-    .select("id, agent_id, organization_id, run_status, input_summary, metadata")
+    .select("id, agent_id, organization_id, run_status, input_summary, metadata, created_at")
     .eq("id", runId)
     .maybeSingle<AgentRunRow>();
 
@@ -9541,6 +9542,7 @@ async function sendAudioOutboundChunk(input: {
         whatsappInstanceId: context.instance.id,
         agentScope: resolveWhatsappAgentUsageScope(context),
         audioChunkIndex: input.chunkIndex,
+        agentRunCreatedAt: context.run.created_at,
         audioChunksTotal: input.chunksTotal,
       },
       client: input.client,

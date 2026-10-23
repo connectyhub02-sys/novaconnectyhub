@@ -6,19 +6,22 @@ import { normalizeAgentVoiceSettings } from './agent-settings';
 import { VoiceError } from '@/lib/voice-api/contract';
 import { BillingAccessError } from '@/lib/billing/trial';
 import { statusForDashboardCompanyScopeError } from '@/lib/client-os/dashboard-route-scope';
+import { speechEffectsCatalog } from '@/lib/voice-api/speech-effects';
 
 export async function agentPreviewResponse(request: Request, scope: { organizationId: string; userId: string; agentScope: 'customer' | 'platform'; client: SupabaseClient }, body?: Record<string, unknown>) {
+  if (request.method === 'GET' && new URL(request.url).searchParams.get('catalog') === 'effects') return Response.json(await speechEffectsCatalog(scope), { headers: { 'Cache-Control': 'no-store' } });
   if (request.method === 'GET') return Response.json({ models: await agentVoiceModels(scope.client, scope.organizationId) }, { headers: { 'Cache-Control': 'no-store' } });
   const config = normalizeAgentVoiceSettings(body?.settings);
   if (!config || typeof body?.text !== 'string' || !body.text.trim() || body.text.length > 600 || typeof body.voiceId !== 'string' || !body.voiceId) throw new VoiceError('invalid_preview', 422, 'Escolha uma voz e escreva uma frase de até 600 caracteres.');
-  const input = { organizationId: scope.organizationId, userId: scope.userId, client: scope.client, text: body.text, voiceId: body.voiceId, voiceSource: 'elevenlabs', studioSettings: config, source: 'whatsapp_voice_preview', metadata: { agentScope: scope.agentScope } };
+  if (body.effectSample !== undefined && (typeof body.effectSample !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(body.effectSample))) throw new VoiceError('invalid_preview', 422, 'Identificador de combinação inválido.');
+  const input = { organizationId: scope.organizationId, userId: scope.userId, client: scope.client, text: body.text, voiceId: body.voiceId, voiceSource: 'elevenlabs', studioSettings: config, source: 'whatsapp_voice_preview', metadata: { agentScope: scope.agentScope, effectPreviewSeed: body.effectSample ?? 'preview' } };
   if (body.action === 'quote') {
     const quote = await quoteAgentSpeech(input);
-    return Response.json({ credits: quote.price.chargeCredits, characters: quote.characters }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ credits: quote.price.chargeCredits, characters: quote.characters, audioEffects: quote.audioEffects }, { headers: { 'Cache-Control': 'no-store' } });
   }
   if (body.action !== 'generate' || typeof body.maxCredits !== 'number' || !Number.isFinite(body.maxCredits) || body.maxCredits < 0 || !request.headers.get('idempotency-key')) throw new VoiceError('invalid_preview', 422, 'Atualize a estimativa antes de gerar a prévia.');
   const result = await generateConnectyVoiceAudio({ ...input, maxCredits: body.maxCredits, idempotencyKey: request.headers.get('idempotency-key')! });
-  return Response.json({ audioUrl: result.audioUrl, credits: result.chargeCredits }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ audioUrl: result.audioUrl, credits: result.chargeCredits, audioEffects: result.audioEffects }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export function agentPreviewError(error: unknown) {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commerceDatabase } from './helpers/commerce-database';
 import { newAgentVoiceSettings } from '@/lib/voice/agent-settings';
 const m = vi.hoisted(() => ({ generate: vi.fn(), meter: vi.fn(), quote: vi.fn(), voices: vi.fn(), access: vi.fn() }));
+vi.mock('@/lib/voice-api/speech-effects', () => ({ speechEffectsCatalog: async () => ({ filter_presets: [], environments: [{ environment_id: 'small_room' }], background_noises: [{ background_noise_id: 'keyboard' }] }) }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }));
 vi.mock('@/lib/billing/access-control', () => ({ assertOrganizationOperationalAccess: vi.fn(async () => ({ planCode: 'pro' })) }));
@@ -11,6 +12,7 @@ vi.mock('@/lib/voice-api/catalog', () => ({ quoteVoice: m.quote, voiceModelPrice
 vi.mock('@/lib/elevenlabs/tts', () => ({ generateElevenLabsAudio: m.generate }));
 vi.mock('@/lib/elevenlabs/voices', () => ({ listWhatsappAudioVoices: m.voices }));
 import { generateConfiguredAgentVoice } from '@/lib/voice/agent-generation';
+import { newAgentEffects } from '@/lib/voice/agent-effects';
 
 const rates = [{ id: 'studio-rate', unit: 'character', connectyPricePerUnit: .24, providerCostPerUnit: .001, minimumChargeCredits: 5 }];
 function fixture() {
@@ -26,6 +28,21 @@ beforeEach(() => {
   m.meter.mockResolvedValue({ usageEventId: 'usage', chargeCredits: 5, billingMode: 'customer_billable' });
 });
 describe('configured agent voice dispatch and billing', () => {
+  it('persists automatic effects before dispatch and reuses them on recovery without changing Studio pricing', async () => {
+    const { input, db } = fixture();
+    input.studioSettings.effects = { ...newAgentEffects(), enabled: true, environmentMode: 'auto', environmentIds: ['small_room'], backgroundMode: 'auto', backgroundIds: ['keyboard'], audio: { distance: .1, send_level: .2, pan: -.1 } };
+    const expected = { environment_id: 'small_room', background_noise_id: 'keyboard', distance: .1, send_level: .2, pan: -.1 };
+    m.generate.mockImplementationOnce(async args => {
+      expect(db.tables.agent_voice_generations[0].quote).toMatchObject({ audioEffects: expected, rates, characters: 4 });
+      expect(args.audioEffects).toEqual(expected);
+      return { mediaId: 'media', audioUrl: 'https://fixture.invalid/audio.mp3', audioEffects: args.audioEffects };
+    });
+    m.meter.mockRejectedValueOnce(new Error('metering unavailable'));
+    await expect(generateConfiguredAgentVoice(input)).rejects.toThrow('metering unavailable');
+    expect((await generateConfiguredAgentVoice(input)).audioEffects).toEqual(expected);
+    expect(m.generate).toHaveBeenCalledTimes(1);
+    expect(m.meter.mock.calls[1][1]).toMatchObject({ quotedRates: rates, characters: 4, metadata: { audioEffects: expected } });
+  });
   it('replays one paid generation, keeping Studio rates and agent attribution', async () => {
     const { input } = fixture();
     const first = await generateConfiguredAgentVoice(input);

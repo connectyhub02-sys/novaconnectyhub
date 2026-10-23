@@ -8,6 +8,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { loadElevenLabsCredentials } from "./credentials";
+import { requestVoiceAudio, boundedVoiceAudio } from '@/lib/voice-api/provider';
+import { VoiceError } from '@/lib/voice-api/contract';
+import type { SpeechEffects } from '@/lib/voice-api/speech-options';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -15,6 +18,7 @@ export type GenerateElevenLabsAudioInput = {
   organizationId: string;
   text: string;
   studioSettings?: AgentVoiceSettings;
+  audioEffects?: SpeechEffects;
   userId?: string | null;
   voiceId?: string | null;
   voicePublicOwnerId?: string | null;
@@ -34,6 +38,7 @@ export type GeneratedElevenLabsAudio = {
   modelId: string;
   outputFormat: string;
   text: string;
+  audioEffects?: SpeechEffects;
 };
 
 const maxAudioTextLength = 4800;
@@ -64,24 +69,34 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
     name: input.voiceName,
   });
 
-  const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
-    text,
-    modelId,
-    outputFormat: credentials.outputFormat,
-    voiceSettings: prepared ? {
-      stability: prepared.settings.stability,
-      similarityBoost: prepared.settings.similarity_boost,
-      style: prepared.settings.style,
-      speed: prepared.settings.speed,
-      useSpeakerBoost: prepared.settings.use_speaker_boost,
-    } : {
-      stability: 0.48,
-      similarityBoost: 0.78,
-      style: 0.22,
-      useSpeakerBoost: true,
-    },
-  }, input.studioSettings ? { maxRetries: 0 } : undefined);
-  const audioBytes = await readableStreamToBytes(audioStream);
+  let audioBytes: Uint8Array;
+  if (input.audioEffects && prepared) {
+    const response = await requestVoiceAudio(credentials.apiKey, { text, voice_id: voiceId, model_id: modelId, voice_settings: prepared.settings, output_format: credentials.outputFormat, audio_effects: input.audioEffects });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new VoiceError('provider_effects_failed', 502, 'Não foi possível gerar o áudio com os efeitos escolhidos. A solicitação não será repetida automaticamente.');
+    }
+    audioBytes = await boundedVoiceAudio(response);
+  } else {
+    const audioStream = await elevenLabs.textToSpeech.convert(voiceId, {
+      text,
+      modelId,
+      outputFormat: credentials.outputFormat,
+      voiceSettings: prepared ? {
+        stability: prepared.settings.stability,
+        similarityBoost: prepared.settings.similarity_boost,
+        style: prepared.settings.style,
+        speed: prepared.settings.speed,
+        useSpeakerBoost: prepared.settings.use_speaker_boost,
+      } : {
+        stability: 0.48,
+        similarityBoost: 0.78,
+        style: 0.22,
+        useSpeakerBoost: true,
+      },
+    }, input.studioSettings ? { maxRetries: 0 } : undefined);
+    audioBytes = await readableStreamToBytes(audioStream);
+  }
   const now = new Date();
   const objectKey = `generated-media/elevenlabs/audio/${input.organizationId}/${now.getTime()}-${randomUUID()}.mp3`;
   const bypassStorageQuota = isRealtimeWhatsappAudioSource(input.source);
@@ -137,6 +152,7 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
       voiceId,
       modelId,
       ...(input.studioSettings ? { studioSettings: input.studioSettings } : {}),
+      ...(input.audioEffects ? { audioEffects: input.audioEffects } : {}),
       outputFormat: credentials.outputFormat,
       generatedBy: input.userId ?? null,
       generatedAt: now.toISOString(),
@@ -152,6 +168,7 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
     modelId,
     outputFormat: credentials.outputFormat,
     text,
+    ...(input.audioEffects ? { audioEffects: input.audioEffects } : {}),
   };
 }
 

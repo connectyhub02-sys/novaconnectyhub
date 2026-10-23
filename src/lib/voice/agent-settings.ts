@@ -1,12 +1,14 @@
 import { normalizeOutboundSpeechText } from "@/lib/whatsapp/outbound-language";
 import { defaultPerformance, interpretations, normalizeSpeech, prepareSpeech, type Performance, type SpeechSettings } from '@/lib/voice-api/performance';
 import { speechControls, studioVoiceSettings } from '@/lib/voice-api/model-controls';
+import { normalizeAgentEffects, type AgentEffects } from './agent-effects';
 
 export type AgentVoiceSettings = {
   version: 1;
   model: keyof typeof speechControls;
   performance: Performance;
   settings: SpeechSettings;
+  effects?: AgentEffects;
 };
 
 export function newAgentVoiceSettings(model: AgentVoiceSettings['model'] = 'eleven_multilingual_v2'): AgentVoiceSettings {
@@ -29,6 +31,8 @@ export function normalizeAgentVoiceSettings(raw: unknown): AgentVoiceSettings | 
     if (typeof next === 'number' && Number.isFinite(next)) result.settings[key] = Math.max(key === 'speed' ? .7 : 0, Math.min(key === 'speed' ? 1.2 : 1, next));
   }
   if (typeof settings?.use_speaker_boost === 'boolean') result.settings.use_speaker_boost = settings.use_speaker_boost;
+  const effects = normalizeAgentEffects(value.effects);
+  if (effects) result.effects = effects;
   return result;
 }
 

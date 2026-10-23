@@ -30,6 +30,7 @@ export type GenerateConnectyVoiceAudioInput = {
 };
 
 export type GeneratedConnectyVoiceAudio = (GeneratedElevenLabsAudio | Omit<GeneratedGeminiAudio, "meteredUsage">) & {
+  audioEffects?: GeneratedElevenLabsAudio['audioEffects'];
   usageEventId?: string | null;
   billingMode?: UsageBillingMode | null;
   chargeCredits?: number | null;
