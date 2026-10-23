@@ -1,5 +1,25 @@
 # Estado operacional da ConnectyHub
 
+## Renovação de campanha corrigida e tentativa pontual conferida — 23/10/2026
+
+Publicado `910dbe12`, slot b/3131; slot a com `77265430` preservado. Migration
+0210 aplicada e registrada após backup local/remoto e ensaio com rollback.
+Após fulfillment de campanha pago por cartão com consentimento comprovado,
+remove somente o bloqueio temporário da assinatura e audita a autorização.
+Reserva SQL também respeita desativação administrativa. Reparada uma assinatura
+legada pelo mesmo verificador; demais contas e registros financeiros preservados.
+
+129 testes, ESLint, build Linux/TypeScript/120 páginas aprovados. Candidata e
+HTTPS público: SHA/saúde, 19 assets, APIs protegidas, Inngest assinado/58 funções.
+Builder parado. Janela D−3/D−2/D−1 preservada; vencidos não ganham retry automático.
+
+Após publicar, a última instrução do titular autorizou uma tentativa pontual
+da fatura vencida. Uma chamada de débito, recusada pelo Asaas com orientação
+para verificar limite do cartão. GET posterior: cobrança pendente, sem pagamento.
+Tentativa local rejected; fatura aberta, assinatura past_due e nenhum fulfillment
+ou concessão de créditos dessa renovação. Nenhuma segunda tentativa.
+[Implementação, evidências e limites](diagnostico-renovacao-campanha-2026-10-23.md).
+
 ## Chat: áudio sem JSON técnico na transcrição — 22/10/2026
 
 Publicado às 15h39 BRT: `77265430`, slot a/3130; anterior `3c5bfb17` no b.

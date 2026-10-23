@@ -79,3 +79,53 @@ automática D−3/D−2/D−1 permanece igual.
 Validação local: 129 testes aprovados em sete arquivos carregados pela rodada
 de campanhas, contratos, ativação personalizada e regressões da nova migration.
 Publicação e tentativa real ainda pendentes neste registro de preparação.
+
+## Publicação e reparo verificados — 23/10/2026, 13h16 BRT
+
+Release `910dbe12422896c8d5fb0efd1d3057f18e3bb7e8` publicada no slot b/3131;
+slot a preserva `77265430` para retorno. Build Linux/webpack, TypeScript e 120
+páginas aprovados. Candidata e domínio público confirmaram SHA/saúde, 19 assets,
+autenticação das APIs e Inngest assinado com 58 funções. Builder parado.
+
+Migration 0210 aplicada e registrada após ensaio transacional com rollback.
+Reparo individual pelo mesmo verificador aplicado uma vez e auditado; repetição
+retornou false. Comparações na transação confirmaram: demais assinaturas idênticas;
+assinatura alvo preservada exceto os dois marcadores, o recibo de autorização e
+updated_at; pagamentos, faturas, tentativas e carteira existentes preservados.
+Reserva automática do vencido recusada, sem criar tentativa. ACL e trigger ativos.
+
+Backup privado de schema e dados financeiros em
+`/opt/connectyhub/app/ops/campaign-renewal-20261023/`, copiado para
+`%LOCALAPPDATA%/ConnectyHub/backups/campaign-renewal-20261023/`, hashes iguais:
+schema `74589646…`, dados `35f40aa7…`. Restauração integral não ensaiada.
+Rollback de aplicação não reverte a migration; eventual retorno SQL exige
+restaurar a função anterior e retirar o novo trigger, preservando pagamentos
+posteriores. Não restaurar o dump financeiro inteiro sobre operações novas.
+
+Até esta etapa nenhuma cobrança foi executada. A tentativa pontual autorizada
+posteriormente está sendo preparada com o código financeiro publicado.
+
+## Tentativa pontual autorizada — 23/10/2026, 13h20 BRT
+
+Depois da correção e publicação, reconferidos a mesma fatura, valor/revisão,
+cartão ativo, ausência de tentativa e ausência de cobrança correspondente no
+Asaas. O script privado exige esses invariantes, reserva a tentativa pelo RPC
+financeiro existente e permite no máximo uma criação de fatura externa sem
+débito e uma chamada de `payWithCreditCard`. Não muda o cron nem simula data.
+
+Foi realizada **uma única tentativa**, recusada pelo Asaas: HTTP 400,
+`invalid_object`, diagnóstico `declined / check_card_limit` (verificar limite
+disponível). GET posterior confirmou a mesma cobrança `PENDING`, valor correto,
+referência correspondente e sem data de pagamento. Fatura externa pendente não
+significa pagamento em andamento no cartão: a tentativa local terminou
+`rejected`, com efeito concluído e motivo persistido.
+
+Fatura local continua aberta, assinatura `past_due`, vencimento anterior
+preservado, `paid_at` nulo e zero fulfillment para a renovação. Nenhuma segunda
+tentativa ou crédito concedido. O bloqueio indevido da campanha está removido;
+novas renovações elegíveis usarão a política existente após regularização,
+sujeitas à aprovação do emissor. A dívida atual permanece pendente.
+
+Evidência privada em `execute-result.jsonl` na pasta operacional acima, com
+IDs fixos e contagem de chamadas; nunca repetir o modo execute para reconciliar.
+Outra tentativa exige nova instrução e reconferência da mesma cobrança externa.
