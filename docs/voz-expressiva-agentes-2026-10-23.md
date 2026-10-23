@@ -47,7 +47,7 @@ Replay concluído reutiliza áudio; falha no metering recupera o áudio persisti
 e reaplica o mesmo identificador de débito. Valida voz autorizada da empresa,
 acesso, saldo e teto da prévia antes de chamar o fornecedor.
 
-Limite explícito: o novo recibo protege dispatch/metring, não substitui o ledger
+Limite explícito: o novo recibo protege dispatch/metering, não substitui o ledger
 financeiro nem cria uma reserva de saldo como a API de Voz. Consumo dos agentes
 continua liquidado pelo medidor existente. Resultados incertos de síntese/storage
 ficam bloqueados para nova geração nessa chave e exigem conciliação operacional;
@@ -72,8 +72,29 @@ não há busca automática no histórico do fornecedor nesta etapa.
 Não foi gerado áudio pago nem enviada mensagem para testar. A qualidade auditiva
 e a latência reais continuam dependentes da prévia com a voz escolhida pelo cliente.
 
-## Publicação
+## Publicação verificada — 23/10/2026, 14h38 BRT
 
-Implementação e validação locais concluídas; build, aplicação da migration e
-ativação da candidata serão registrados abaixo após confirmação. A VPS tem
-cerca de 8 GiB livres nesta preparação; não foram excluídos dados ou imagens.
+Release `469f91cbb002f344a945e0503c5471828c940f01` ativa no slot a/3130.
+Anterior `910dbe12` preservada no slot b/3131. Build Linux/webpack, TypeScript e
+120 páginas aprovados. Candidata e HTTPS público: saúde/SHA, 19 assets,
+bundle com novos controles, GET/POST de preview protegidos, painel redirecionando
+sem sessão, Inngest assinado HTTP 200 com 58 funções e fixture de QA ausente.
+Builder parado; os dois slots permaneceram saudáveis.
+
+Migration 0211 aplicada e registrada depois de ensaio transacional com rollback.
+Tabela inicial vazia, RLS ativa, anon/authenticated sem acesso e service_role com
+acesso. API PostgREST confirmou leitura de serviço HTTP 200 e zero linhas antes
+da ativação. Não houve alteração de agentes ou tarifas nem geração paga de teste.
+
+Backup do schema anterior em
+`/opt/connectyhub/app/ops/agent-voice-20261023/schema-before.sql`, copiado para
+`%LOCALAPPDATA%/ConnectyHub/backups/agent-voice-20261023/schema-before.sql`.
+SHA-256 igual nas duas cópias:
+`0fa02fab5305e0f101ba1a1987c04046eb57ad1c01a2de0f35ac34cf42bfa243`.
+Restauração integral não ensaiada. Rollback da aplicação usa o slot b; a tabela
+aditiva e os recibos de consumo posteriores devem ser preservados.
+
+Pendente fora desta entrega: espaço da VPS. Às 14h38, cerca de 8,9 GiB livres,
+97% de ocupação; não foi feita limpeza de dados, imagens ou releases. Qualidade
+auditiva/latência real permanece para a prévia escolhida pelo titular/cliente;
+os testes de navegador e transporte desta entrega usaram respostas simuladas.

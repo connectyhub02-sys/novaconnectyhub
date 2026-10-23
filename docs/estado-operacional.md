@@ -1,5 +1,28 @@
 # Estado operacional da ConnectyHub
 
+## Voz expressiva e custo do Estúdio nos agentes — 23/10/2026
+
+Publicado às 14h38 BRT: `469f91cb`, slot a/3130; anterior `910dbe12` no b.
+Cliente/admin e agentes internos compartilham modelo, estilo v3, intensidade,
+ajustes compatíveis e prévia com estimativa. Preferência opcional versionada:
+agentes existentes mantêm síntese/cobrança até escolha explícita e salvamento.
+Nova geração usa preparação e tarifa do Estúdio, incluindo mínimo/arredondamento,
+com snapshot de preço e atribuição do consumo ao agente. Nenhuma tarifa alterada.
+
+Migration 0211: recibos privados com claim único e recuperação do metering,
+sem repetir síntese incerta. Backup local/remoto de schema conferido; ensaio com
+rollback e ACL/RLS aprovados. Não atualiza registros de agentes. 130 testes,
+TypeScript, ESLint, UI simulada em 1366/390 px e build de 120 páginas aprovados.
+Candidata/HTTPS: SHA/saúde, 19 assets, bundle, APIs protegidas e Inngest assinado
+com 58 funções. Builder parado. Teste estático antigo de painel tem marcador
+obsoleto já ausente em HEAD; documentado separadamente.
+
+Sem áudio pago ou mensagem de teste. Avaliação auditiva/latência real pendente
+para a prévia escolhida pelo cliente. Recibo incerto exige conciliação, sem
+regeneração automática. Disco da VPS continua com pouca folga: 8,9 GiB livres,
+97% ocupado ao concluir; nenhuma limpeza realizada nesta entrega.
+[Implementação, evidências e limites](voz-expressiva-agentes-2026-10-23.md).
+
 ## Renovação de campanha corrigida e tentativa pontual conferida — 23/10/2026
 
 Publicado `910dbe12`, slot b/3131; slot a com `77265430` preservado. Migration
