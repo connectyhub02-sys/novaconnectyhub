@@ -6,14 +6,14 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createStudioAssetHandler} from '../services/ai-relay/studio-assets.mjs';
-async function fixture({reject=false,confirm=true,measureFail=false}={}){
+async function fixture({reject=false,confirm=true,measureFail=false,objectStore}={}){
  const stateDir=await mkdtemp(join(tmpdir(),'studio-assets-')),id=randomUUID(),ticket='a'.repeat(64),calls=[];let canConfirm=confirm;
  const fetcher=async(url,request)=>{
   expect(String(url)).toBe('https://control.example/internal');const body=JSON.parse(request.body);calls.push(body);
   if(body.action==='asset.connect')return Response.json({id,size_bytes:3,mime_type:'audio/wav'},{status:reject?401:200});
   return Response.json({id,status:body.status},{status:canConfirm?200:503});
  };
- const options={control:'https://control.example/internal',secret:'secret',stateDir,fetcher,measure:async()=>{if(measureFail)throw new Error('invalid');return {duration_seconds:1.5};}};
+ const options={control:'https://control.example/internal',secret:'secret',stateDir,objectStore,fetcher,measure:async()=>{if(measureFail)throw new Error('invalid');return {duration_seconds:1.5};}};
  let handler=createStudioAssetHandler(options);
  const server=createServer(async(req,res)=>{if(!await handler(req,res)){res.writeHead(404);res.end();}});server.listen(0,'127.0.0.1');await once(server,'listening');
  const url=`http://127.0.0.1:${server.address().port}/studio-assets/${id}`;
@@ -61,4 +61,41 @@ it('reconciles a crashed upload but protects local audio and pending manifests',
   expect(await readdir(stateDir)).toEqual(expect.arrayContaining([`${saved}.audio`,`${pending}.json`]));
   expect(await readdir(stateDir)).not.toContain(`${abandoned}.audio.tmp`);
  }finally{handler.close();await rm(stateDir,{recursive:true,force:true});}
+});
+
+function remoteStore({uncertainWrite=false}={}) {
+ const values=new Map();
+ return {values,
+  async writeExclusive(id,bytes){if(values.has(id))throw Error('conflict');values.set(id,Buffer.from(bytes));if(uncertainWrite)throw Error('network timeout after commit');},
+  async read(id){if(!values.has(id))throw Object.assign(Error('missing'),{code:'ENOENT'});return values.get(id);},
+  async stat(id){return {size:(await this.read(id)).length};},
+  async exists(id){return values.has(id);},
+  async remove(id){values.delete(id);},
+ };
+}
+it('stores remote audio without a local payload and keeps ticket checks for download/delete',async()=>{
+ const objectStore=remoteStore(),f=await fixture({objectStore});try{
+  expect((await f.send()).status).toBe(201);expect(await readdir(f.stateDir)).toEqual([]);
+  expect(objectStore.values.get(f.id).toString()).toBe('abc');
+  expect(await (await f.send('GET')).text()).toBe('abc');
+  expect(f.calls.at(-1)).toMatchObject({action:'asset.connect',purpose:'download'});
+  expect((await f.send('DELETE')).status).toBe(200);expect(objectStore.values.size).toBe(0);
+ }finally{await f.close();}
+});
+it('reconciles an uncertain R2 write after restart without resending bytes',async()=>{
+ const objectStore=remoteStore({uncertainWrite:true}),f=await fixture({objectStore});try{
+  expect((await f.send()).status).toBe(503);
+  expect(await readdir(f.stateDir)).toEqual([`${f.id}.json`]);
+  await f.restart();expect(await readdir(f.stateDir)).toEqual([]);
+  expect(objectStore.values.get(f.id).toString()).toBe('abc');
+  expect(f.calls.filter(c=>c.action==='asset.connect')).toHaveLength(1);
+ }finally{await f.close();}
+});
+it('does not replace an R2 outage with local storage or confirm a missing payload',async()=>{
+ const objectStore=remoteStore();objectStore.writeExclusive=async()=>{throw Error('unavailable');};
+ const f=await fixture({objectStore});try{
+  expect((await f.send()).status).toBe(503);await f.restart();
+  expect(await readdir(f.stateDir)).toEqual([`${f.id}.json`]);
+  expect(f.calls.some(c=>c.action==='asset.complete')).toBe(false);
+ }finally{await f.close();}
 });

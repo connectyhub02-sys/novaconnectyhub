@@ -3,15 +3,16 @@ import {WebSocket,WebSocketServer} from 'ws';
 import {pathToFileURL} from 'node:url';
 import {createUploadHandler} from './uploads.mjs';
 import {createStudioAssetHandler} from './studio-assets.mjs';
+import {createR2AssetStore} from './r2-assets.mjs';
 
 /** Persistent process, behind TLS. No client receives an upstream credential. */
-export function createAiRelay({controlUrl,secret,fetcher=fetch,Socket=WebSocket,maxSessions=16,maxSessionMs=900000,uploadsEnabled=false,uploadStateDir,studioAssetsEnabled=false,studioAssetDir}) {
+export function createAiRelay({controlUrl,secret,fetcher=fetch,Socket=WebSocket,maxSessions=16,maxSessionMs=900000,uploadsEnabled=false,uploadStateDir,studioAssetsEnabled=false,studioAssetDir,studioObjectStore}) {
   if(!secret||secret.length<32)throw new Error('AI_RELAY_SECRET must contain at least 32 characters');
   const control=new URL(controlUrl);
   if(control.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(control.hostname))throw new Error('Control requires HTTPS');
   if(!Number.isInteger(maxSessions)||maxSessions<1||!Number.isInteger(maxSessionMs)||maxSessionMs<1000)throw new Error('Invalid relay capacity');
   const upload=uploadsEnabled?createUploadHandler({control,secret,fetcher,stateDir:uploadStateDir}):null;
-  const assets=studioAssetsEnabled?createStudioAssetHandler({control:new URL('/api/internal/studio/relay',control),secret,fetcher,stateDir:studioAssetDir}):null;
+  const assets=studioAssetsEnabled?createStudioAssetHandler({control:new URL('/api/internal/studio/relay',control),secret,fetcher,stateDir:studioAssetDir,objectStore:studioObjectStore}):null;
   const server=createServer(async(req,res)=>{
     if(assets&&await assets(req,res))return;
     if(upload&&await upload(req,res))return;
@@ -81,7 +82,10 @@ export function createAiRelay({controlUrl,secret,fetcher=fetch,Socket=WebSocket,
   return server;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
-  const server=createAiRelay({controlUrl:process.env.AI_RELAY_CONTROL_URL,secret:process.env.AI_RELAY_SECRET,uploadsEnabled:process.env.AI_UPLOAD_RELAY_ENABLED==='true',uploadStateDir:process.env.AI_UPLOAD_STATE_DIR,studioAssetsEnabled:process.env.STUDIO_ASSETS_ENABLED==='true',studioAssetDir:process.env.STUDIO_ASSET_DIR});
+  const studioAssetsEnabled=process.env.STUDIO_ASSETS_ENABLED==='true';
+  // Production fails closed if R2 is missing; there is no disk fallback.
+  const studioObjectStore=studioAssetsEnabled?createR2AssetStore({endpoint:process.env.STUDIO_R2_ENDPOINT,bucket:process.env.STUDIO_R2_BUCKET,accessKeyId:process.env.STUDIO_R2_ACCESS_KEY_ID,secretAccessKey:process.env.STUDIO_R2_SECRET_ACCESS_KEY}):undefined;
+  const server=createAiRelay({controlUrl:process.env.AI_RELAY_CONTROL_URL,secret:process.env.AI_RELAY_SECRET,uploadsEnabled:process.env.AI_UPLOAD_RELAY_ENABLED==='true',uploadStateDir:process.env.AI_UPLOAD_STATE_DIR,studioAssetsEnabled,studioAssetDir:process.env.STUDIO_ASSET_DIR,studioObjectStore});
   server.listen(Number(process.env.PORT??3120),'0.0.0.0');
   for(const event of ['SIGINT','SIGTERM'])process.on(event,()=>server.close());
 }

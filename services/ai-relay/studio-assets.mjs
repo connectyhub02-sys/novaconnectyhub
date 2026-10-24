@@ -3,11 +3,12 @@ import {createReadStream} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {pipeline} from 'node:stream/promises';
+import {Readable} from 'node:stream';
 import {measureStudioAudio,studioMediaLimits} from './audio-measure.mjs';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 class AssetFailure extends Error {constructor(status,code){super(code);this.status=status;this.code=code;}}
-export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,measure=measureStudioAudio,maxActive=2,requestTimeoutMs=180000}) {
+export function createStudioAssetHandler({control,secret,stateDir,objectStore,fetcher=fetch,measure=measureStudioAudio,maxActive=2,requestTimeoutMs=180000}) {
  if(!stateDir)throw new Error('Studio requires a private persistent asset directory');
  let active=0,draining=false,lastStaleScan=0;const activeIds=new Set();
  const ready=mkdir(stateDir,{recursive:true,mode:0o700});
@@ -20,9 +21,9 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
  };
  const remember=async item=>{await writeFile(manifest(item.id)+'.tmp',JSON.stringify(item),{mode:0o600});await rename(manifest(item.id)+'.tmp',manifest(item.id));};
  const confirm=async item=>{
-  if(item.status==='deleted')await remove(audio(item.id));
+  if(item.status==='deleted'){if(objectStore)await objectStore.remove(item.id);else await remove(audio(item.id));}
   else {
-   const bytes=await readFile(audio(item.id));
+   const bytes=objectStore?await objectStore.read(item.id):await readFile(audio(item.id));
    if(bytes.length!==item.size_bytes||createHash('sha256').update(bytes).digest('hex')!==item.sha256)throw new Error('asset_integrity');
   }
   const result=await call({action:'asset.complete',...item});await remove(manifest(item.id));return result;
@@ -35,7 +36,7 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
     const item=JSON.parse(await readFile(join(stateDir,name),'utf8'));
     if(item.id!==name.slice(0,-5)||!['ready','deleted'].includes(item.status))continue;
     try{await confirm(item);}catch(error){
-     if(error.code==='ENOENT'&&item.status==='ready'&&Number.isFinite(item.created_at)&&Date.now()-item.created_at>600000){
+     if(!objectStore&&error.code==='ENOENT'&&item.status==='ready'&&Number.isFinite(item.created_at)&&Date.now()-item.created_at>600000){
       await call({action:'asset.fail',id:item.id});await remove(audio(item.id)+'.tmp');await remove(manifest(item.id));
      }
     }
@@ -49,7 +50,7 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
    for(const id of Array.isArray(stale.ids)?stale.ids.slice(0,20):[]){
     if(typeof id!=='string'||!uuid.test(id)||activeIds.has(id))continue;
     const exists=async path=>stat(path).then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error;});
-    if(await exists(manifest(id))||await exists(audio(id)))continue;
+    if(await exists(manifest(id))||(objectStore?await objectStore.exists(id):await exists(audio(id))))continue;
     const result=await call({action:'asset.fail_stale',id});if(result.status==='failed')await remove(audio(id)+'.tmp');
    }
   }
@@ -85,9 +86,11 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
     reply(200,await confirm(item));return true;
    }
    if(purpose==='download'){
-    const file=await stat(audio(id));if(file.size!==session.size_bytes)throw new AssetFailure(503,'asset_integrity');
+    const file=objectStore?await objectStore.stat(id):await stat(audio(id));if(file.size!==session.size_bytes)throw new AssetFailure(503,'asset_integrity');
+    const bytes=objectStore?await objectStore.read(id):null;
+    if(bytes&&bytes.length!==session.size_bytes)throw new AssetFailure(503,'asset_integrity');
     res.writeHead(200,{'Content-Type':session.mime_type,'Content-Length':file.size,'Content-Disposition':'attachment; filename="audio"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cors});
-    await pipeline(createReadStream(audio(id)),res);return true;
+    await pipeline(bytes?Readable.from(bytes):createReadStream(audio(id)),res);return true;
    }
    if(size!==session.size_bytes||req.headers['content-type']!==session.mime_type)throw new AssetFailure(422,'asset_metadata');
    const chunks=[];let received=0;
@@ -99,8 +102,11 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
    const item={id,status:'ready',size_bytes:received,duration_seconds:measurement.duration_seconds,sha256:createHash('sha256').update(bytes).digest('hex'),created_at:Date.now()};
    // Persist intent first so a crash before the atomic file link is recoverable.
    await remember(item);durable=true;
-   const temporary=audio(id)+'.tmp';await writeFile(temporary,bytes,{mode:0o600,flag:'wx'});
-   try{await link(temporary,audio(id));ownedFile=true;}finally{await remove(temporary);}
+   if(objectStore)await objectStore.writeExclusive(id,bytes,session.mime_type);
+   else {
+    const temporary=audio(id)+'.tmp';await writeFile(temporary,bytes,{mode:0o600,flag:'wx'});
+    try{await link(temporary,audio(id));ownedFile=true;}finally{await remove(temporary);}
+   }
    // Durable receipt before acknowledgment. No provider key or ticket is stored.
    reply(201,await confirm(item));
   }catch(error){

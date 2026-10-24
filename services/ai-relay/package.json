@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {"ws": "8.21.0"}
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1156.0",
+    "ws": "8.21.0"
+  }
 }
