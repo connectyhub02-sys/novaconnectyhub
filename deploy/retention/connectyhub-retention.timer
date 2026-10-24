@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Inngest diagnostic retention (Brasilia 01:15)
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=connectyhub-retention.service
+
+[Install]
+WantedBy=timers.target

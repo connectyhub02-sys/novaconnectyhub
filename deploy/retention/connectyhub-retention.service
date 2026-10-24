@@ -1,0 +1,22 @@
+[Unit]
+Description=Encrypted archive and retention of completed Inngest diagnostics
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/connectyhub/retention/retention.py
+User=root
+UMask=0077
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+CPUQuota=100%
+MemoryMax=1536M
+TimeoutStartSec=3h
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/connectyhub-retention
+
