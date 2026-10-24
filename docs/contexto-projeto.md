@@ -111,13 +111,20 @@ Essa priorização é uma avaliação técnica da revisão de 11/09, não uma de
 | Componente | Destino registrado | Fontes principais |
 |---|---|---|
 | Aplicação, painéis, APIs e handlers de automações | Next.js 16 / React 19 / Node 24 em Docker na VPS, atrás do Caddy | `src/app`, `src/components`, `package.json` |
-| Banco, Auth, RLS e Supabase Storage | Supabase em Docker na VPS Contabo | `src/lib/supabase`, `supabase/migrations` |
+| Banco, Auth, RLS e API Supabase Storage | Supabase em Docker na VPS Contabo; arquivos do Storage no R2 | `src/lib/supabase`, `supabase/migrations`, `deploy/storage-r2` |
 | Agendamento e orquestração | Inngest na mesma VPS; chama handlers da aplicação | `src/lib/inngest`, `src/lib/automations` |
 | Mídias em object storage | Cloudflare R2 permanece | referências `R2_` em `.env.example` e fontes |
 | WhatsApp | UAZAPI; integrações Meta conforme configuração/ativação | `src/lib/uazapi`, `src/lib/whatsapp` |
 | IA | Adaptadores Gemini; voz também ElevenLabs | `src/lib/gemini`, `src/lib/ai-api`, `src/lib/voice` |
 | Pagamentos | Adaptadores Asaas, PagBank e Mercado Pago; verificar seleção por fluxo | `src/lib/billing`, `src/lib/sales-catalog` |
 | E-mail de autenticação | Resend SMTP configurado na migração | relatório da migração Supabase |
+
+Diretriz do titular em 24/10: arquivos persistentes de API e clientes devem usar
+R2, evitando crescimento do disco da VPS por uploads. Storage usa backend S3
+nativo; relay do Estúdio também grava no R2 privado. Mídias públicas e privadas
+mantêm destinos/permissões separados. Banco, metadados, filas e recibos mínimos
+continuam na VPS; cópias temporárias exigidas pelos provedores de IA não são
+arquivos locais permanentes. [Implantação e limites](padronizacao-arquivos-r2-2026-10-24.md).
 
 Endereços operacionais registrados: aplicação `https://www.connectyhub.com.br`, Supabase `https://supabase.connectyhub.com.br`, Inngest `https://inngest.connectyhub.com.br`. Confirme os destinos no ambiente alvo antes de operar. Valores secretos não pertencem a este documento. Configurações reais podem combinar ambiente e credenciais criptografadas no banco; não basta ler `.env.example`.
 
