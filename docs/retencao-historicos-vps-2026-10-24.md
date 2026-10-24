@@ -189,3 +189,51 @@ Checkpoint impede duplicação. Falha/índice transitório inválido exige revis
 nada é descartado automaticamente. Resultado final será ganho dos índices,
 sem declarar compactação dos heaps concluída. Novo acompanhamento a cada 15 min:
 `conclus-o-dos-ndices-concorrentes-da-vps`; timer diário original preservado.
+
+### Conclusão da recuperação concorrente — 19h54 BRT; conferência às 19h56
+
+`online-index-status.json` terminou `complete` / `finished` em 24/10/2026,
+22h54 UTC (19h54 BRT). Serviço finalizou com sucesso, sem processo de índice
+remanescente. Todos os 30 índices planejados foram concluídos: 13 ConnectyHub
+e 17 Vision. Esta é a conclusão da alternativa concorrente escolhida pelo titular,
+não da compactação integral dos heaps. Controlador antigo continua parado e seu
+`attention_required` permanece somente como registro da interrupção anterior.
+
+| Medida | Antes | Depois verificado |
+|---|---:|---:|
+| Espaço livre desde o incidente | aproximadamente 7,8 GiB / 98% ocupado | 36,19 GiB / 88% ocupado |
+| Espaço livre na etapa concorrente | 15,226 GiB | 36,19 GiB |
+| Banco Inngest ConnectyHub, antes da etapa concorrente | 30,90 GiB | 25,096 GiB |
+| Banco Inngest Vision, antes da etapa concorrente | 121,50 GiB | 104,109 GiB |
+
+Índices reduziram 25.301.024.768 bytes (23,56 GiB): 6.354.665.472 bytes
+ConnectyHub e 18.946.359.296 bytes Vision. Ganho líquido de filesystem nessa
+etapa foi aproximadamente 20,96 GiB, pois os serviços continuaram gravando.
+Desde o diagnóstico inicial, a folga aumentou aproximadamente 28,4 GiB; não somar
+cache, compactações e índices como se fossem o ganho líquido atual.
+
+Conferência SQL nos dois Inngest: zero índices públicos inválidos, zero sessões
+esperando locks e zero reconstruções em andamento. Bancos Supabase dos dois
+projetos responderam SQL e estão primários. Auth/REST de ambos, health público
+ConnectyHub, relay e Inngest dos dois projetos responderam HTTP 200. Containers
+essenciais ativos/saudáveis onde há healthcheck. Essas evidências não comprovam
+login pessoal nem conclusão de todas as mensagens, cobranças ou execuções atrasadas.
+
+Preservação: arquivos antigos de diagnóstico continuam criptografados e verificados
+no R2; clientes, conversas, cobranças, resultados, eventos e filas não foram alvo
+da reconstrução de índices. Esta etapa não excluiu linhas adicionais. Nenhuma
+compra de disco, reinício de banco ou retomada do controlador bloqueante.
+
+`connectyhub-retention.timer` confirmado ativo e habilitado; próximo disparo
+observado em 25/10 às 01h18 BRT. A política diária usa VACUUM comum e permanece
+ativa após encerrar o acompanhamento do chat. O acompanhamento recorrente dos
+índices será removido por ter concluído seu propósito; isso não altera o timer VPS.
+
+Não há necessidade imediata de ampliar o disco para concluir esta recuperação.
+A folga de 36,2 GiB resolve a urgência, mas 88% de uso ainda exige observar a
+tendência de crescimento e o resultado dos ciclos diários; não é garantia de
+capacidade indefinida. Espaço livre dentro dos heaps pode ser reutilizado pelo
+PostgreSQL e não aparece como livre no filesystem. Compactação adicional dos
+heaps dependeria de outro plano/janela, não está incluída na conclusão dos índices.
+Validação dos backups que falharam no incidente e backup independente de objetos
+contra exclusão continuam pendências separadas já registradas.

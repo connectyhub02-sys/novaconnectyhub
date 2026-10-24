@@ -31,9 +31,12 @@ Não há retry automático nem fallback bloqueante. SIGTERM solicita cancelament
 do SQL corrente. Ao concluir, o estado é `complete` **somente para índices**;
 espaço livre dentro dos heaps pode continuar reservado ao banco para reutilização.
 
-Testes: `python3 -m unittest -v test_online_indexes`. Acompanhamento do chat
-`conclus-o-dos-ndices-concorrentes-da-vps` verifica a cada 15 minutos e fica
-silencioso em progresso normal. Timer diário da VPS permanece habilitado.
+Testes: `python3 -m unittest -v test_online_indexes`. Execução concluída em
+24/10/2026 às 19h54 BRT: 30 índices, redução de 23,56 GiB nos índices, zero
+índices públicos inválidos na conferência final dos dois bancos. Checkpoint
+`complete` preservado; não repetir essa execução. Acompanhamento do chat
+`conclus-o-dos-ndices-concorrentes-da-vps` encerrado após conclusão.
+Timer diário da VPS permanece habilitado. [Resultado e limites](../../docs/retencao-historicos-vps-2026-10-24.md).
 
 Rotina do host para os bancos independentes Inngest da ConnectyHub e da Vision.
 Só remove linhas de `spans`, `traces` e `history`. Não remove eventos, resumos
