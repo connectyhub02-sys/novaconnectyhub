@@ -7,8 +7,13 @@ clientes: QR recebido pela geração, reset ou consulta de status abre a janela
 ampliada automaticamente. Fechamento manual é respeitado nas atualizações da mesma
 tentativa; nova geração pode abrir novamente. Conexão concluída, tentativa encerrada
 ou modo por telefone escondem o QR. Doze testes existentes passaram e ESLint sem
-erros. Publicação e conferência visual pendentes. Nenhuma conexão real foi resetada
-para testar a interface.
+erros. Conferência no navegador com o componente real e dados fictícios confirmou
+abertura automática após geração, nova geração reabrindo, fechamento por botão e
+Escape, atualização do mesmo QR respeitando fechamento e modo por código sem QR.
+Publicado 48e27288 no slot a às 17h47 BRT; build, tipos, páginas, assets, APIs sem
+sessão e GET assinado Inngest (59 funções) validados no candidato e no domínio
+público. Slot b com b4775d7b preservado para retorno. Nenhuma conexão real foi
+resetada para testar a interface.
 
 ## Correções da auditoria de cobrança — 26/10/2026
 
