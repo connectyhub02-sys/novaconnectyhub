@@ -1,5 +1,25 @@
 # Estado operacional da ConnectyHub
 
+## Disco a 98% e auditoria do R2 — 26/10/2026
+
+Leitura aproximadamente às 19h25–19h38 BRT: 290 GiB totais, 283 GiB usados,
+7,1–7,3 GiB livres. Maiores consumos: históricos Inngest Vision 112 GiB,
+ConnectyHub 27 GiB, aplicação/versões Vision 60 GiB, backups locais 20 GiB,
+containerd 27 GiB e builder dedicado 8,5 GiB. 439 diretórios de releases.
+Nenhuma limpeza, compactação ou alteração de política executada nesta auditoria.
+
+R2 confirmado: 738 objetos de arquivo de diagnóstico somam 7,10 GB decimais;
+quatro amostras reais baixadas/descriptografadas/hash conferido. Timer de retenção
+rodou hoje com sucesso. Arquiva detalhes concluídos após sete dias e falhas após
+trinta; não transfere todos os bancos, versões ou backups locais. Compactação
+inicial de 24/10 ficou parcial por bloqueios; índices concorrentes posteriores
+liberaram 23,56 GiB e deixaram 36,2 GiB livres. Cerca de 29 GiB de folga foram
+consumidos desde então; atribuição exata desse crescimento por diretório não está
+comprovada. Monitor local Vision está unavailable por inventário/recursos fora do
+escopo revisado, enquanto R2 continua sendo medido. Priorizar folga com artefatos
+reproduzíveis e retenção, depois manutenção dos bancos com espaço e controle de
+locks. [Medições, limites e proposta](auditoria-disco-r2-2026-10-26.md).
+
 ## Fotos dos leads renovadas — 26/10/2026
 
 Publicado `0c19c471` no slot b às 19h05 BRT; `04314db0` preservado no a.
