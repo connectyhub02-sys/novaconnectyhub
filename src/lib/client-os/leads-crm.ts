@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   readLeadProfileImageUrl,
   syncLeadAvatarFromUazapi,
+  shouldAttemptLeadAvatarSync,
   type LeadAvatarSyncInstance,
 } from "@/lib/whatsapp/lead-avatar-sync";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
@@ -846,6 +847,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         client: input.client,
         leads: leadRows,
         conversations: conversationRows,
+        connectedInstanceIds: new Set(leadCrmWhatsappInstanceRows.filter(instance => instance.status === "connected").map(instance => instance.id)),
       });
     } catch (error) {
       warnings.push(toLoadWarning("fotos dos leads", error));
@@ -1197,16 +1199,17 @@ async function syncMissingLeadAvatarsForCrm(input: {
   client: SupabaseClient;
   leads: LeadRow[];
   conversations: ConversationRow[];
+  connectedInstanceIds: Set<string>;
 }) {
   const updatedMetadata = new Map<string, JsonRecord>();
   const conversationsByLead = groupBy(input.conversations, (conversation) => conversation.lead_id ?? "none");
   const candidates = input.leads
     .filter((lead) => {
-      if (!lead.phone_number || readLeadProfileImageUrl(lead.metadata)) {
+      if (lead.channel !== "whatsapp" || !lead.phone_number || !shouldAttemptLeadAvatarSync(lead.metadata)) {
         return false;
       }
 
-      return (conversationsByLead.get(lead.id) ?? []).some((conversation) => Boolean(conversation.whatsapp_instance_id));
+      return (conversationsByLead.get(lead.id) ?? []).some((conversation) => input.connectedInstanceIds.has(conversation.whatsapp_instance_id ?? ""));
     })
     .slice(0, 6);
 
@@ -1233,6 +1236,7 @@ async function syncMissingLeadAvatarsForCrm(input: {
     .from("whatsapp_instances")
     .select("id, instance_token_encrypted, metadata")
     .in("organization_id", organizationIds)
+    .eq("status", "connected")
     .in("id", instanceIds);
 
   if (error) {
@@ -1243,13 +1247,13 @@ async function syncMissingLeadAvatarsForCrm(input: {
     ((data ?? []) as WhatsappInstanceAvatarRow[]).map((instance) => [instance.id, instance]),
   );
 
-  for (const lead of candidates) {
+  await Promise.all(candidates.map(async lead => {
     const conversation = (conversationsByLead.get(lead.id) ?? [])
       .find((item) => item.whatsapp_instance_id && instanceById.has(item.whatsapp_instance_id));
     const instance = conversation?.whatsapp_instance_id ? instanceById.get(conversation.whatsapp_instance_id) ?? null : null;
 
     if (!instance?.instance_token_encrypted) {
-      continue;
+      return;
     }
 
     const metadata = await syncLeadAvatarFromUazapi({
@@ -1264,7 +1268,7 @@ async function syncMissingLeadAvatarsForCrm(input: {
     if (metadata) {
       updatedMetadata.set(lead.id, metadata);
     }
-  }
+  }));
 
   return updatedMetadata;
 }

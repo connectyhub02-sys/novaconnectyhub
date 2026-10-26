@@ -5,9 +5,10 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/whatsapp/lead-avatar-sync", () => ({
   readLeadProfileImageUrl: vi.fn(() => null),
   syncLeadAvatarFromUazapi: vi.fn(),
+  shouldAttemptLeadAvatarSync: vi.fn(() => false),
 }));
 vi.mock("@/lib/whatsapp/lead-names", () => ({
-  resolveLeadDisplayName: vi.fn(() => null),
+  resolveAttendanceLeadName: vi.fn(() => null),
 }));
 vi.mock("@/lib/meta/social-approval-policy", () => ({
   buildMetaSocialSuggestedReply: vi.fn(() => "Resposta sugerida."),
@@ -99,7 +100,9 @@ describe("client dashboard scoped loaders", () => {
     });
 
     expect(workspace.companies.map((company) => company.id)).toEqual([companyA.id]);
-    expect(recorder.organizationFilters("leads")).toEqual([[companyA.id]]);
+    const leadFilters = recorder.organizationFilters("leads");
+    expect(leadFilters.length).toBeGreaterThan(0);
+    expect(leadFilters.every((filter) => Array.isArray(filter) && filter.length === 1 && filter[0] === companyA.id)).toBe(true);
     expect(recorder.organizationFilters("agent_registry")).toEqual([[companyA.id]]);
     expect(recorder.organizationFilters("intelligence_events")).toEqual([[companyA.id]]);
   });

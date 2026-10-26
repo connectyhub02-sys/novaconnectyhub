@@ -58,6 +58,7 @@ export function mergeLeadProfileImageMetadata(
     ...(readRecord(metadata) ?? {}),
     profile_image_url: input.profileImageUrl,
     profile_image_synced_at: syncedAt,
+    profile_image_last_attempt_at: syncedAt,
     profile_image_source: input.source,
     profile_image_sync_status: "synced",
     ...(input.providerChatId ? { profile_image_provider_chat_id: input.providerChatId } : {}),
@@ -74,13 +75,8 @@ export async function syncLeadAvatarFromUazapi(input: {
   existingMetadata?: JsonRecord | null;
   force?: boolean;
 }) {
-  const baseMetadata = readRecord(input.existingMetadata) ?? {};
-
-  if (!input.force && readLeadProfileImageUrl(baseMetadata)) {
-    return null;
-  }
-
-  if (!input.force && !shouldAttemptAvatarSync(baseMetadata)) {
+  let baseMetadata = readRecord(input.existingMetadata) ?? {};
+  if (!input.force && !shouldAttemptLeadAvatarSync(baseMetadata)) {
     return null;
   }
 
@@ -91,14 +87,21 @@ export async function syncLeadAvatarFromUazapi(input: {
     return null;
   }
 
+  const reservation = await input.client.rpc("claim_lead_avatar_sync", {
+    p_lead: input.leadId, p_instance: input.instance!.id, p_force: input.force ?? false,
+  });
+  if (reservation.error || !reservation.data?.claim) return null;
+  baseMetadata = readRecord(reservation.data.metadata) ?? baseMetadata;
+
   const attemptedAt = new Date().toISOString();
+  let nextMetadata: JsonRecord;
 
   try {
     const credentials = await loadUazapiCredentials(input.client);
     const avatar = await getConnectedAvatarData(credentials, token, phoneNumber);
 
     if (avatar?.profileImageUrl) {
-      const nextMetadata = mergeLeadProfileImageMetadata(baseMetadata, {
+      nextMetadata = mergeLeadProfileImageMetadata(baseMetadata, {
         profileImageUrl: avatar.profileImageUrl,
         source: avatar.source,
         syncedAt: attemptedAt,
@@ -106,8 +109,7 @@ export async function syncLeadAvatarFromUazapi(input: {
         providerData: avatar.data,
       });
 
-      await updateLeadMetadata(input.client, input.leadId, nextMetadata);
-      return nextMetadata;
+      return completeAvatarSync(input, reservation.data.claim, nextMetadata);
     }
   } catch {
     // Avatar sync must never block webhook ingest or CRM loading.
@@ -119,24 +121,28 @@ export async function syncLeadAvatarFromUazapi(input: {
     profile_image_last_attempt_at: attemptedAt,
   } satisfies JsonRecord;
 
-  await updateLeadMetadata(input.client, input.leadId, attemptedMetadata);
-  return attemptedMetadata;
+  return completeAvatarSync(input, reservation.data.claim, attemptedMetadata);
 }
 
-function shouldAttemptAvatarSync(metadata: JsonRecord) {
-  const lastAttempt = readString(metadata.profile_image_last_attempt_at);
-
-  if (!lastAttempt) {
-    return true;
-  }
-
-  const parsed = new Date(lastAttempt).getTime();
-
-  if (!Number.isFinite(parsed)) {
-    return true;
-  }
-
-  return Date.now() - parsed > 6 * 60 * 60 * 1000;
+export function shouldAttemptLeadAvatarSync(value: unknown, now = Date.now()) {
+  const metadata = readRecord(value) ?? {};
+  const url = readLeadProfileImageUrl(metadata);
+  const recent = (key: string, duration: number) => {
+    const timestamp = Date.parse(readString(metadata[key]) ?? "");
+    return Number.isFinite(timestamp) && timestamp <= now && now - timestamp < duration;
+  };
+  if (recent("profile_image_refresh_started_at", 2 * 60 * 1000)) return false;
+  if (metadata.profile_image_sync_status === "not_found" && recent("profile_image_last_attempt_at", 6 * 60 * 60 * 1000)) return false;
+  if (!url) return true;
+  // Uploaded/static pictures do not expire like WhatsApp's signed CDN links.
+  let whatsappImage = false;
+  try { const host = new URL(url).hostname; whatsappImage = host.endsWith(".whatsapp.net") || host.endsWith(".fbcdn.net"); } catch { /* embedded image */ }
+  if (!whatsappImage) return false;
+  try {
+    const expires = new URL(url).searchParams.get("oe");
+    if (expires && /^[a-f0-9]{8}$/i.test(expires) && parseInt(expires, 16) * 1000 < now + 5 * 60 * 1000) return true;
+  } catch { /* use refresh age */ }
+  return !recent("profile_image_synced_at", 24 * 60 * 60 * 1000);
 }
 
 async function getConnectedAvatarData(credentials: UazapiCredentials, token: string, phoneNumber: string) {
@@ -147,13 +153,6 @@ async function getConnectedAvatarData(credentials: UazapiCredentials, token: str
       body: {
         number: phoneNumber,
         preview: true,
-      },
-    },
-    {
-      source: "contact_avatar",
-      path: "/contact/avatar",
-      body: {
-        number: phoneNumber,
       },
     },
   ];
@@ -196,6 +195,7 @@ async function callUazapi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
+    signal: AbortSignal.timeout(5000),
   });
   const data = await readResponse(response);
 
@@ -220,11 +220,11 @@ async function readResponse(response: Response) {
   }
 }
 
-async function updateLeadMetadata(client: SupabaseClient, leadId: string, metadata: JsonRecord) {
-  await client
-    .from("leads")
-    .update({ metadata })
-    .eq("id", leadId);
+async function completeAvatarSync(input: { client: SupabaseClient; leadId: string; instance: LeadAvatarSyncInstance | null }, claim: string, metadata: JsonRecord) {
+  const result = await input.client.rpc("complete_lead_avatar_sync", {
+    p_lead: input.leadId, p_instance: input.instance!.id, p_claim: claim, p_patch: metadata,
+  });
+  return result.error ? null : readRecord(result.data);
 }
 
 function decryptInstanceToken(instance: LeadAvatarSyncInstance | null) {

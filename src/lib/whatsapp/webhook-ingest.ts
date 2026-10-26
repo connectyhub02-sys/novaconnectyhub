@@ -16,6 +16,7 @@ import {
   mergeLeadProfileImageMetadata,
   readLeadProfileImageUrl,
   syncLeadAvatarFromUazapi,
+  shouldAttemptLeadAvatarSync,
 } from "./lead-avatar-sync";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
 import { incomingCallLeadText, isInsideAiWindow, readIncomingCallOffer, rejectIncomingCall, type IncomingCallOffer } from "./incoming-call";
@@ -300,7 +301,7 @@ export async function ingestUazapiWebhook(input: {
     if (
       lead &&
       message.direction === "inbound" &&
-      !readLeadProfileImageUrl(lead.metadata)
+      shouldAttemptLeadAvatarSync(lead.metadata)
     ) {
       runWebhookSideEffect("lead-avatar-sync", () =>
         syncLeadAvatarFromUazapi({
