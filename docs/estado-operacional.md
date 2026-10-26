@@ -1,5 +1,32 @@
 # Estado operacional da ConnectyHub
 
+## Pendências históricas de cobrança encerradas — 26/10/2026
+
+Publicado `eda1eebf` no slot b às 18h18 BRT; anterior `48e27288` no slot a
+preservado para retorno. Migration 0217 e encerramento pontual aplicados às 18h08,
+após backup privado conferido e ensaio com ROLLBACK. Dois usos sem tarifa de 27/09
+encerrados sem débito retroativo e dois avisos de 14/09 encerrados sem reenvio.
+Histórico e evidência original preservados; travas impedem cobrança posterior
+dos usos e retorno dos avisos à fila. Comparação transacional confirmou que
+pagamentos, contratos, carteiras, livro e tentativas/políticas de recarga não mudaram.
+
+Financeiro agora mostra cliente, data em Brasília e orientação específica para
+cada pendência; encerramentos aparecem em histórico separado, sem fingir entrega
+confirmada ou custo de IA conhecido. RPC de detalhes exclusivo do serviço e
+página restrita a admin. Consulta incompleta não aparece como saúde confirmada.
+46 testes, tipos, ESLint, build de 120 páginas, candidato/HTTPS, 19 assets, APIs
+protegidas, GET assinado Inngest (59 funções) e tela autenticada validados.
+Rotina das 18h10 apresentou oito contadores zerados, nenhuma nova tentativa de
+recarga e nenhum envio de aviso. Quatro encerramentos conferidos no navegador.
+
+Observação independente dos testes: rotina normal registrou às 18h00 a recarga
+previamente autorizada da Vision de R$47/5.000 créditos, tentativa e pagamento
+aprovados, efeitos concluídos e uma única compra de créditos no livro às 18h00:19.
+Nenhuma cobrança ou mensagem foi disparada como teste. Recarga observada não
+certifica Pix Automático, liquidação bancária nem resolve dívidas anteriores.
+VPS com cerca de 8 GiB livres/98% ocupado; nenhuma limpeza realizada.
+[Escopo, verificações e limites](encerramento-pendencias-cobranca-2026-10-26.md).
+
 ## QR Code ampliado automaticamente — 26/10/2026
 
 Implementado no componente compartilhado de conexão dos agentes internos e dos
