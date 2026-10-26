@@ -17,7 +17,7 @@ const fieldHints: Record<ReplacementCardField, string> = {
   postalCode: "Informe os 8 dígitos do CEP.", addressNumber: "Informe o número (até 6 dígitos).",
 };
 
-export function BillingCardReplacement({ subscriptionId, planName, onClose, onSaved }: { subscriptionId: string; planName: string; onClose: () => void; onSaved?: () => void }) {
+export function BillingCardReplacement({ subscriptionId, planName, autoChargeDisabled, onClose, onSaved }: { subscriptionId: string; planName: string; autoChargeDisabled?: boolean; onClose: () => void; onSaved?: () => void }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -138,12 +138,12 @@ export function BillingCardReplacement({ subscriptionId, planName, onClose, onSa
       <Dialog.Content className="flex h-dvh w-full flex-col bg-white text-slate-950 shadow-2xl outline-none md:h-auto md:max-h-[calc(100dvh-2.5rem)] md:max-w-5xl md:rounded-2xl" onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onPointerDownOutside={event => event.preventDefault()}>
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 md:px-6">
           <div><Dialog.Title className="text-lg font-bold">Alterar método de pagamento</Dialog.Title>
-          <Dialog.Description className="mt-1 text-sm leading-5 text-slate-600">Próximas renovações de {planName}. Plano, valor e vencimento mantidos. Sem cobrança agora.</Dialog.Description></div>
+          <Dialog.Description className="mt-1 text-sm leading-5 text-slate-600">Cartão padrão de {planName}. Plano, valor e vencimento mantidos. Sem cobrança agora. {autoChargeDisabled ? "A cobrança automática da mensalidade continuará desativada; recargas já autorizadas passam a usar o novo cartão." : "Será usado nas próximas renovações e recargas já autorizadas."}</Dialog.Description></div>
           <Dialog.Close disabled={busy} aria-label="Fechar modal" className="-mr-2 -mt-1 flex size-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-60"><X size={20} /></Dialog.Close>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:px-6">
         {!done ? <div className="grid gap-2 md:grid-cols-2">
-          <div className="flex items-center gap-3 rounded-xl border border-blue-600 bg-blue-50 px-3 py-2.5 text-sm"><CreditCard size={20} className="shrink-0 text-blue-700" /><div><strong>Cartão de crédito</strong><p className="mt-0.5 text-xs text-slate-600">{snapshot?.lastFour ? `Substituir cartão •••• ${snapshot.lastFour}` : "Substituir o cartão das próximas renovações"}</p></div><span className="ml-auto text-xs font-semibold text-blue-700">Selecionado</span></div>
+          <div className="flex items-center gap-3 rounded-xl border border-blue-600 bg-blue-50 px-3 py-2.5 text-sm"><CreditCard size={20} className="shrink-0 text-blue-700" /><div><strong>Cartão de crédito</strong><p className="mt-0.5 text-xs text-slate-600">{snapshot?.lastFour ? `Substituir cartão •••• ${snapshot.lastFour}` : "Substituir o cartão padrão"}</p></div><span className="ml-auto text-xs font-semibold text-blue-700">Selecionado</span></div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"><button type="button" disabled aria-describedby={`${fieldPrefix}-pix-reason`} className="flex items-center gap-2 text-sm font-semibold text-slate-500"><QrCode size={16} />Pix Automático<span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px]">Indisponível nesta troca</span></button><p id={`${fieldPrefix}-pix-reason`} className="mt-1 text-xs leading-4 text-slate-600">Disponível para novas contratações elegíveis. A troca de plano ativo exige primeiro pagamento; uma jornada sem cobrança depende de confirmação do Asaas.</p></div>
         </div> : null}
         {!snapshot && !message ? <p role="status" className="mt-3">Conferindo assinatura…</p> : null}
@@ -162,7 +162,7 @@ export function BillingCardReplacement({ subscriptionId, planName, onClose, onSa
             ] as const).map(([name, label, type, autoComplete]) => <label key={name} className="text-xs font-semibold">{label}<input className={field} name={name} defaultValue={holderDefaults[name] ?? ""} type={type} inputMode={["cpfCnpj", "phone", "postalCode", "addressNumber"].includes(name) ? "numeric" : name === "email" ? "email" : "text"} autoComplete={autoComplete} maxLength={name === "email" ? 254 : 120} required {...fieldBehavior(name)} />{fieldError(name)}</label>)}</div>
             </section>
             </div>
-            <label className="mt-5 flex items-start gap-2 text-xs leading-5 text-slate-600"><input name="consent" type="checkbox" required className="mt-1 size-4 shrink-0" />Autorizo substituir o cartão das próximas renovações e das recargas automáticas que já autorizei. As condições, limites e datas permanecem iguais.</label>
+            <label className="mt-5 flex items-start gap-2 text-xs leading-5 text-slate-600"><input name="consent" type="checkbox" required className="mt-1 size-4 shrink-0" />{autoChargeDisabled ? "Autorizo substituir o cartão padrão e o das recargas automáticas que já autorizei. A cobrança automática da mensalidade continuará desativada." : "Autorizo substituir o cartão das próximas renovações e das recargas automáticas que já autorizei."} As condições, limites e datas permanecem iguais.</label>
           </fieldset>
         </form> : null}
         {message ? <p role="status" className={Object.values(errors).some(Boolean) ? "sr-only" : "mt-3 rounded-lg bg-slate-50 p-3 text-sm"}>{message}</p> : null}

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readClientIp, validatePublicWriteRequest } from "@/lib/security/public-request-guard";
-import { CardManagementError, changeBillingCard, listBillingCards } from "@/lib/billing/card-management";
+import { CardManagementError, changeBillingCard, listBillingCards, removeSavedBillingCard } from "@/lib/billing/card-management";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=90;
@@ -31,7 +31,11 @@ export async function POST(request:NextRequest){
     const raw=await request.text();if(raw.length>16384)return reply({error:"Dados excedem o limite permitido."},413);
     let body;try{body=JSON.parse(raw);}catch{return reply({error:"Dados inválidos."},400);}
     if(!body||typeof body!=="object"||Array.isArray(body))return reply({error:"Dados inválidos."},400);
+    if(body.action==="remove") {
+      const result=await removeSavedBillingCard(createServiceClient(),w.organization!.id,w.user.id,body);
+      return reply({...result,message:"Cartão removido da lista de cartões salvos. Histórico de pagamentos preservado."});
+    }
     const result=await changeBillingCard(createServiceClient(),w.organization!.id,w.user.id,body,readClientIp(request.headers));
-    return reply({...result,message:"Cartão padrão atualizado. A próxima renovação usará este cartão. Nenhuma cobrança foi realizada agora."});
+    return reply({...result,message:"Cartão padrão atualizado. Recargas já autorizadas no cartão substituído passam a usar este cartão. A configuração da mensalidade foi mantida. Nenhuma cobrança realizada agora."});
   }catch(e){return fail(e);}
 }

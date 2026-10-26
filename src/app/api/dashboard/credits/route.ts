@@ -9,7 +9,7 @@ export async function GET(){try{
  const [packs,policy,cards,wallet,alerts,runs,owner]=await Promise.all([
  loadBillingOrderBumpProductOptions(c),
  c.from("credit_topup_policies").select("enabled,product_id,card_method_id,threshold_credits,agreed_amount_brl,agreed_credits,monthly_cap_brl,authorized_at").eq("organization_id",org).maybeSingle(),
- c.from("billing_asaas_card_vault").select("id,created_at").eq("organization_id",org).eq("status","active"),
+ c.from("billing_asaas_card_vault").select("id,created_at,brand,last_digits,exp_month,exp_year").eq("organization_id",org).eq("status","active"),
  c.from("credit_wallets").select("balance_credits,reserved_credits").eq("organization_id",org).maybeSingle(),
  c.from("wallet_alert_state").select("reference_credits,absolute_low:absolute_low_credits,absolute_critical:absolute_critical_credits").eq("organization_id",org).maybeSingle(),
  c.from("credit_topup_runs").select("id,amount_brl,credits,created_at,billing_card_attempts(state)").eq("organization_id",org).order("created_at",{ascending:false}).limit(30),

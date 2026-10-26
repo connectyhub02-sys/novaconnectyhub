@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mock=vi.hoisted(()=>({workspace:vi.fn(),change:vi.fn(),list:vi.fn()}));
+const mock=vi.hoisted(()=>({workspace:vi.fn(),change:vi.fn(),remove:vi.fn(),list:vi.fn()}));
 vi.mock("server-only",()=>({}));
 vi.mock("@/lib/supabase/profile",()=>({getCurrentWorkspace:mock.workspace}));
 vi.mock("@/lib/supabase/service",()=>({createServiceClient:()=>"service"}));
-vi.mock("@/lib/billing/card-management",()=>({changeBillingCard:mock.change,listBillingCards:mock.list,CardManagementError:class extends Error{constructor(message:string,public status=409){super(message);}}}));
+vi.mock("@/lib/billing/card-management",()=>({changeBillingCard:mock.change,removeSavedBillingCard:mock.remove,listBillingCards:mock.list,CardManagementError:class extends Error{constructor(message:string,public status=409){super(message);}}}));
 import { GET, POST } from "@/app/api/dashboard/billing/payment-methods/route";
 const id="11111111-1111-4111-8111-111111111111";
 const req=(body:unknown,origin="https://www.connectyhub.com.br")=>new NextRequest("https://www.connectyhub.com.br/api/dashboard/billing/payment-methods",{method:"POST",headers:{origin,"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -26,4 +26,10 @@ it("accepts the public origin behind the VPS proxy without trusting forwarded ho
   expect((await POST(request)).status).toBe(200);
   expect(mock.change).toHaveBeenCalledOnce();
  } finally {vi.unstubAllEnvs();}
+});
+
+it("removes a saved card only in the authenticated workspace and does not call card replacement",async()=>{
+ mock.remove.mockResolvedValue({removed:true});
+ const r=await POST(req({action:"remove",organizationId:"other-org",subscriptionId:id,methodId:id}));
+ expect(r.status).toBe(200);expect(mock.remove.mock.calls[0].slice(0,3)).toEqual(["service","session-org","actor"]);expect(mock.change).not.toHaveBeenCalled();
 });

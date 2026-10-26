@@ -117,11 +117,13 @@ type UsageEventRow = {
   created_at: string | null;
 };
 
-type UsageSummaryEventRow = {
-  feature_code: string | null;
-  connecty_charge_credits: number | string | null;
-  occurred_at: string | null;
-  created_at: string | null;
+type UsageTotals = {
+  totalChargeCredits30d: number;
+  todayChargeCredits: number;
+  eventCount30d: number;
+  lastEventAt: string | null;
+  referenceCredits: number | null;
+  features: Array<{ featureCode: string | null; chargeCredits: number; events: number }>;
 };
 
 type BillingCycleRow = {
@@ -154,8 +156,6 @@ export async function GET() {
     const client = createServiceClient();
     const accountAccess = await getOrganizationBillingAccess({ organizationId: organization.id, client });
     const operational = !["paid_expired", "trial_expired", "inactive"].includes(accountAccess.state);
-    const usageSummarySince = new Date();
-    usageSummarySince.setDate(usageSummarySince.getDate() - 30);
     const [
       accountCompletion,
       billingAccess,
@@ -208,15 +208,7 @@ export async function GET() {
         .order("occurred_at", { ascending: false })
         .limit(30)
         .returns<UsageEventRow[]>(),
-      client
-        .from("usage_events")
-        .select("feature_code, connecty_charge_credits, occurred_at, created_at")
-        .eq("organization_id", organization.id)
-        .eq("status", "completed")
-        .gte("occurred_at", usageSummarySince.toISOString())
-        .order("occurred_at", { ascending: false })
-        .limit(1000)
-        .returns<UsageSummaryEventRow[]>(),
+      client.rpc("account_usage_totals", { p_org: organization.id }),
       client
         .from("billing_cycles")
         .select("id, cycle_start, cycle_end, included_credits, used_credits, overage_credits, status, created_at, metadata, billing_plans(plan_code, name)")
@@ -296,7 +288,7 @@ export async function GET() {
         creditTransactions: (creditTransactionsResult.data ?? []).map(mapCreditTransaction),
         usageEvents: (usageEventsResult.data ?? []).map(mapUsageEvent),
         usageSummary: {
-          ...mapUsageSummary(usageSummaryEventsResult.data ?? [], billingAccess),
+          ...mapUsageSummary(usageSummaryEventsResult.data as UsageTotals, billingAccess, toNumber(walletResult.data?.reserved_credits)),
           estimatedReplies: (await estimateReplies(client, organization.id, billingAccess.balanceCredits)).estimatedReplies,
         },
         cycles: (cyclesResult.data ?? []).map(mapCycle),
@@ -541,55 +533,26 @@ function mapUsageEvent(row: UsageEventRow) {
   };
 }
 
-function mapUsageSummary(rows: UsageSummaryEventRow[], billingAccess: Awaited<ReturnType<typeof getOrganizationBillingAccess>>) {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const categoryMap = new Map<string, { category: string; chargeCredits: number; events: number }>();
-  let totalChargeCredits = 0;
-  let todayChargeCredits = 0;
-  let eventCount = 0;
-  let lastEventAt: string | null = null;
-  let lastEventTime = 0;
-
-  for (const row of rows) {
-    const chargeCredits = toNumber(row.connecty_charge_credits);
-    const occurredAt = row.occurred_at ?? row.created_at;
-    const occurredTime = occurredAt ? new Date(occurredAt).getTime() : 0;
-    const category = usagePublicCategory(row.feature_code);
-    const current = categoryMap.get(category) ?? { category, chargeCredits: 0, events: 0 };
-
-    current.chargeCredits += chargeCredits;
-    current.events += 1;
-    categoryMap.set(category, current);
-    totalChargeCredits += chargeCredits;
-    eventCount += 1;
-
-    if (Number.isFinite(occurredTime) && occurredTime >= todayStart.getTime()) {
-      todayChargeCredits += chargeCredits;
-    }
-
-    if (Number.isFinite(occurredTime) && occurredTime > lastEventTime) {
-      lastEventTime = occurredTime;
-      lastEventAt = occurredAt;
-    }
+function mapUsageSummary(totals: UsageTotals, billingAccess: Awaited<ReturnType<typeof getOrganizationBillingAccess>>, reservedCredits: number) {
+  const categories = new Map<string, { category: string; chargeCredits: number; events: number }>();
+  for (const feature of totals.features) {
+    const category = usagePublicCategory(feature.featureCode);
+    const item = categories.get(category) ?? { category, chargeCredits: 0, events: 0 };
+    item.chargeCredits += Number(feature.chargeCredits);
+    item.events += Number(feature.events);
+    categories.set(category, item);
   }
-
   return {
     balanceCredits: billingAccess.balanceCredits,
     includedCredits: billingAccess.includedCredits,
     usedCredits: billingAccess.usedCredits,
-    remainingCredits: billingAccess.balanceCredits,
-    totalChargeCredits30d: roundCredits(totalChargeCredits),
-    todayChargeCredits: roundCredits(todayChargeCredits),
-    eventCount30d: eventCount,
-    lastEventAt,
-    byCategory: Array.from(categoryMap.values())
-      .map((item) => ({
-        ...item,
-        chargeCredits: roundCredits(item.chargeCredits),
-      }))
-      .sort((left, right) => right.chargeCredits - left.chargeCredits)
-      .slice(0, 6),
+    remainingCredits: Math.max(0, billingAccess.balanceCredits - reservedCredits),
+    referenceCredits: Number(totals.referenceCredits ?? billingAccess.includedCredits),
+    totalChargeCredits30d: Number(totals.totalChargeCredits30d),
+    todayChargeCredits: Number(totals.todayChargeCredits),
+    eventCount30d: Number(totals.eventCount30d),
+    lastEventAt: totals.lastEventAt,
+    byCategory: [...categories.values()].sort((a, b) => b.chargeCredits - a.chargeCredits).slice(0, 6),
   };
 }
 
@@ -694,9 +657,7 @@ function toNumber(value: number | string | null | undefined) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function roundCredits(value: number) {
-  return Math.round((Number.isFinite(value) ? value : 0) * 1_000_000) / 1_000_000;
-}
+
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};

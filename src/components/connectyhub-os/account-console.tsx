@@ -1,6 +1,8 @@
 "use client";
 import { BillingAddressEditor } from "./billing-address-editor";
 import type { AccountPaymentNotice } from "@/lib/billing/account-payment-notice";
+import { CreditsConsole } from "./credits-console";
+import { accountCreditBalance } from "@/lib/billing/account-credit-summary";
 import { BillingPaymentMethods } from "./billing-payment-methods";
 import { CreditExplainer } from "./credit-explainer";
 import { NotificationSenderSettings } from "./notification-sender-settings";
@@ -166,6 +168,7 @@ type AccountData = {
   }>;
   usageSummary: {
     balanceCredits: number;
+    referenceCredits?: number;
     /** Replies the balance covers at the recent average; absent when unknown. */
     estimatedReplies?: number | null;
     includedCredits: number;
@@ -422,6 +425,8 @@ export function AccountConsole() {
       </div>
 
       <BillingPaymentMethods subscriptions={account.subscriptions} />
+
+      <CreditsConsole embedded />
 
       <NotificationSenderSettings />
 
@@ -869,6 +874,10 @@ function AccountDetailsCard({
   );
 }
 
+function formatSummaryCredits(value: number) {
+  return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
 function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData; pendingCheckoutHref: string | null }) {
   const access = account.billingAccess;
   const usageSummary = account.usageSummary;
@@ -876,7 +885,7 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
   const planName = activeSubscription?.planName ?? formatPlanName(account.organization.planCode);
   const monthlyPrice = activeSubscription?.monthlyPriceBrl ?? 0;
   const nextBillingAt = activeSubscription?.nextBillingAt ?? null;
-  const usagePercent = usagePercentage(access.usedCredits, access.includedCredits);
+  const balance = accountCreditBalance(account.wallet.balanceCredits, account.wallet.reservedCredits, usageSummary.referenceCredits ?? access.includedCredits);
   const trialText = trialSummary(access);
   const hasActiveSubscription = Boolean(activeSubscription && isActiveSubscription(activeSubscription.status));
   const primaryHref = pendingCheckoutHref ?? account.actions.plansHref;
@@ -895,7 +904,7 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-blue-50 text-blue-600">
               <WalletCards className="h-4 w-4" />
             </span>
-            <h2 className="truncate text-base font-semibold text-slate-950">Plano e utilização</h2>
+            <h2 className="truncate text-base font-semibold text-slate-950">Plano e saldo</h2>
           </div>
           <StatusBadge status={account.organization.status} />
         </div>
@@ -903,42 +912,35 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-center">
           <div className="min-w-0">
             <h3 className="truncate text-2xl font-semibold text-slate-950">{planName}</h3>
-            <p className="mt-1 text-sm text-slate-600">Franquia do ciclo: {formatCredits(access.includedCredits)} créditos</p>
+            <p className="mt-1 text-sm text-slate-600">Franquia contratada: {formatSummaryCredits(access.includedCredits)} créditos</p>
             {trialText ? (
               <p className="mt-4 inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                 Teste gratis: {trialText}
               </p>
             ) : null}
           </div>
-          <UsageRing value={usagePercent} />
+          {balance.remainingPercent !== null ? <UsageRing value={balance.remainingPercent} /> : null}
         </div>
 
-        <div>
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-slate-600">
-              <span className="font-semibold text-blue-700">{formatCredits(access.usedCredits)}</span> de {formatCredits(access.includedCredits)} créditos utilizados
-            </span>
-            <span className="font-semibold text-slate-800">{Math.round(clamp(usagePercent, 0, 100))}%</span>
-          </div>
-          <ProgressBar value={usagePercent} />
+        <div className={`rounded-lg p-3 ${balance.low ? "bg-amber-50 text-amber-950" : "bg-blue-50 text-blue-950"}`}>
+          <p className="text-sm font-semibold">{balance.available <= 0 ? "Sem créditos disponíveis" : balance.low ? "Saldo baixo — confira sua recarga" : "Saldo disponível para uso"}</p>
+          <p className="mt-1 text-2xl font-bold">{formatSummaryCredits(balance.available)} <span className="text-sm font-normal">créditos</span></p>
+          {balance.reference > 0 ? <p className="mt-2 text-xs leading-5">Saldo restante sobre a referência de {formatSummaryCredits(balance.reference)} créditos, atualizada após recargas. O histórico de ciclos fica em Faturamento e consumo.</p> : null}
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-3">
-          <PlanMetric label="Creditos disponiveis" value={formatCredits(account.wallet.balanceCredits)} />
-          <PlanMetric label="Usados no ciclo" value={formatCredits(access.usedCredits)} />
-          <PlanMetric label="Gasto hoje" value={formatCredits(usageSummary.todayChargeCredits)} />
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3">
-          <PlanMetric label="Ultimos 30 dias" value={formatCredits(usageSummary.totalChargeCredits30d)} />
-          <PlanMetric label="Eventos 30 dias" value={formatCredits(usageSummary.eventCount30d)} />
+        <div className="grid grid-cols-2 gap-2">
+          <PlanMetric label="Saldo total" value={formatSummaryCredits(account.wallet.balanceCredits)} />
+          <PlanMetric label="Reservados em chamadas" value={formatSummaryCredits(account.wallet.reservedCredits)} />
+          <PlanMetric label="Consumo hoje" value={formatSummaryCredits(usageSummary.todayChargeCredits)} />
+          <PlanMetric label="Consumo nos últimos 30 dias" value={formatSummaryCredits(usageSummary.totalChargeCredits30d)} />
+          <PlanMetric label="Eventos nos últimos 30 dias" value={formatSummaryCredits(usageSummary.eventCount30d)} />
           <PlanMetric label="Valor mensal" value={formatCurrency(monthlyPrice)} />
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-slate-500">Ultimo consumo / proxima cobranca</p>
+              <p className="text-sm text-slate-500">Último consumo / vencimento do plano</p>
               <p className="mt-1 font-semibold text-slate-950">
                 {usageSummary.lastEventAt ? formatDateTime(usageSummary.lastEventAt) : "Sem consumo recente"} / {nextBillingAt ? formatDate(nextBillingAt) : "Não agendada"}
               </p>
@@ -951,11 +953,7 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
           <ActionLink href={primaryHref} icon={pendingCheckoutHref ? ExternalLink : CreditCard} variant={primaryTone}>
             {primaryLabel}
           </ActionLink>
-          {pendingCheckoutHref ? (
-            <ActionLink href={account.actions.plansHref} variant="secondary">
-              Ver planos
-            </ActionLink>
-          ) : null}
+          <ActionLink href="#creditos-recargas" variant="secondary">Créditos e recargas</ActionLink>
         </div>
       </div>
     </Surface>
@@ -1466,7 +1464,7 @@ function CreditsTab({
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <PlanMetric label="Saldo agora" value={formatCredits(usageSummary.balanceCredits)} />
         {typeof usageSummary.estimatedReplies === "number" && <PlanMetric label="Rende cerca de" value={`${usageSummary.estimatedReplies.toLocaleString("pt-BR")} respostas`} />}
-        <PlanMetric label="Usado no ciclo" value={formatCredits(usageSummary.usedCredits)} />
+        <PlanMetric label="Saldo reservado" value={formatCredits(Math.max(0, usageSummary.balanceCredits - usageSummary.remainingCredits))} />
         <PlanMetric label="Gasto hoje" value={formatCredits(usageSummary.todayChargeCredits)} />
         <PlanMetric label="Gasto 30 dias" value={formatCredits(usageSummary.totalChargeCredits30d)} />
       </div>
@@ -1771,12 +1769,12 @@ function UsageRing({ value }: { value: number }) {
     <div
       className="grid h-28 w-28 place-items-center rounded-full"
       style={{ background: `conic-gradient(#2563eb ${percent * 3.6}deg, #dbeafe 0deg)` }}
-      aria-label={`${percent}% utilizado`}
+      aria-label={`${percent}% do saldo de referência disponível`}
     >
       <div className="grid h-[84px] w-[84px] place-items-center rounded-full bg-white text-center shadow-inner">
         <div>
           <p className="text-2xl font-semibold text-slate-950">{percent}%</p>
-          <p className="text-xs text-slate-500">utilizado</p>
+          <p className="text-xs text-slate-500">disponível</p>
         </div>
       </div>
     </div>

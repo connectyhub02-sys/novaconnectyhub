@@ -27,6 +27,21 @@ export async function listBillingCards(client: SupabaseClient, org: string, id: 
   if(cards.error) throw new CardManagementError("Não foi possível carregar os cartões. Solicite ao suporte a verificação do cofre de pagamentos.",503);
   return { subscriptionId:id, periodEnd:subscription.current_period_end, nextBillingAt:subscription.next_billing_at, blocker:cardBlocker(subscription), cards:cards.data ?? [] };
 }
+export async function removeSavedBillingCard(client: SupabaseClient, org: string, actor: string, body: Record<string, unknown>) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (typeof body.subscriptionId !== "string" || !uuid.test(body.subscriptionId) || typeof body.methodId !== "string" || !uuid.test(body.methodId)) {
+    throw new CardManagementError("Selecione um cartão salvo nesta conta.", 400);
+  }
+  const result = await client.rpc("remove_saved_billing_card", { p_org: org, p_actor: actor, p_subscription: body.subscriptionId, p_method: body.methodId });
+  if (result.error) {
+    if (result.error.message.includes("CARD_IN_USE")) throw new CardManagementError("Este cartão está em uso. Escolha outro cartão padrão e confira a recarga automática antes de removê-lo.");
+    if (result.error.message.includes("CARD_PAYMENT_BUSY")) throw new CardManagementError("Há um pagamento em conferência. Aguarde antes de remover o cartão.");
+    if (result.error.message.includes("CARD_NOT_FOUND")) throw new CardManagementError("Cartão não encontrado nesta conta.", 404);
+    if (result.error.message.includes("CARD_FORBIDDEN")) throw new CardManagementError("Você não pode gerenciar os cartões desta conta.", 403);
+    throw new CardManagementError("Não foi possível remover o cartão. Atualize a lista e tente novamente.", 503);
+  }
+  return result.data;
+}
 export async function changeBillingCard(client: SupabaseClient, org: string, actor: string, body: Record<string,unknown>, remoteIp: string) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if(typeof body.subscriptionId!=="string" || !uuid.test(body.subscriptionId) || typeof body.requestId!=="string" || !uuid.test(body.requestId) || (body.expectedDefault!==null && (typeof body.expectedDefault!=="string" || !uuid.test(body.expectedDefault))) || typeof body.expectedEnd!=="string" || !Number.isFinite(Date.parse(body.expectedEnd))) throw new CardManagementError("Atualize a página e confira a assinatura.",400);
