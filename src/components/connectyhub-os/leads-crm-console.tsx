@@ -2883,7 +2883,7 @@ function formatThreadQueueLabel(thread: AttendanceThread) {
 
 function hasUnreadThreadSignal(thread: AttendanceThread) {
   const latest = thread.latestMessage;
-  return thread.lead.status === "new" || latest?.author === "lead" || latest?.direction === "inbound";
+  return latest?.direction === "inbound" || (latest?.author === "lead" && latest.direction !== "outbound");
 }
 
 function getThreadHumanIntervention(
@@ -3912,18 +3912,19 @@ function LeadIdentity({ lead }: { lead: ClientLeadRecord }) {
 
 function LeadAvatar({ lead, size = "md" }: { lead: ClientLeadRecord; size?: "md" | "lg" }) {
   const dimensions = size === "lg" ? "h-12 w-12" : "h-10 w-10";
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  if (lead.avatarUrl) {
+  if (lead.avatarUrl && lead.avatarUrl !== failedUrl) {
     return (
       <span className={cn("relative block shrink-0 overflow-hidden rounded-xl border border-emerald-300 bg-emerald-50", dimensions)}>
-        <Image alt={`Foto do lead ${lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.avatarUrl} unoptimized />
+        <Image alt={`Foto do lead ${lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.avatarUrl} onError={() => setFailedUrl(lead.avatarUrl)} unoptimized />
       </span>
     );
   }
 
   return (
     <span className={cn("flex shrink-0 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 font-mono font-bold text-emerald-700", dimensions)}>
-      {lead.name.slice(0, 1).toUpperCase()}
+      {getInitials(lead.name)}
     </span>
   );
 }
@@ -3937,6 +3938,7 @@ function AgentAvatar({
   name: string;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const dimensions = {
     lg: "h-12 w-12",
     md: "h-10 w-10",
@@ -3956,10 +3958,10 @@ function AgentAvatar({
     xs: "20px",
   }[size];
 
-  if (avatarUrl) {
+  if (avatarUrl && avatarUrl !== failedUrl) {
     return (
       <span className={cn("relative block shrink-0 overflow-hidden rounded-full border border-[#25D366]/55 bg-[#effff4]", dimensions)}>
-        <Image alt={`Foto do agente ${name}`} className="object-cover" fill sizes={imageSize} src={avatarUrl} unoptimized />
+        <Image alt={`Foto do agente ${name}`} className="object-cover" fill sizes={imageSize} src={avatarUrl} onError={() => setFailedUrl(avatarUrl)} unoptimized />
       </span>
     );
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
-import { classifyWhatsappLeadDisplayName, resolveLeadDisplayName, resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
+import { classifyWhatsappLeadDisplayName, resolveAttendanceLeadName, resolveLeadDisplayName, resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
 import type * as Media from "@/lib/whatsapp/message-media";
 
 const media = serverModuleHarness<typeof Media>("src/lib/whatsapp/message-media.ts");
@@ -70,6 +70,16 @@ describe("delivered WhatsApp media", () => {
 });
 
 describe("lead identities", () => {
+  it("uses a verified account contact for unnamed notice recipients before a provider nickname", () => {
+    expect(resolveAttendanceLeadName({ displayName: null, metadata: {whatsapp_display_name:"Vision Group"}, accountContactName:"André Sampaio" })).toBe("André Sampaio");
+    expect(resolveAttendanceLeadName({displayName:"WhatsApp 2993",accountContactName:"André Sampaio"})).toBe("André Sampaio");
+  });
+  it("preserves saved CRM names, including business names, without turning them into personal billing identity", () => {
+    expect(resolveAttendanceLeadName({displayName:"Nome Cadastrado",accountContactName:"Outro Nome"})).toBe("Nome Cadastrado");
+    expect(resolveAttendanceLeadName({displayName:"Loja Exemplo",accountContactName:"Outro Nome"})).toBe("Loja Exemplo");
+    expect(resolveLeadPersonalName({displayName:"Loja Exemplo"})).toBeNull();
+    expect(resolveAttendanceLeadName({displayName:null})).toBeNull();
+  });
   it.each(["Qual o valor", "quanto custa", "Pode gerar o Pix", "sim pode aguardando", "Boa tarde", "quero comprar", "me manda o preço", "Você tem estoque?"])("rejects conversation fragment %s", (name) => {
     expect(classifyWhatsappLeadDisplayName(name)).toBe("unknown");
     expect(resolveLeadPersonalName({ displayName: name, metadata: { person_name: name, lead_memory: { personName: name } } })).toBeNull();

@@ -14,7 +14,7 @@ import {
   resolveConversationMessageMedia,
   type WhatsappMessageMediaKind,
 } from "@/lib/whatsapp/message-media";
-import { resolveLeadDisplayName } from "@/lib/whatsapp/lead-names";
+import { resolveAttendanceLeadName } from "@/lib/whatsapp/lead-names";
 import { platformWhatsappOrganizationSlug, type ConversationPanelScope } from "@/lib/whatsapp/conversation-panel-scope";
 import { listClientCompanies, type ClientCompany } from "./companies";
 import { historyBeforeFilter, type AttendanceHistoryCursor } from "./attendance-history-cursor";
@@ -825,6 +825,17 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   }
 
   const companyById = new Map(input.companies.map((company) => [company.id, company]));
+  const accountContactNames = new Map<string, string>();
+  const platformLeadIds = leadRows.filter(lead => lead.channel === "whatsapp" && companyById.get(lead.organization_id)?.slug === platformWhatsappOrganizationSlug).map(lead => lead.id);
+  if (platformLeadIds.length) {
+    try {
+      const result = await input.client.rpc("platform_notice_contact_names", { p_leads: platformLeadIds });
+      if (result.error) throw result.error;
+      for (const contact of result.data ?? []) accountContactNames.set(contact.lead_id, contact.contact_name);
+    } catch (error) {
+      warnings.push(toLoadWarning("nomes dos contatos dos avisos", error));
+    }
+  }
   const agentByOrgId = new Map<string, AgentRow>();
   const agentById = new Map(agentRows.map((agent) => [agent.id, agent]));
   let syncedAvatarMetadata = new Map<string, JsonRecord>();
@@ -863,6 +874,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
     return mapLeadRecord({
       lead,
+      accountContactName: accountContactNames.get(lead.id),
       company,
       agent,
       conversations,
@@ -1259,6 +1271,7 @@ async function syncMissingLeadAvatarsForCrm(input: {
 
 function mapLeadRecord(input: {
   lead: LeadRow;
+  accountContactName?: string;
   company?: ClientCompany;
   agent: AgentRow | null;
   conversations: ConversationRow[];
@@ -1275,9 +1288,10 @@ function mapLeadRecord(input: {
     ?? readLeadProfileImageUrl(input.conversations.map((conversation) => conversation.metadata));
   const formName = input.lead.channel === "meta_lead_ads" && input.lead.source === "meta_lead_ads"
     ? readString(input.lead.display_name) : null;
-  const name = formName ?? resolveLeadDisplayName({
+  const name = formName ?? resolveAttendanceLeadName({
     displayName: input.lead.display_name,
     metadata,
+    accountContactName: input.accountContactName,
   }) ?? fallbackLeadName(input.lead.phone_number);
   const email = readString(metadata.email) ?? readString(metadata.customer_email) ?? readString(metadata.lead_email);
   const source = readString(input.lead.source) ?? readString(metadata.source) ?? input.lead.channel ?? "whatsapp";

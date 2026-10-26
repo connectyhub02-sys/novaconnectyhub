@@ -24,6 +24,8 @@ export function classifyWhatsappLeadDisplayName(value: unknown): WhatsappLeadNam
     return "unknown";
   }
 
+  if (/^(?:whatsapp\s*\d+|lead sem nome|contato sem nome)$/i.test(name)) return "unknown";
+
   if (/^\+?\d[\d\s().-]{6,}$/.test(name) || /[@:/\\]/.test(name)) {
     return "unknown";
   }
@@ -159,6 +161,18 @@ export function resolveLeadDisplayName(input: LeadNameInput) {
     if (classifyWhatsappLeadDisplayName(candidate) !== "unknown") return normalizeLeadNameCandidate(candidate);
   }
   return null;
+}
+
+export function resolveAttendanceLeadName(input: LeadNameInput & { accountContactName?: string | null }) {
+  // Explicit CRM identity wins. Verified account contact is a fallback before provider nicknames.
+  const saved = resolveLeadDisplayName({ displayName: input.displayName, metadata: {
+    ...input.metadata, whatsapp_display_name: null, last_provider_display_name: null,
+  } });
+  // A saved business label is valid in the CRM; it is not a personal billing identity.
+  const business = classifyWhatsappLeadDisplayName(input.displayName) === "business"
+    && normalizeLeadNameCandidate(input.metadata?.lead_name_needs_confirmation) !== normalizeLeadNameCandidate(input.displayName)
+    ? normalizeLeadNameCandidate(input.displayName) : null;
+  return saved ?? business ?? (normalizeLeadNameCandidate(input.accountContactName) || null) ?? resolveLeadDisplayName(input);
 }
 
 export function resolveNonPersonalWhatsappDisplayName(input: LeadNameInput) {
