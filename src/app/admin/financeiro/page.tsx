@@ -42,7 +42,8 @@ export default async function AdminFinanceiroPage({searchParams}:{searchParams:P
       {!reliability ? <p role="alert">Não foi possível conferir as pendências financeiras. Atualize a página.</p> : issues.length ? <>
         <p role="alert" className="mt-2 text-amber-800">Há pendências que precisam de atenção. Confira os avisos, o remetente da plataforma e as operações abaixo.</p>
         <ul className="mt-3 list-inside list-disc text-sm">{issues.map(issue => <li key={issue.key}>{issue.label}: <strong>{issue.count}</strong></li>)}</ul>
-        <p className="mt-3 text-sm">Reconecte o WhatsApp financeiro em Agentes da plataforma. Avisos aguardando conexão serão retomados se ainda forem válidos. Entregas incertas exigem conferência antes de reenviar.</p>
+        {reliability.blockedNotices > 0 ? <p className="mt-3 text-sm">Confira a ativação dos avisos e a conexão do WhatsApp financeiro em WhatsApp Interno. Avisos aguardando conexão serão retomados se ainda forem válidos.</p> : null}
+        {reliability.uncertainNotices > 0 ? <p className="mt-3 text-sm">As entregas incertas permanecem retidas para evitar duplicidade. Confira o resultado no provedor antes de reenviar.</p> : null}
       </> : <p className="mt-2 text-emerald-800">Nenhuma pendência detectada nesta conferência. A aprovação das próximas cobranças depende do banco.</p>}
     </section>
     <BillingCenter

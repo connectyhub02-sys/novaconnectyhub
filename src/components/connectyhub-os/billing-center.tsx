@@ -81,7 +81,7 @@ export function BillingCenter({
             style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.22)" }}
           >
             <p className="font-semibold text-amber-700">
-              O painel financeiro ja existe, mas o Supabase ainda precisa receber a migration de billing.
+              {summary.schemaReady ? "Há pendências de tarifas ou dados para conferir. Veja os detalhes abaixo." : "Não foi possível carregar todos os dados financeiros. Confira os detalhes abaixo para identificar a pendência."}
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {summary.warnings.slice(0, 3).map((warning) => (
