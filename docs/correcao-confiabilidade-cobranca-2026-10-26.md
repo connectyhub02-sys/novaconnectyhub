@@ -20,7 +20,15 @@ Titular autorizou corrigir avisos, Pix Automático e recargas, testar sem cobran
 
 ## Publicação e limites
 
-Publicação e verificação após ativação serão registradas ao concluir o release. Migrações 0213–0216 exigidas antes de ativar a aplicação.
+Migrações 0213–0216 aplicadas com transação e registro, após backup privado de schema e tabelas financeiras na VPS e cópia local com SHA-256 idêntico. Verificação interna da transação confirmou preservação de pagamentos, tentativas, assinaturas, carteiras e condições de recarga.
+
+Aplicação funcional d2d2651c publicada no slot a às 17h22 BRT. Health, home/login, 19 assets, redirecionamento de dashboard sem sessão, APIs financeiras 401 e GET assinado Inngest com 59 funções passaram no candidato e no domínio público. Registro do mesmo app atualizado por PUT, sem publicar evento financeiro. Revisão final b4775d7b publicada no slot b às 17h34 BRT, com nova validação no candidato, no domínio público e no navegador autenticado. Slot a (d2d2651c) preservado para retorno. O Financeiro só pede reconexão quando há aviso bloqueado e distingue pendência de tarifa de falha de carregamento.
+
+A agenda normal de 17h20 retomou quatro avisos com ID de mensagem persistido (saldo crítico e recarga autorizada da Vision, dois lembretes válidos) e descartou três desatualizados. Aceitação pelo provedor não comprova leitura humana. Bloqueados e esgotados: zero; dois avisos antigos incertos continuam retidos, sem reenvio.
+
+Às 17h25: rotina geral conferiu 12 contratos, sem falha e sem tentativa de cartão; reconciliação Pix conferiu o mandato existente, sem pendência. A nova rotina independente conferiu a política de recarga (last_checked_at atualizado, last_error_code nulo), sem cobrança, e terminou Failed intencionalmente com a indicação dos dois avisos incertos. Essa falha é o alerta operacional esperado, não uma recusa de pagamento ou uma segunda execução do débito. Total de tentativas de cartão segue quatro, nenhuma criada desde o início da correção; zero execuções de recarga.
+
+O Admin Financeiro autenticado foi aberto e confirmou o quadro de saúde com somente as duas entregas incertas. Conferência final às 17h34: nenhum novo débito/tentativa, política de recarga conferida novamente às 17h30 sem erro e Eliane connected com credencial. Também identificado aviso anterior de duas operações sem tarifa (whatsapp_traffic_routine_ai / gemini-3.6-flash); precificação e eventual conciliação desse consumo permanecem pendentes, sem inventar tarifa ou debitar retroativamente.
 
 Ainda não existe prova de liquidação de recarga automática ou renovação via Pix Automático real; gerar uma cobrança para obtê-la violaria a restrição dos testes. Betel permanece com tentativa anterior recusada pelo banco; correção técnica não equivale a pagamento. Pix diretos sem referência local exigem conciliação comercial. Entregas incertas exigem conferência antes de eventual reenvio.
 

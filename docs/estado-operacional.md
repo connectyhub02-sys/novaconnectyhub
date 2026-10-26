@@ -2,17 +2,29 @@
 
 ## Correções da auditoria de cobrança — 26/10/2026
 
-Implementadas nesta revisão, aguardando publicação: avisos bloqueados sem consumo
-indevido de tentativas, descarte de lembretes antigos, Pix inicial independente da
-ativação recorrente, origem canônica, recargas por saldo disponível e monitor
-financeiro no admin/Inngest. Migrações 0213–0216 ensaiadas com ROLLBACK e preservação
-do estado financeiro. Testes focalizados: 127 aprovados; tipos sem erros. Suíte
-completa: 4.491 aprovados e 15 falhas anteriores reproduzidas na revisão base.
-Eliane reconectada no painel e credencial confirmada em produção às 17h08 BRT.
-Nenhuma cobrança ou mensagem de teste. Homologação financeira real permanece
-pendente; Betel recusada pelo banco, dois avisos incertos e Pix sem vínculo comercial
-exigem tratamento específico. [Detalhes e evidências](correcao-confiabilidade-cobranca-2026-10-26.md).
+Publicado código final b4775d7b no slot b às 17h34 BRT, migrations 0213–0216
+aplicadas após backup privado e ensaio com ROLLBACK. Aplicação, APIs sem sessão,
+assets, navegador autenticado e GET assinado Inngest com 59 funções validados;
+mesmo app ressincronizado. Slot a (d2d2651c) preservado para retorno. Textos do
+Financeiro distinguem entrega incerta, remetente bloqueado e pendência de tarifa.
 
+Avisos bloqueados não consomem tentativas; claims descartam lembretes antigos.
+Pix inicial recebido libera o ciclo independentemente da autorização recorrente;
+origem canônica corrigida. Recargas usam saldo disponível, respeitam teto/consentimento
+e têm job independente, com monitor de pendências no admin e na fila.
+
+Eliane reconectada e credencial confirmada às 17h08. Agenda de 17h20 retomou quatro
+avisos, aceitos pelo provedor, e descartou três desatualizados. Nenhum bloqueado ou
+esgotado restante; duas entregas antigas incertas retidas. Às 17h25, ciclo de 12
+contratos sem falhas, Pix conferido sem pendência e recarga conferida sem erro ou
+cobrança. Monitor encerra Failed explicitamente pelos dois avisos incertos.
+
+Testes focalizados: 127 aprovados; tipos/build aprovados. Suíte completa: 4.491
+aprovados e 15 falhas anteriores reproduzidas em checkout da base. Nenhuma cobrança
+ou mensagem de teste. Total de tentativas de cartão permaneceu quatro; zero recargas.
+Homologação financeira real pendente; Betel recusada pelo banco, avisos incertos,
+Pix diretos sem vínculo e duas operações sem tarifa exigem tratamento específico.
+[Detalhes e evidências](correcao-confiabilidade-cobranca-2026-10-26.md).
 
 ## Auditoria de cobrança — 26/10/2026
 
