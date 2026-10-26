@@ -1,5 +1,15 @@
 # Estado operacional da ConnectyHub
 
+## QR Code ampliado automaticamente — 26/10/2026
+
+Implementado no componente compartilhado de conexão dos agentes internos e dos
+clientes: QR recebido pela geração, reset ou consulta de status abre a janela
+ampliada automaticamente. Fechamento manual é respeitado nas atualizações da mesma
+tentativa; nova geração pode abrir novamente. Conexão concluída, tentativa encerrada
+ou modo por telefone escondem o QR. Doze testes existentes passaram e ESLint sem
+erros. Publicação e conferência visual pendentes. Nenhuma conexão real foi resetada
+para testar a interface.
+
 ## Correções da auditoria de cobrança — 26/10/2026
 
 Publicado código final b4775d7b no slot b às 17h34 BRT, migrations 0213–0216

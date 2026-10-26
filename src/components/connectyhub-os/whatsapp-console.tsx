@@ -5452,6 +5452,7 @@ function CompactConnectionCard({
   onReset: () => void;
 }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  const autoOpenedQrAttemptRef = useRef<string | null>(null);
   const [passkeyModalOpen, setPasskeyModalOpen] = useState(false);
   const [migrationModalOpen, setMigrationModalOpen] = useState(false);
   const [pairCodeCopied, setPairCodeCopied] = useState(false);
@@ -5498,17 +5499,24 @@ function CompactConnectionCard({
   };
 
   useEffect(() => {
-    if (!visibleQrCode || phoneModeSelected || connectionAttemptFinished) {
-      let cancelled = false;
-      queueMicrotask(() => {
-        if (!cancelled) setQrModalOpen(false);
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [connectionAttemptFinished, phoneModeSelected, visibleQrCode]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!visibleQrCode) {
+        autoOpenedQrAttemptRef.current = null;
+        setQrModalOpen(false);
+        return;
+      }
+      const attemptKey = `${instance?.id ?? "new"}:${latestConnectionAttempt?.id ?? "pending"}`;
+      // Open when a QR arrives, including delayed polling responses. Refreshing
+      // the same attempt must not reopen a dialog the user deliberately closed.
+      if (autoOpenedQrAttemptRef.current !== attemptKey) {
+        autoOpenedQrAttemptRef.current = attemptKey;
+        setQrModalOpen(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [instance?.id, latestConnectionAttempt?.id, visibleQrCode]);
 
   useEffect(() => {
     if (!passkeyBlockedAttempt) {
@@ -5613,7 +5621,7 @@ function CompactConnectionCard({
               <QrCode className="h-6 w-6" />
             </div>
             <p className="mt-2 text-[11px] leading-4 text-emerald-700">
-              QR Code gerado — clique para exibir
+              QR Code pronto — clique para ampliar novamente
             </p>
           </button>
         ) : profileImageUrl ? (
