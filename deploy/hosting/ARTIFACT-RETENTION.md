@@ -30,6 +30,13 @@ Criar /var/lib/connectyhub-artifact-retention em modo 700. O timer executa a cad
 seis horas (02h15, 08h15, 14h15 e 20h15 de Brasília, com atraso aleatório até dez
 minutos). O script usa os locks de deploy dos dois projetos e lock próprio.
 
+O serviço usa DOCKER_CONFIG próprio sob seu diretório de estado, mantendo
+ProtectHome ativo. Copiar apenas a definição local do builder connectyhub-build
+para docker/buildx/instances/connectyhub-build, sem config.json, credenciais ou
+contextos de registries. Conferir endpoint unix:///var/run/docker.sock e driver
+docker-container antes da instalação. Esse arquivo aponta para o builder já
+existente: não cria outro daemon nem altera sua configuração.
+
 O publicador Vision deve adquirir /opt/vision/app/release.lock em volta de main;
 o publicador ConnectyHub já usa /opt/connectyhub/app/release.lock. A aplicação
 continua em execução enquanto publicações concorrentes aguardam a manutenção.
@@ -41,9 +48,11 @@ em /opt/connectyhub/monitoring/public/artifact-retention.json. Falha não aparec
 como conclusão. Estatística de bytes é diferença observada do disco, afetada pela
 atividade de outros serviços; não equivale à soma lógica de arquivos apagados.
 
-A medição de storage reconhece releases de aplicação no inventário revisado apenas
-para contar armazenamento. Não modifica broker.inventory nem as regras destrutivas
-de hospedagem. Containers desconhecidos ou montagens externas continuam recusados.
+A medição de storage reconhece versões e auxiliares vision-* que montam somente
+pastas da raiz Vision já revisada, sem volumes extras ou vínculo a outro projeto.
+Essa atribuição serve apenas para contar armazenamento. Não modifica
+broker.inventory nem as regras destrutivas de hospedagem. Nomes fora do escopo,
+montagens externas e volumes não revisados continuam recusados.
 
 A retenção limita artefatos; não garante capacidade ilimitada. Monitor geral alerta
 em 80% e 90%. Se dados úteis/carga crescerem além da folga, planejar capacidade e

@@ -82,17 +82,14 @@ def measurement_inventory(project, all_containers=None):
     cfg = broker.config(project)
     extras = []
     if project == 'vision':
-        root = Path('/opt/vision/app/releases')
         for container in all_containers:
             name = container['Name'].lstrip('/')
             mounts = container.get('Mounts', [])
             if (not broker.belongs(container, cfg)
-                    and re.fullmatch(r'vision-demo-admin-(?:candidate|rollback|failed)-[a-zA-Z0-9_-]+', name)
-                    and container['Config']['Image'] == 'node:22-alpine'
-                    and len(mounts) == 1 and mounts[0]['Type'] == 'bind'
-                    and Path(mounts[0]['Source']).parent == root
-                    and Path(mounts[0]['Source']).resolve() == Path(mounts[0]['Source'])
-                    and any(broker.inside(str(root), owned) for owned in cfg['directories'])):
+                    and name.startswith('vision-') and mounts
+                    and not any(broker.belongs(container, other) for key, other in broker.PROJECTS.items() if key != project)
+                    and all(m['Type'] == 'bind' and Path(m['Source']).resolve() == Path(m['Source'])
+                            and any(broker.inside(m['Source'], owned) for owned in cfg['directories']) for m in mounts)):
                 extras.append(container)
     extra_ids = {c['Id'] for c in extras}
     selected, volumes = broker.inventory(project, [c for c in all_containers if c['Id'] not in extra_ids])

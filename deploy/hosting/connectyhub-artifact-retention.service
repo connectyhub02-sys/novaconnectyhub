@@ -5,6 +5,7 @@ After=docker.service network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 /opt/connectyhub/hosting/artifact_retention.py --apply
+Environment=DOCKER_CONFIG=/var/lib/connectyhub-artifact-retention/docker
 TimeoutStartSec=3h
 Nice=19
 IOSchedulingClass=idle
@@ -19,4 +20,3 @@ ProtectSystem=strict
 ReadWritePaths=/opt/connectyhub/app/releases /opt/connectyhub/app/release.lock
 ReadWritePaths=/opt/vision/app/releases /opt/vision/app/release.lock
 ReadWritePaths=/var/lib/connectyhub-artifact-retention /opt/connectyhub/monitoring/public /run/lock
-

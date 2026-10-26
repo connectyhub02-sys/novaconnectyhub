@@ -1,5 +1,34 @@
 # Estado operacional da ConnectyHub
 
+## Limpeza segura e retenção automática de disco — 26/10/2026
+
+Concluída às 20h18 BRT: de aproximadamente 98% ocupado/7 GiB livres para
+83,48% ocupado/47,82 GiB livres, recuperando cerca de 40,86 GiB observados.
+Removidos 380 containers antigos já encerrados, 276 releases elegíveis e
+50 imagens sem referências; cache do builder reduzido para cerca de 3,184 GB.
+Dados dos clientes, volumes e seis backups diários preservados. Quatro bancos
+principais mantêm os horários de início anteriores à manutenção. Nenhum stop,
+restart de serviço, VACUUM FULL, cobrança ou envio de teste pela limpeza.
+
+Retenção no host executada com sucesso e timer habilitado a cada seis horas:
+preserva sete dias, piso de cinco versões e todas as referências restantes;
+cache do builder com alvo 3 GB/reserva 1 GB. Primeiro disparo agendado 27/10
+às 02h22 BRT. Locks de publicação, baixa prioridade e estado de falha explícito.
+Buildx usa configuração isolada sem credenciais, mantendo ProtectHome.
+
+Coletor local Vision corrigido sem ampliar permissões de exclusão. Coleta real
+e navegador confirmaram 150 GiB locais detalhados, separados de 7,76 GiB de mídia
+R2. Monitor global continua com coleta de 30 s e avisos 80%/90%; disco ainda em
+atenção, fora da faixa crítica. Dez testes de storage, seis de retenção, unidades
+systemd e smoke HTTPS aprovados. Aplicação permanece 0c19c471, alteração no host.
+
+Históricos Inngest seguem como principal consumo; retenção R2 não substitui
+planejamento de capacidade. Realtime ConnectyHub já estava encerrado desde 24/10,
+fora desta correção. Configuração de verificações de integrações Vision continua
+pendente, separada do monitor de armazenamento restaurado. Houve publicação Vision
+concorrente por outro fluxo, sem comando de parada desta manutenção.
+[Evidências, política e limites](limpeza-retencao-disco-2026-10-26.md).
+
 ## Disco a 98% e auditoria do R2 — 26/10/2026
 
 Leitura aproximadamente às 19h25–19h38 BRT: 290 GiB totais, 283 GiB usados,

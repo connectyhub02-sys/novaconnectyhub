@@ -40,6 +40,15 @@ class StorageTests(unittest.TestCase):
                 storage.measurement_inventory('vision', [item])
             inventory.assert_called_once_with('vision', [item])
 
+    def test_multiple_exclusive_binds_are_measured_but_unreviewed_volumes_are_not(self):
+        item = {'Id': 'site', 'Name': '/vision-storefront-rollback-example', 'Config': {'Image': 'caddy:2'},
+                'Mounts': [{'Type': 'bind', 'Source': '/opt/vision/storefront/release'}, {'Type': 'bind', 'Source': '/opt/vision/storefront/Caddyfile'}]}
+        with patch.object(storage.broker, 'config', return_value={'directories': ['/opt/vision']}), patch.object(storage.broker, 'belongs', return_value=False), patch.object(storage.Path, 'resolve', lambda self: self), patch.object(storage.broker, 'inventory', return_value=([], [])) as inventory:
+            self.assertEqual(storage.measurement_inventory('vision', [item])[0], [item])
+            item['Mounts'].append({'Type': 'volume', 'Source': '/var/lib/docker/volumes/unknown'})
+            self.assertEqual(storage.measurement_inventory('vision', [item])[0], [])
+            inventory.assert_called_with('vision', [item])
+
     def test_pagination_and_safe_aggregate_only(self):
         with patch.object(storage, 'list_page', side_effect=[page([('private/person%20one.JPG', 10)], True), page([('private/voice.opus', 20)])]) as fetch:
             totals, count = storage.measure_bucket('account', 'bucket', 'access', 'secret')
