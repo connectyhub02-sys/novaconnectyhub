@@ -1,5 +1,26 @@
 # Estado operacional da ConnectyHub
 
+## Identificação dos contatos no atendimento — 26/10/2026
+
+Publicado `04314db0` no slot a às 18h42 BRT, anterior `eda1eebf` no b preservado.
+Migration 0218 aplicada após backup de schema espelhado e ensaio com ROLLBACK.
+Consulta exclusiva do serviço usa o vínculo comprovado do aviso enviado para
+exibir o nome cadastrado da conta/responsável em contatos internos sem nome CRM.
+Preserva nomes existentes, não faz busca genérica entre clientes por telefone e
+não regrava leads ou mensagens. Associações ambíguas não recebem nome presumido.
+
+Avatares indisponíveis mostram iniciais e aceitam nova URL válida. Indicador
+`lead respondeu` depende da mensagem de entrada, sem tratar contato `new` como
+resposta. Lista, cabeçalho e contexto de Andre Sampaio conferidos no navegador,
+assim como Magno Gomes na lista, iniciais AS/MG e ausência do falso selo nos avisos.
+114 testes distintos, tipos, ESLint, build, candidato/HTTPS, APIs protegidas,
+19 assets e GET assinado Inngest com 59 funções validados. Prévia isolada confirmou
+fallback das fotos e recuperação por URL nova. Nenhum envio ou cobrança de teste.
+
+Nesta solicitação, o titular também confirmou a cobrança da recarga previamente
+autorizada da Vision e o envio do aviso ao cliente; não se trata de teste financeiro
+real disparado pelo agente. [Detalhes e limites](identificacao-atendimento-2026-10-26.md).
+
 ## Pendências históricas de cobrança encerradas — 26/10/2026
 
 Publicado `eda1eebf` no slot b às 18h18 BRT; anterior `48e27288` no slot a
