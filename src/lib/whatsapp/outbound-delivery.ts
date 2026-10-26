@@ -110,7 +110,10 @@ export async function fetchWhatsappOutbound(input: RequestInfo | URL, init: Requ
       return Response.json({error:"transport_track_id_required",retryable:false},{status:422});
     }
   }
-  if (path === "/send/status" && collectOutboundLinks(original).length) throw new Error("Status do WhatsApp não aceita botões de link. Envie esse conteúdo por mensagem para manter o link com botão e o registro por destinatário.");
+  // Native API tenants own their public links and delivery ledger. A Status may
+  // carry a text URL; it cannot carry interactive menus. Origin and idempotency
+  // checks below still apply before the provider sees the payload.
+  if (path === "/send/status" && (original.choices || original.carousel || original.buttons || (!nativeOrigin && collectOutboundLinks(original).length))) throw new Error("Status do WhatsApp não aceita botões de link. Envie esse conteúdo por mensagem para manter o link com botão e o registro por destinatário.");
   const urlFor = (next: string) => { const url = new URL(endpoint); url.pathname = endpoint.pathname.slice(0, -path.length) + next; return url; };
   const claimToken = randomUUID();
   let operation: Operation | null = null;
