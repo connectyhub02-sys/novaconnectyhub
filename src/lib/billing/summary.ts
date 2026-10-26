@@ -445,16 +445,17 @@ export async function getBillingAdminSummary(
       .select("feature_code, model_id")
       .eq("status", "pending")
       .eq("error_message", "billing_rate_missing")
-      .gte("occurred_at", sinceIso)
+      .is("billing_closed_at", null)
       .limit(1000),
   ]);
 
   const errors = [usageResult.error, walletResult.error, costCenterResult.error, rateResult.error].filter(Boolean);
   const missingRateRows = (missingRateResult.data ?? []) as Array<{ feature_code: string; model_id: string | null }>;
   const missingRateWarning = missingRateRows.length
-    ? `${missingRateRows.length} uso(s) sem tarifa aguardando conferência, sem cobrança: ${[...new Set(missingRateRows.map(row => `${row.feature_code}${row.model_id ? ` (${row.model_id})` : ""}`))].slice(0, 4).join(", ")}. Cadastre a tarifa em Centro de custo.`
+    ? `${missingRateRows.length} uso(s) sem tarifa aguardando decisão, sem cobrança automática. Confira cliente, data e orientação em Saúde das cobranças, acima. A tarifa dos próximos usos deve ser conferida no Centro de custo.`
     : null;
   const nonBlockingWarnings = [
+    missingRateResult.error ? "Não foi possível conferir os usos sem tarifa. Atualize a página." : null,
     paymentResult.error?.message,
     creditTransactionResult.error?.message,
     organizationResult.error?.message,

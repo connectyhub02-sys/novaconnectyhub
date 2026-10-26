@@ -10,9 +10,12 @@ beforeAll(async()=>{
  alter table platform_products add column price text,add column short_description text,add column commercial_description text,add column offer jsonb default '{}',add column metadata jsonb default '{}';
  alter table credit_wallets add column reserved_credits numeric default 0,add column status text default 'active';
  alter table billing_notification_events add column dedupe_key text unique;
+ create table usage_events(id uuid primary key default gen_random_uuid(),organization_id uuid,occurred_at timestamptz default now(),feature_code text,model_id text,status text default 'pending',error_message text,connecty_charge_credits numeric default 0,connecty_revenue_estimate numeric default 0,debit_retry_at timestamptz);
+ alter type credit_transaction_type add value 'debit';
+ alter table credit_transactions add column usage_event_id uuid;
  insert into auth.users(id) values('${admin}');insert into profiles(id,is_platform_admin) values('${admin}',true);`);
  const money=readFileSync("supabase/migrations/0076_transparent_checkout_attempts.sql","utf8");await db.exec(money.slice(money.indexOf("create or replace function public.checkout_money"),money.indexOf("create or replace function public.guard_checkout_order_revision")));
- for(const name of ["0107_custom_contracts","0108_wallet_alert_episodes","0109_custom_software_meetings","0110_automatic_credit_topups","0112_custom_meeting_reminders","0121_account_billing_notice_outbox","0154_pix_automatic","0213_billing_notice_recovery","0214_pix_initial_payment_independent","0215_topup_available_balance","0216_billing_reliability_monitor"])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,"utf8"));
+ for(const name of ["0107_custom_contracts","0108_wallet_alert_episodes","0109_custom_software_meetings","0110_automatic_credit_topups","0112_custom_meeting_reminders","0121_account_billing_notice_outbox","0154_pix_automatic","0213_billing_notice_recovery","0214_pix_initial_payment_independent","0215_topup_available_balance","0216_billing_reliability_monitor","0217_billing_historical_closures"])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,"utf8"));
 },60000);
 afterAll(async()=>{await db?.close();});
 async function configuredTopup(){
@@ -175,4 +178,42 @@ it.each(['CREATED','REFUSED'])('grants a received initial Pix exactly once while
  await db.query('select sync_billing_pix_authorization($1,$2,null)',[id,{...remote,status:'ACTIVE',subscriptionId:'sub_'+id}]);
  expect((await db.query('select provider_subscription_id from organization_subscriptions where id=$1',[a.sub])).rows[0]).toEqual({provider_subscription_id:state==='CREATED'?'sub_'+id:null});
  expect((await db.query('select * from test_credit_grants where organization_id=$1',[a.org])).rows).toHaveLength(1);
+});
+
+it("closes historical usage without a ledger debit and permanently rejects repricing, reopening and debit insertion",async()=>{
+ const a=await account(),id=randomUUID();
+ await db.query("insert into usage_events(id,organization_id,feature_code,model_id,error_message,occurred_at) values($1,$2,'legacy_traffic','fixture_model','billing_rate_missing','2026-09-27T17:15:16Z')",[id,a.org]);
+ const before=(await db.query("select balance_credits from credit_wallets where organization_id=$1",[a.org])).rows;
+ await db.query("update usage_events set billing_closed_at=now(),billing_closure_reason='Encerrado sem cobrança retroativa.' where id=$1",[id]);
+ for(const sql of ["update usage_events set connecty_charge_credits=1 where id=$1","update usage_events set debit_retry_at=now() where id=$1","update usage_events set status='completed' where id=$1","update usage_events set billing_closed_at=null,billing_closure_reason=null where id=$1","insert into credit_transactions(usage_event_id,transaction_type,amount_credits) values($1,'debit',1)"]){await expect(db.query(sql,[id])).rejects.toThrow(/historical|Historical|Closed/);}
+ expect((await db.query("select balance_credits from credit_wallets where organization_id=$1",[a.org])).rows).toEqual(before);
+ expect((await db.query("select * from credit_transactions where usage_event_id=$1",[id])).rows).toHaveLength(0);
+ expect((await db.query("select status,error_message,connecty_charge_credits from usage_events where id=$1",[id])).rows[0]).toEqual({status:'pending',error_message:'billing_rate_missing',connecty_charge_credits:'0'});
+});
+it("closes an uncertain notice without claiming or sending and preserves provider evidence",async()=>{
+ const a=await account(),id=randomUUID();
+ await db.query("insert into billing_notification_events(id,organization_id,event_type,status,delivery_uncertain,error_message) values($1,$2,'payment_approved','failed',true,'original provider error')",[id,a.org]);
+ await db.query("update billing_notification_events set status='skipped',next_attempt_at=null,billing_closed_at=now(),billing_closure_reason='Encerrado sem reenvio.' where id=$1",[id]);
+ expect((await db.query('select claim_billing_notice($1) claimed',[id])).rows[0]).toEqual({claimed:false});
+ for(const sql of ["update billing_notification_events set status='pending' where id=$1","update billing_notification_events set delivery_claimed_at=now() where id=$1","update billing_notification_events set next_attempt_at=now() where id=$1"]){await expect(db.query(sql,[id])).rejects.toThrow(/Closed historical notice/);}
+ expect((await db.query('select delivery_uncertain,error_message,provider_message_id,attempts from billing_notification_events where id=$1',[id])).rows[0]).toEqual({delivery_uncertain:true,error_message:'original provider error',provider_message_id:null,attempts:0});
+});
+it("shows customer, original date and separate closure history; does not hide other unresolved records; service-only",async()=>{
+ const a=await account(),ids=[randomUUID(),randomUUID()];
+ for(const id of ids)await db.query("insert into usage_events(id,organization_id,feature_code,error_message,occurred_at) values($1,$2,'legacy_traffic','billing_rate_missing','2026-09-27T17:15:16Z')",[id,a.org]);
+ await db.query("update usage_events set billing_closed_at=now(),billing_closure_reason='Sem cobrança retroativa.' where id=$1",[ids[0]]);
+ const detail=(await db.query<{r:{pending:Array<{id:string;customer:string;occurred_at:string}>,closed:Array<{id:string}>}}>('select billing_attention_details() r')).rows[0].r;
+ const pending=detail.pending.find(r=>r.id===ids[1]);
+ expect(pending?.customer).toBe('Cliente');expect(new Date(pending!.occurred_at).toISOString()).toBe('2026-09-27T17:15:16.000Z');
+ expect(detail.pending.some(r=>r.id===ids[0])).toBe(false);expect(detail.closed.some(r=>r.id===ids[0])).toBe(true);
+ for(const role of ['anon','authenticated'])expect((await db.query("select has_function_privilege($1,'billing_attention_details()','EXECUTE') ok",[role])).rows[0]).toEqual({ok:false});
+ expect((await db.query("select has_function_privilege('service_role','billing_attention_details()','EXECUTE') ok")).rows[0]).toEqual({ok:true});
+});
+it("keeps normal usage debits and notice claims available",async()=>{
+ const a=await account(),usage=randomUUID(),notice=randomUUID();
+ await db.query("insert into usage_events(id,organization_id,feature_code,status,connecty_charge_credits) values($1,$2,'content_generation','completed',1)",[usage,a.org]);
+ await db.query("insert into credit_transactions(usage_event_id,transaction_type,amount_credits) values($1,'debit',1)",[usage]);
+ await expect(db.query("update usage_events set status='pending',connecty_charge_credits=0,billing_closed_at=now(),billing_closure_reason='Waive' where id=$1",[usage])).rejects.toThrow(/Closed historical usage/);
+ await db.query("insert into billing_notification_events(id,organization_id,event_type,status,delivery_uncertain) values($1,$2,'payment_pending','pending',false)",[notice,a.org]);
+ expect((await db.query('select claim_billing_notice($1) claimed',[notice])).rows[0]).toEqual({claimed:true});
 });

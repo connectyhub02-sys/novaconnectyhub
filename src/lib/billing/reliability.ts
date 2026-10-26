@@ -1,9 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { BillingAttention } from "./attention";
 export const billingReliabilityLabels = {
   blockedNotices: "Avisos aguardando remetente ou ativação",
   exhaustedNotices: "Avisos com tentativas esgotadas",
-  uncertainNotices: "Avisos com entrega a conferir antes de reenviar",
+  uncertainNotices: "Avisos retidos: entrega não confirmada",
   overdueNotices: "Avisos atrasados na fila",
   unreconciledPayments: "Pagamentos aguardando conciliação há mais de 15 minutos",
   topupErrors: "Recargas que precisam de atenção",
@@ -21,4 +22,9 @@ export function billingReliabilityIssues(snapshot: BillingReliability) {
     const count = Number(snapshot[key as keyof typeof billingReliabilityLabels]);
     return count > 0 ? [{ key, label, count }] : [];
   });
+}
+export async function loadBillingAttention(client: SupabaseClient): Promise<BillingAttention> {
+  const result = await client.rpc("billing_attention_details");
+  if (result.error || !result.data) throw new Error("Não foi possível carregar os detalhes financeiros.");
+  return result.data as BillingAttention;
 }

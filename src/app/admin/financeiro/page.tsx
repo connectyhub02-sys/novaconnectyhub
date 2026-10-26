@@ -1,4 +1,5 @@
-import { loadBillingReliability, billingReliabilityIssues } from "@/lib/billing/reliability";
+import { loadBillingReliability, loadBillingAttention, billingReliabilityIssues } from "@/lib/billing/reliability";
+import { BillingAttentionDetails } from "@/components/connectyhub-os/billing-attention";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
@@ -34,17 +35,21 @@ export default async function AdminFinanceiroPage({searchParams}:{searchParams:P
     getAgentOptimizationAdmin(createServiceClient()),
   ]);
 
-  const reliability = await loadBillingReliability(createServiceClient()).catch(() => null);
+  const [reliability, attention] = await Promise.all([
+    loadBillingReliability(createServiceClient()).catch(() => null),
+    loadBillingAttention(createServiceClient()).catch(() => null),
+  ]);
   const issues = reliability ? billingReliabilityIssues(reliability) : [];
   return (<>
     <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 text-slate-900" aria-label="Saúde das cobranças">
       <h2 className="text-lg font-semibold">Saúde das cobranças</h2>
-      {!reliability ? <p role="alert">Não foi possível conferir as pendências financeiras. Atualize a página.</p> : issues.length ? <>
-        <p role="alert" className="mt-2 text-amber-800">Há pendências que precisam de atenção. Confira os avisos, o remetente da plataforma e as operações abaixo.</p>
+      {!reliability || !attention ? <p role="alert">Conferência financeira incompleta. Atualize a página.</p> : issues.length || attention.pendingCount ? <>
+        <p role="alert" className="mt-2 text-amber-800">Há pendências que precisam de atenção. Veja abaixo o cliente, a data e a orientação de cada registro.</p>
         <ul className="mt-3 list-inside list-disc text-sm">{issues.map(issue => <li key={issue.key}>{issue.label}: <strong>{issue.count}</strong></li>)}</ul>
         {reliability.blockedNotices > 0 ? <p className="mt-3 text-sm">Confira a ativação dos avisos e a conexão do WhatsApp financeiro em WhatsApp Interno. Avisos aguardando conexão serão retomados se ainda forem válidos.</p> : null}
-        {reliability.uncertainNotices > 0 ? <p className="mt-3 text-sm">As entregas incertas permanecem retidas para evitar duplicidade. Confira o resultado no provedor antes de reenviar.</p> : null}
+        {reliability.uncertainNotices > 0 ? <p className="mt-3 text-sm">As entregas incertas permanecem retidas para evitar duplicidade. Não reenvie enquanto o resultado não estiver confirmado.</p> : null}
       </> : <p className="mt-2 text-emerald-800">Nenhuma pendência detectada nesta conferência. A aprovação das próximas cobranças depende do banco.</p>}
+      <BillingAttentionDetails data={attention} />
     </section>
     <BillingCenter
       summary={summary}
