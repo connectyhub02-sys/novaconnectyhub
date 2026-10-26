@@ -1,5 +1,18 @@
 # Estado operacional da ConnectyHub
 
+## Links da Vision Home no Status — 25/10/2026
+
+Publicada a correção isolada `8c9698ff`, baseada na produção `094d167d`, no
+slot a; slot b preservado para rollback. Permite URLs de texto no Status somente
+para organizações API com origem nativa cadastrada. Validação de origem,
+idempotência, recibos e bloqueio de menus permanecem. Integração no master:
+`e989b3a3`. Mudanças locais de IA/relay não foram incluídas nessa publicação.
+
+29 testes passaram; build e TypeScript, health, login/assets, acesso anônimo
+negado e GET assinado do Inngest validados no candidato. Versão conferida por
+HTTPS após ativação. Nenhuma mensagem, Status ou cobrança enviada para testar.
+A renderização no aplicativo WhatsApp ainda depende de uma postagem autorizada.
+
 ## Efeitos completos e ambientação automática dos agentes — 23/10/2026
 
 Publicado às 16h50 BRT: `094d167d`, slot b/3131; anterior `469f91cb` no a,
