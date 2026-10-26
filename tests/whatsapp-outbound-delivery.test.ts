@@ -8,6 +8,20 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
 import * as links from "../src/lib/whatsapp/outbound-links";
 afterEach(()=>vi.unstubAllEnvs());
+it("allows native Status URLs with origin validation and a single durable receipt",async()=>{
+ vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({org:"https://vision.example"}));
+ const f=fixture(),body={type:"image",file:"https://media.example/card.jpg",text:"Leia https://vision.example/blog/item",track_id:"native-status"};
+ expect((await f.send("/send/status",body,{apiOrganizationId:"org"})).status).toBe(200);
+ expect(JSON.parse(String(f.fetch.mock.calls[0][1].body))).toEqual(body);
+ expect(String(f.fetch.mock.calls[0][0])).toContain("/send/status");
+ await f.send("/send/status",body,{apiOrganizationId:"org"});
+ expect(f.fetch).toHaveBeenCalledTimes(1);
+ expect(f.db.tables.whatsapp_outbound_deliveries??[]).toHaveLength(0);
+ expect((await f.send("/send/status",{...body,text:"https://other.example",track_id:"bad-origin"},{apiOrganizationId:"org"})).status).toBe(422);
+ expect((await f.send("/send/status",{...body,track_id:undefined},{apiOrganizationId:"org"})).status).toBe(422);
+ await expect(f.send("/send/status",{...body,choices:["Copy|copy:text"]},{apiOrganizationId:"org"})).rejects.toThrow("não aceita botões");
+ expect(f.fetch).toHaveBeenCalledTimes(1);
+});
 it("transports native API links unchanged without CH CRM or tracking and replays once",async()=>{
  vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
  const f=fixture();
