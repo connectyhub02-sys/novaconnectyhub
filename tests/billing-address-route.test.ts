@@ -1,3 +1,4 @@
+import * as sameOrigin from "../src/lib/security/same-origin-request";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { describe, expect, it, vi } from "vitest";
@@ -11,7 +12,7 @@ const valid={postalCode:'01001000',street:'Praça da Sé',number:'10',complement
 function setup(role='owner'){
  const rpc=vi.fn(async():Promise<{data:Record<string,unknown>|null;error:{message:string}|null}>=>({data:{},error:null}));
  const api=serverModuleHarness<typeof import('../src/app/api/dashboard/billing/address/route')>('src/app/api/dashboard/billing/address/route.ts',{
-  'next/server':{NextResponse},'@/lib/supabase/profile':{getCurrentWorkspace:async()=>role==='anonymous'?null:{organization:{id:organization,name:'Organization',role},user:{id:actor,email:'owner@example.test'},profile:{fullName:'Owner Name',email:'owner@example.test',phone:'11999999999'}}},
+  '@/lib/security/same-origin-request':sameOrigin,'next/server':{NextResponse},'@/lib/supabase/profile':{getCurrentWorkspace:async()=>role==='anonymous'?null:{organization:{id:organization,name:'Organization',role},user:{id:actor,email:'owner@example.test'},profile:{fullName:'Owner Name',email:'owner@example.test',phone:'11999999999'}}},
   '@/lib/supabase/service':{createServiceClient:()=>({rpc})},'@/lib/billing/billing-address':address,'@/lib/billing/billing-contact':contact,'@/lib/billing/billing-address-store':{loadBillingProfile:async()=>({address:valid,contact:null,updatedAt:null,suggestion:null})},'@/lib/security/public-request-guard':guard,'@/lib/account/signup-completion':{loadAccountDocument:async()=>({number:'12345678909'})},'@/lib/sales-catalog/card-input':cardInput,
  });
  return{api,rpc};

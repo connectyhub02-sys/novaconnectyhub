@@ -4,7 +4,7 @@ import Image from "next/image";
 
 export type PixAutomaticSnapshot = {
   enabled: boolean; reason: string | null; amount: number; recurringAmount: number; recurrenceLabel: string; revision: number; consentVersion: string;
-  authorization: { id: string; state: string; active: boolean; qrCode: string | null; qrImage: string | null; expiresAt: string | null; error: string | null; canRetry: boolean } | null;
+  authorization: { id: string; state: string; active: boolean; paymentConfirmed?: boolean; paymentRefunded?: boolean; qrCode: string | null; qrImage: string | null; expiresAt: string | null; error: string | null; canRetry: boolean } | null;
 };
 export function BillingPixAutomaticCheckout({ subscriptionId, initial, onChange, cartSyncing }: { subscriptionId: string; initial: PixAutomaticSnapshot; onChange: (snapshot: PixAutomaticSnapshot) => void; cartSyncing: boolean }) {
   const [snapshot, setSnapshot] = useState(initial);
@@ -23,7 +23,7 @@ export function BillingPixAutomaticCheckout({ subscriptionId, initial, onChange,
     update(data);
   }, [endpoint, update]);
   useEffect(() => {
-    if (!snapshot.authorization || snapshot.authorization.active || snapshot.authorization.canRetry) return;
+    if (!snapshot.authorization || snapshot.authorization.active || snapshot.authorization.paymentRefunded || snapshot.authorization.canRetry) return;
     const timer = window.setInterval(() => { void refresh().catch(error => setMessage(error.message)); }, 8000);
     return () => window.clearInterval(timer);
   }, [refresh, snapshot.authorization]);
@@ -46,7 +46,7 @@ export function BillingPixAutomaticCheckout({ subscriptionId, initial, onChange,
   return <section className="mt-6 space-y-4 border-t border-slate-200 pt-5 text-slate-900">
     <h3 className="font-semibold">Pix Automático</h3>
     <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4"><div><p className="text-xs text-slate-500">Primeiro pagamento</p><p className="mt-1 text-lg font-semibold">{money(snapshot.amount)}</p></div><div><p className="text-xs text-slate-500">Renovação {snapshot.recurrenceLabel.toLowerCase()}</p><p className="mt-1 text-lg font-semibold">{money(snapshot.recurringAmount)}</p></div></div>
-    {authorization?.active ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Pagamento confirmado e Pix Automático ativo. Seu plano está sendo atualizado.</p> : authorization && !authorization.canRetry ? <>
+    {authorization?.paymentRefunded ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">O primeiro pagamento foi estornado. Confira a situa��o do plano antes de iniciar outro pagamento.</p> : authorization?.active ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Pagamento confirmado e Pix Automático ativo. Seu plano está sendo atualizado.</p> : authorization?.paymentConfirmed ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Primeiro pagamento confirmado. Seu plano foi pago, mas a autorização das próximas cobranças ainda não está ativa. Não pague este ciclo novamente. Consulte o suporte se a autorização não for confirmada.</p> : authorization && !authorization.canRetry ? <>
       <p role="status" className="text-sm leading-6">{authorization.state === "CREATED" ? "Use o QR Code ou Pix Copia e Cola no app do banco. Confirme o primeiro pagamento e autorize as próximas renovações." : ["CANCELLED", "EXPIRED"].includes(authorization.state) ? "A autorização foi encerrada. Confira com a equipe antes de iniciar outro pagamento." : "Aguardando confirmação do banco. Não faça outro pagamento enquanto conferimos."}</p>
       {authorization.qrImage && /^[A-Za-z0-9+/=\r\n]+$/.test(authorization.qrImage) ? <Image unoptimized width={220} height={220} src={`data:image/png;base64,${authorization.qrImage}`} alt="QR Code de Pix Automático: primeiro pagamento e autorização recorrente" className="mx-auto" /> : null}
       {authorization.qrCode ? <><textarea readOnly aria-label="Pix Automático copia e cola" value={authorization.qrCode} className="w-full rounded border p-2 text-xs" /><button type="button" onClick={() => void navigator.clipboard.writeText(authorization.qrCode!).then(() => setMessage("Código copiado.")).catch(() => setMessage("Selecione e copie o código acima."))} className="min-h-11 rounded-lg border px-3 text-sm">Copiar código</button></> : null}
@@ -54,7 +54,7 @@ export function BillingPixAutomaticCheckout({ subscriptionId, initial, onChange,
     </> : snapshot.enabled ? <>
       {authorization?.canRetry ? <p role="status" className="text-sm text-amber-800">A autorização anterior não foi concluída. Você pode iniciar uma nova solicitação.</p> : null}
       <p className="text-sm leading-6 text-slate-600">Gere o QR Code e confirme o pagamento e a recorrência no app do seu banco.</p>
-      <details className="text-xs leading-5 text-slate-600"><summary className="cursor-pointer font-medium">Como funciona a autorização</summary><p className="mt-2">O plano é liberado após o primeiro pagamento e a autorização. Com a autorização ativa, os próximos ciclos seguem automaticamente. Recargas de créditos não estão incluídas. O Asaas valida a disponibilidade ao gerar o Pix.</p></details>
+      <details className="text-xs leading-5 text-slate-600"><summary className="cursor-pointer font-medium">Como funciona a autorização</summary><p className="mt-2">O plano é liberado após a confirmação do primeiro pagamento. Com a autorização ativa, os próximos ciclos seguem automaticamente. Recargas de créditos não estão incluídas. O Asaas valida a disponibilidade ao gerar o Pix.</p></details>
       <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm leading-6"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} className="mt-1.5 h-4 w-4 shrink-0" /><span>Autorizo o primeiro pagamento e as renovações recorrentes nos valores acima. Confirmarei essa autorização no meu banco. Tentativas no dia seguem as regras do banco; não autorizo retentativas em dias posteriores.</span></label>
       <button type="button" disabled={!accepted || busy || cartSyncing} onClick={() => { if (authorization?.canRetry) requestId.current = null; void create(); }} className="min-h-11 w-full rounded-lg bg-blue-700 px-3 font-semibold text-white disabled:opacity-50">{busy ? "Preparando autorização…" : "Gerar Pix Automático"}</button>
     </> : <p role="status" className="text-sm">{snapshot.reason}</p>}

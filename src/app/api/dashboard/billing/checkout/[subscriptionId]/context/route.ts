@@ -1,3 +1,4 @@
+import { isSameOriginRequest } from "@/lib/security/same-origin-request";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -5,7 +6,7 @@ import { validatePublicWriteRequest } from "@/lib/security/public-request-guard"
 export async function POST(request: NextRequest, context: { params: Promise<{ subscriptionId: string }> }) {
   const guard = validatePublicWriteRequest({ headers: request.headers, requestUrl: request.url, routeKey: "billing-context", maxPayloadBytes: 300, rateLimit: { limit: 30, windowMs: 60000 } });
   if (!guard.ok) return NextResponse.json({ error: guard.message }, { status: guard.status });
-  if (request.headers.get("origin") !== new URL(request.url).origin || !request.headers.get("content-type")?.startsWith("application/json")) return NextResponse.json({ error: "Origem não autorizada." }, { status: 403 });
+  if (!isSameOriginRequest(request) || !request.headers.get("content-type")?.startsWith("application/json")) return NextResponse.json({ error: "Origem não autorizada." }, { status: 403 });
   const workspace = await getCurrentWorkspace({ allowRestricted: true });
   if (!workspace?.organization) return NextResponse.json({}, { status: 401 });
   if (!["owner", "admin"].includes(workspace.organization.role)) return NextResponse.json({}, { status: 403 });

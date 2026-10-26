@@ -16,6 +16,7 @@ beforeAll(async()=>{
  create table intelligence_events(scope text,organization_id uuid,source_type text,source_id uuid,event_type text,title text,summary text,visibility text,tags text[],payload jsonb);`);
  await db.exec(readFileSync("supabase/migrations/0078_ecosystem_native_billing.sql","utf8"));
  await db.exec(readFileSync("supabase/migrations/0154_pix_automatic.sql","utf8"));
+ await db.exec(readFileSync("supabase/migrations/0214_pix_initial_payment_independent.sql","utf8"));
 },30000);
 afterAll(async()=>{await db?.close();});
 beforeEach(async()=>{
@@ -29,7 +30,7 @@ beforeEach(async()=>{
 });
 async function begin(id=randomUUID(),user=actor,organization=org,amount=130){return (await db.query<{r:{claimed:boolean;authorization:{id:string;contract_id:string;state:string}}}>("select begin_billing_pix_authorization($1,$2,$3,$4,$5,'sandbox',0,$6,110,'MONTHLY','2035-10-17') r",[organization,user,sub,pay,id,amount])).rows[0].r;}
 async function sync(id:string,state="CREATED",failure:string|null=null){
- const remote={id:"auth_fixture",status:state,contractId:id.replaceAll("-",""),customerId:"cus_fixture",subscriptionId:state==="CREATED"?"":"sub_fixture",value:110,frequency:"MONTHLY",startDate:"2035-10-17",paymentCreationMode:"SUBSCRIPTION",conciliationIdentifier:"txid_fixture",payload:"qr_fixture",encodedImage:"base64"};
+ const remote={id:"auth_fixture",status:state,contractId:id.replaceAll("-",""),customerId:"cus_fixture",subscriptionId:state==="ACTIVE"?"sub_fixture":"",value:110,frequency:"MONTHLY",startDate:"2035-10-17",paymentCreationMode:"SUBSCRIPTION",conciliationIdentifier:"txid_fixture",payload:"qr_fixture",encodedImage:"base64"};
  return (await db.query<{r:{state:string}}>("select sync_billing_pix_authorization($1,$2,$3) r",[id,remote,failure])).rows[0].r;
 }
 async function prepare(state="CREATED") {const a=await begin();await db.query("update billing_pix_authorizations set customer_id='cus_fixture',state='dispatching' where id=$1",[a.authorization.id]);await sync(a.authorization.id,state);return a.authorization.id;}
@@ -48,7 +49,7 @@ describe("Pix Automatic durable financial boundaries",()=>{
   await expect(db.query("update billing_payments set amount_brl=140 where id=$1",[pay])).rejects.toThrow("BILLING_PIX_PENDING");
  });
  it("cannot activate from QR creation; binds one paid initial transaction only after ACTIVE",async()=>{
-  const id=await prepare();await expect(bind(id)).rejects.toThrow("PIX_NOT_ACTIVE");
+  const id=await prepare();const initial=await bind(id);expect(initial.rows[0].r).toContain(pay);
   expect((await db.query("select status from organization_subscriptions")).rows[0]).toEqual({status:"pending"});
   await sync(id,"ACTIVE"); const a=await bind(id),b=await bind(id);expect(a.rows).toEqual(b.rows);
   expect((await db.query("select initial_effects_completed from billing_pix_authorizations")).rows[0]).toEqual({initial_effects_completed:false});
@@ -66,7 +67,7 @@ describe("Pix Automatic durable financial boundaries",()=>{
   expect((await db.query("select qr_payload from billing_pix_authorizations")).rows[0]).toEqual({qr_payload:null});
  });
  it("lets a definitive refusal switch to manual Pix without retaining the mandate recovery marker",async()=>{
-  const id=await prepare();await sync(id,"REFUSED");await db.query("select claim_native_billing_pix($1,$2)",[org,pay]);
+  const id=await prepare();await sync(id,"REFUSED");await expect(db.query("select claim_native_billing_pix($1,$2)",[org,pay])).rejects.toThrow("BILLING_PAYMENT_BUSY");await db.query("select confirm_billing_pix_initial_absent($1)",[id]);await db.query("select claim_native_billing_pix($1,$2)",[org,pay]);
   const result=(await db.query<{payload:Record<string,unknown>}>("select payload from billing_payments where id=$1",[pay])).rows[0].payload;
   expect(result.payment_method).toBe("pix");expect(result.pix_creation_pending).toBe(true);expect(result.pix_automatic_authorization_id).toBeUndefined();
   expect((await db.query("select state from billing_pix_authorizations where id=$1",[id])).rows[0]).toEqual({state:"REFUSED"});
@@ -90,4 +91,11 @@ describe("Pix Automatic durable financial boundaries",()=>{
    expect((await db.query<{ok:boolean}>("select has_function_privilege($1,'sync_billing_pix_authorization(uuid,jsonb,text)','EXECUTE') ok",[role])).rows[0].ok).toBe(false);
   }
  });
+});
+
+it.each(['REFUSED','CANCELLED','EXPIRED'])('binds a verified paid initial Pix in %s without enabling future debits',async state=>{
+ const id=await prepare(state);await bind(id);expect((await bind(id)).rows[0].r).toContain(pay);
+ expect((await db.query('select initial_provider_payment_id,activated_at from billing_pix_authorizations where id=$1',[id])).rows[0]).toEqual({initial_provider_payment_id:'pay_initial',activated_at:null});
+ await expect(db.query('select confirm_billing_pix_initial_absent($1)',[id])).rejects.toThrow('PIX_PAYMENT_CHECK_REQUIRED');
+ expect((await db.query('select * from billing_pix_payments')).rows).toHaveLength(1);
 });

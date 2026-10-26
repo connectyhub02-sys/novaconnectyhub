@@ -11,7 +11,7 @@ import { pixAutomaticCheckoutRestriction } from "./pix-automatic-availability";
 
 export const pixAutomaticConsentVersion = "connectyhub-pix-automatic-v1";
 type Config = Awaited<ReturnType<typeof loadAsaasPlatformBillingConfig>>;
-export type PixMandate = { id: string; organization_id: string; subscription_id: string; invoice_id: string; payment_id: string; actor_id: string; mode: string; contract_id: string; state: string; amount: number; recurring_amount: number; frequency: string; start_date: string; customer_id: string | null; provider_id: string | null; provider_subscription_id: string | null; conciliation_id: string | null; qr_payload: string | null; qr_image: string | null; qr_expires_at: string | null; initial_provider_payment_id: string | null; error_code: string | null; initial_effects_completed: boolean };
+export type PixMandate = { id: string; organization_id: string; subscription_id: string; invoice_id: string; payment_id: string; actor_id: string; mode: string; contract_id: string; state: string; amount: number; recurring_amount: number; frequency: string; start_date: string; customer_id: string | null; provider_id: string | null; provider_subscription_id: string | null; conciliation_id: string | null; qr_payload: string | null; qr_image: string | null; qr_expires_at: string | null; initial_provider_payment_id: string | null; error_code: string | null; initial_effects_completed: boolean; initial_payment_refunded?: boolean; initial_payment_absent?: boolean };
 const columns = "*"; // Service-only tables; responses are explicitly projected below.
 const frequency = { week: "WEEKLY", month: "MONTHLY", quarter: "QUARTERLY", semester: "SEMIANNUALLY", year: "ANNUALLY" };
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,19 +27,22 @@ export async function loadPixMandate(client: SupabaseClient, organizationId: str
   return result.data as PixMandate | null;
 }
 function publicMandate(a: PixMandate | null) {
-  return a ? { id: a.id, state: a.state, active: a.state === "ACTIVE" && Boolean(a.initial_effects_completed), qrCode: a.state === "CREATED" ? a.qr_payload : null, qrImage: a.state === "CREATED" ? a.qr_image : null, expiresAt: a.qr_expires_at, error: a.error_code ? new PixAutomaticError(a.error_code).message : null, canRetry: a.state === "failed" || a.state === "REFUSED" } : null;
+  return a ? { id: a.id, state: a.state, active: a.state === "ACTIVE" && Boolean(a.initial_effects_completed && !a.initial_payment_refunded), paymentConfirmed: Boolean(a.initial_effects_completed && !a.initial_payment_refunded), paymentRefunded: Boolean(a.initial_payment_refunded), qrCode: a.state === "CREATED" && !a.initial_effects_completed ? a.qr_payload : null, qrImage: a.state === "CREATED" && !a.initial_effects_completed ? a.qr_image : null, expiresAt: a.qr_expires_at, error: a.error_code ? new PixAutomaticError(a.error_code).message : null, canRetry: !a.initial_provider_payment_id && (a.state === "failed" || a.state === "REFUSED" && a.initial_payment_absent === true) } : null;
 }
 export async function pixCheckoutSnapshot(client: SupabaseClient, organizationId: string, subscriptionId: string, reconcile = false) {
   const snapshot = await loadNativeBillingSnapshot(client, organizationId, subscriptionId);
   const config = await loadAsaasPlatformBillingConfig({ client });
   let mandate = await loadPixMandate(client, organizationId, subscriptionId);
-  if (reconcile && mandate && !["failed", "REFUSED"].includes(mandate.state)) mandate = await reconcilePixMandate(client, mandate, config);
+  if (reconcile && mandate && mandate.state !== "failed") mandate = await reconcilePixMandate(client, mandate, config);
   const restriction = pixAutomaticCheckoutRestriction({ checkoutKind: snapshot.intent.checkoutKind, subscriptionStatus: snapshot.intent.subscription.status, billingCycle: snapshot.terms.billingCycle, recurringAmount: snapshot.recurringAmount, providerSubscription: Boolean(snapshot.intent.subscription.provider_subscription_id), campaignPricing: Boolean(snapshot.intent.payment.payload?.campaign_pricing) });
   return { enabled: enabled(config) && !restriction, reason: !enabled(config) ? new PixAutomaticError("unavailable").message : restriction, amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision, consentVersion: pixAutomaticConsentVersion, authorization: publicMandate(mandate) };
 }
 export async function beginPixCheckout(client: SupabaseClient, scope: { organizationId: string; subscriptionId: string; actorId: string }, body: Record<string, unknown>, holder: { name: string; email: string; cpfCnpj: string; phone: string }) {
   if (!idPattern.test(text(body.requestId)) || body.acceptRecurring !== true || body.consentVersion !== pixAutomaticConsentVersion) throw new PixAutomaticError("invalid_input", 422);
   for (const field of ["name", "email", "cpfCnpj", "phone"] as const) if (validateReplacementCardField(field, holder[field])) throw new PixAutomaticError("invalid_input", 422);
+  // Recheck a refused authorization before offering another payment: its initial Pix may have been received.
+  const existing = await loadPixMandate(client, scope.organizationId, scope.subscriptionId);
+  if (existing?.state === "REFUSED") await reconcilePixMandate(client, existing);
   const snapshot = await loadNativeBillingSnapshot(client, scope.organizationId, scope.subscriptionId);
   const config = await loadAsaasPlatformBillingConfig({ client });
   if (!enabled(config)) throw new PixAutomaticError("unavailable", 503);
@@ -69,7 +72,7 @@ export async function beginPixCheckout(client: SupabaseClient, scope: { organiza
 function sync(client: SupabaseClient, mandate: PixMandate, remote: PixAuthorization) { return rpc<PixMandate>(client, "sync_billing_pix_authorization", { p_id: mandate.id, p_remote: remote, p_failure: null }); }
 
 export async function reconcilePixMandate(client: SupabaseClient, mandate: PixMandate, suppliedConfig?: Config): Promise<PixMandate> {
-  if (["failed", "REFUSED"].includes(mandate.state)) return mandate;
+  if (mandate.state === "failed") return mandate;
   const config = suppliedConfig ?? await loadAsaasPlatformBillingConfig({ client });
   if (config.mode !== mandate.mode) throw new PixAutomaticError("unavailable", 503);
   if (!mandate.customer_id) return mandate; // No safe provider lookup yet; never dispatch from a read/retry.
@@ -85,6 +88,9 @@ export async function reconcilePixMandate(client: SupabaseClient, mandate: PixMa
   const initial = candidates.filter(p => p.conciliationIdentifier && p.conciliationIdentifier === mandate.conciliation_id);
   if (initial.length > 1) throw new PixAutomaticError("mismatch");
   if (initial[0]?.id) await settlePixPayment(client, mandate, await getPixPayment(config, initial[0].id));
+  else if (mandate.state === "REFUSED" && !mandate.initial_provider_payment_id) {
+    await rpc(client, "confirm_billing_pix_initial_absent", { p_id: mandate.id });
+  }
   const renewed = await client.from("billing_pix_authorizations").select(columns).eq("id", mandate.id).single();
   if (renewed.error) throw new PixAutomaticError("unknown", 503);
   mandate = renewed.data as PixMandate;
@@ -109,7 +115,8 @@ export async function settlePixPayment(client: SupabaseClient, mandate: PixManda
       await sync(client, mandate, cancelled);
     }
   }
-  if (initial && !mandate.initial_provider_payment_id && (mandate.state !== "ACTIVE" || !approved)) return;
+  // Receipt of the initial Pix and consent for future payments are independent.
+  if (initial && !mandate.initial_provider_payment_id && !approved) return;
   if (!initial && !mandate.initial_provider_payment_id) return;
   let start: Date | null = null, end: Date | null = null;
   if (!initial) {
@@ -128,8 +135,8 @@ export async function settlePixPayment(client: SupabaseClient, mandate: PixManda
   const verified = { ...payment, externalReference: reference };
   const result = await processPlatformBillingAsaasWebhook(client, { dataId: payment.id, eventType: "payment", action: "pix_automatic_reconciled", providerEventId: null, requestId: mandate.id, payload: { payment: verified } }, verified);
   if (["failed", "deferred"].includes(result.processingStatus)) throw new PixAutomaticError("unknown", 503);
-  if (initial && approved && result.processingStatus === "processed") {
-    const saved = await client.from("billing_pix_authorizations").update({ initial_effects_completed: true }).eq("id", mandate.id);
+  if (initial && (approved || payment.status === "REFUNDED") && result.processingStatus === "processed") {
+    const saved = await client.from("billing_pix_authorizations").update(approved ? { initial_effects_completed: true, initial_payment_refunded: false } : { initial_payment_refunded: true }).eq("id", mandate.id);
     if (saved.error) throw new PixAutomaticError("unknown", 503);
   }
 }
@@ -173,7 +180,7 @@ export async function processPixAutomaticWebhook(client: SupabaseClient, payload
   return { ok: true, received: true };
 }
 export async function reconcilePendingPixAutomatic(client: SupabaseClient) {
-  const rows = await client.from("billing_pix_authorizations").select(columns).not("state", "in", "(failed,REFUSED)").order("checked_at", { ascending: true, nullsFirst: true }).limit(10);
+  const rows = await client.from("billing_pix_authorizations").select(columns).neq("state", "failed").order("checked_at", { ascending: true, nullsFirst: true }).limit(10);
   if (rows.error) throw new PixAutomaticError("unavailable", 503);
   let checked = 0, pending = 0;
   for (const row of rows.data ?? []) {

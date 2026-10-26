@@ -1,3 +1,4 @@
+import { isSameOriginRequest } from "@/lib/security/same-origin-request";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -23,7 +24,7 @@ export async function PATCH(request: NextRequest) {
   const workspace = await getCurrentWorkspace({ allowRestricted: true });
   if (!workspace?.organization) return json({ error: "Sessão obrigatória." }, 401);
   if (!["owner", "admin"].includes(workspace.organization.role)) return json({ error: "Somente responsáveis pela conta podem editar o faturamento." }, 403);
-  if (request.headers.get("origin") !== new URL(request.url).origin || !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Origem ou formato não autorizado." }, 403);
+  if (!isSameOriginRequest(request) || !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Origem ou formato não autorizado." }, 403);
   const raw = await request.text();
   if (Buffer.byteLength(raw, "utf8") > 4000) return json({ error: "Payload grande demais." }, 413);
   let address, contact, subscriptionId: string | null, suggestionId: string | null, expectedUpdatedAt: string | null;

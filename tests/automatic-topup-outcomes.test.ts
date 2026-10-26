@@ -30,12 +30,12 @@ function setup(outcome: string | Error) {
     "./commercial-terms": { billingLocalDate: () => "2026-09-10" },
     "./native-card-checkout": { finishNativeBilling: finish },
   });
-  return { run: () => mod.processAutomaticTopups(client), updates, finish, pay, authorizedAt };
+  return { run: () => mod.processAutomaticTopups(client), updates, finish, pay, authorizedAt, client };
 }
 
 it.each(["rejected", "error", "cancelled"])("pauses the original authorization after a returned %s outcome", async state => {
   const f = setup(state);
-  expect(await f.run()).toEqual({ attempted: 1 });
+  expect(await f.run()).toMatchObject({ attempted: 1 });
   expect(f.pay).toHaveBeenCalledTimes(1);
   expect(f.updates.filter(update => update.value.enabled === false)).toEqual([{
     table: "credit_topup_policies", value: { enabled: false, updated_at: expect.any(String) },
@@ -53,3 +53,5 @@ it("keeps an uncertain network result for reconciliation without retrying the ca
   expect(f.pay).toHaveBeenCalledTimes(1);
   expect(f.updates.some(update => update.value.enabled === false)).toBe(false);
 });
+
+it('reports and persists a claim failure without a provider call or disabling consent',async()=>{const f=setup('approved');f.client.rpc.mockResolvedValueOnce({data:null,error:{message:'fixture error'}} as never);expect(await f.run()).toMatchObject({checked:1,attempted:0,failed:1});expect(f.pay).not.toHaveBeenCalled();expect(f.updates.some(u=>u.value.last_error_code==='claim_failed')).toBe(true);expect(f.updates.some(u=>u.value.enabled===false)).toBe(false);});

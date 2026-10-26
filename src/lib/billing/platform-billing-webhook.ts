@@ -2124,10 +2124,10 @@ async function sendBillingNotificationNow(
     if (!currentEvent?.organization_id) throw new Error("Conta do aviso não encontrada.");
     const recipient = await ensureNoticeRecipient(client, currentEvent.organization_id, input.phone);
     if (!recipient.enabled) throw new AccountNoticesOptedOut();
-    if (settings?.notification_whatsapp_enabled === false) throw new Error("Avisos WhatsApp desativados na plataforma.");
+    if (settings?.notification_whatsapp_enabled === false) throw new BillingNoticeBlocked("platform_disabled");
     const platformAgentId = readString(currentEvent.metadata?.platform_sender_agent_id) ?? input.agentId;
     const sender = await resolveNotificationSender(client, currentEvent.organization_id, platformAgentId, input.phone);
-    if (!sender) throw new Error("Nenhum WhatsApp disponível para enviar o aviso. O envio será tentado novamente.");
+    if (!sender) throw new BillingNoticeBlocked("sender_unavailable");
     const button = buildCheckoutActionButton({
       eventType: currentEvent?.event_type ?? null,
       metadata: currentEvent?.metadata ?? null,
@@ -2191,6 +2191,7 @@ async function sendBillingNotificationNow(
           error_message: null,
           next_attempt_at: null,
           delivery_claimed_at: null,
+          delivery_blocked_reason: null,
           attempts: nextAttempts,
           sent_at: new Date().toISOString(),
           provider_message_id: readProviderMessageId(sendResult.providerResponse.data),
@@ -2219,6 +2220,18 @@ async function sendBillingNotificationNow(
     if (saved.some(result => result.error)) throw new Error("Aviso enviado; confirmação de registro em conferência.");
     return true;
   } catch (error) {
+    if (error instanceof BillingNoticeBlocked && !dispatched) {
+      // No provider call took place. A disconnected sender must not exhaust the
+      // customer's delivery attempts or be mistaken for uncertain delivery.
+      const blocked = await client.from("billing_notification_events").update({
+        status: "failed", delivery_claimed_at: null, delivery_uncertain: false,
+        delivery_blocked_reason: error.reason,
+        next_attempt_at: new Date(Date.now() + 15 * 60000).toISOString(),
+        error_message: error.message,
+      }).eq("id", input.eventId);
+      if (blocked.error) throw new Error("Não foi possível registrar a pendência do aviso financeiro.");
+      return false;
+    }
     if (error instanceof AccountNoticesOptedOut) {
       await client.from("billing_notification_events").update({ status: "skipped", delivery_claimed_at: null, next_attempt_at: null, error_message: error.message }).eq("id", input.eventId);
       return false;
@@ -2229,12 +2242,21 @@ async function sendBillingNotificationNow(
         status: "failed",
         delivery_claimed_at: null,
         delivery_uncertain: dispatched && !(error instanceof BillingNoticeProviderError && error.definitive),
-        next_attempt_at: new Date(Date.now() + Math.min(3600000, 60000 * 2 ** nextAttempts)).toISOString(),
+        delivery_blocked_reason: null,
+        next_attempt_at: nextAttempts >= 5 ? null : new Date(Date.now() + Math.min(3600000, 60000 * 2 ** nextAttempts)).toISOString(),
         attempts: nextAttempts,
         error_message: error instanceof Error ? error.message : "Falha ao enviar WhatsApp de billing.",
       })
       .eq("id", input.eventId);
     return false;
+  }
+}
+
+class BillingNoticeBlocked extends Error {
+  constructor(readonly reason: "sender_unavailable" | "platform_disabled") {
+    super(reason === "sender_unavailable"
+      ? "Aviso aguardando conexão de um remetente autorizado. O envio será retomado quando houver conexão."
+      : "Aviso aguardando a ativação dos avisos WhatsApp da plataforma.");
   }
 }
 

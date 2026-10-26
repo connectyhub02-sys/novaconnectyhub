@@ -1,3 +1,4 @@
+import { loadBillingReliability, billingReliabilityIssues } from "@/lib/billing/reliability";
 import { queueDueSocialFollowUps } from "@/lib/meta/social-follow-up";
 import { pauseSuspendedWhatsappCampaigns } from "@/lib/whatsapp/contract-campaign-guard";
 import { processStoreRenewals } from "@/lib/commerce/store-renewals";
@@ -574,14 +575,28 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
       await step.run('reconcile-ai-resources',()=>reconcileAiResources(createServiceClient()));
       await step.run('reconcile-ai-live',()=>reconcileAiLive(createServiceClient()));
       await step.run("reconcile-platform-usage", () => reconcileUsageDebits(createServiceClient()));
-      const topups = await step.run("process-authorized-topups", () => processAutomaticTopups(createServiceClient()));
+
       const meetings = await step.run("send-meeting-reminders", () => processCustomMeetingReminders(createServiceClient()));
 
       return {
         status: "swept",
         summary,
-        walletAlerts, ai, topups, meetings,
+        walletAlerts, ai, meetings,
     };
+  },
+);
+
+// Financial work is independent of unrelated AI/media reconciliation failures.
+export const connectyhubBillingReliability = inngest.createFunction(
+  { id: "connectyhub-billing-reliability", name: "ConnectyHub Cobranças e pendências financeiras", retries: 0, concurrency: { limit: 1 }, triggers: [{ cron: "*/5 * * * *" }] },
+  async ({ step }) => {
+    const topups = await step.run("process-authorized-topups", () => processAutomaticTopups(createServiceClient()));
+    const health = await step.run("check-billing-health", () => loadBillingReliability(createServiceClient()));
+    const issues = billingReliabilityIssues(health);
+    // A failed business result must not be presented as a successful empty sweep.
+    // No automatic retry of the debit step: durable attempts reconcile separately.
+    if (topups.failed || issues.length) throw new Error("Cobranças requerem atenção: " + issues.map(issue => issue.label + ": " + issue.count).join("; ") + (topups.failed ? "; falhas na recarga: " + topups.failed : ""));
+    return { topups, health };
   },
 );
 
@@ -871,6 +886,7 @@ export const functions = [
   connectyhubWhatsappContractGuard,
   connectyhubLeadMediaArchive,
   connectyhubTransparentCheckoutReconciliation,
+  connectyhubBillingReliability,
   connectyhubDailyAdminReport,
   connectyhubAdminPing,
   connectyhubWhatsappSync,

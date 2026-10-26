@@ -54,9 +54,9 @@ async function loadOutboxNotice(client: SupabaseClient, row: OutboxRow, appUrl: 
   if (row.event_type === "credit_topup_disabled" && p.enabled) return null;
   if (row.event_type === "credit_topup_action_required") {
     if (row.metadata.reason === "offer_changed" ? p.enabled : !p.enabled) return null;
-    const wallet = await client.from("credit_wallets").select("balance_credits").eq("organization_id", row.organization_id).single();
+    const wallet = await client.from("credit_wallets").select("balance_credits,reserved_credits").eq("organization_id", row.organization_id).single();
     if (wallet.error) throw new Error("Saldo indisponível para conferir o aviso.");
-    if (Number(wallet.data.balance_credits) > Number(p.threshold_credits)) return null;
+    if (Number(wallet.data.balance_credits) - Number(wallet.data.reserved_credits ?? 0) > Number(p.threshold_credits)) return null;
     if (row.metadata.reason === "monthly_cap" && row.metadata.cap_month !== new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(new Date())) return null;
     if (row.metadata.reason === "card_unavailable") {
       const card = await client.from("billing_asaas_card_vault").select("status").eq("id", p.card_method_id).eq("organization_id", row.organization_id).maybeSingle();

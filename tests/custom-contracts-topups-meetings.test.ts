@@ -6,12 +6,13 @@ import {commercialDb} from "./helpers/commercial-db";
 let db:PGlite;const admin=randomUUID();
 beforeAll(async()=>{
  db=await commercialDb();await db.exec(`alter table profiles add column is_platform_admin boolean default false;
+ alter table organization_members add column role text;
  alter table platform_products add column price text,add column short_description text,add column commercial_description text,add column offer jsonb default '{}',add column metadata jsonb default '{}';
- alter table credit_wallets add column reserved_credits numeric default 0;
+ alter table credit_wallets add column reserved_credits numeric default 0,add column status text default 'active';
  alter table billing_notification_events add column dedupe_key text unique;
  insert into auth.users(id) values('${admin}');insert into profiles(id,is_platform_admin) values('${admin}',true);`);
  const money=readFileSync("supabase/migrations/0076_transparent_checkout_attempts.sql","utf8");await db.exec(money.slice(money.indexOf("create or replace function public.checkout_money"),money.indexOf("create or replace function public.guard_checkout_order_revision")));
- for(const name of ["0107_custom_contracts","0108_wallet_alert_episodes","0109_custom_software_meetings","0110_automatic_credit_topups","0112_custom_meeting_reminders","0121_account_billing_notice_outbox"])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,"utf8"));
+ for(const name of ["0107_custom_contracts","0108_wallet_alert_episodes","0109_custom_software_meetings","0110_automatic_credit_topups","0112_custom_meeting_reminders","0121_account_billing_notice_outbox","0154_pix_automatic","0213_billing_notice_recovery","0214_pix_initial_payment_independent","0215_topup_available_balance","0216_billing_reliability_monitor"])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,"utf8"));
 },60000);
 afterAll(async()=>{await db?.close();});
 async function configuredTopup(){
@@ -134,4 +135,44 @@ it("claims an authorized one-off topup once, enforces its cap and never changes 
  for(let n=0;n<2;n++) await db.query("select fulfill_confirmed_billing_payment(id,payload->>'target_plan_code',(payload->>'cycle_start_at')::timestamptz,(payload->>'cycle_end_at')::timestamptz,'{}') from billing_payments where id=$1",[first.attempt.payment_id]);
  expect((await db.query<{amount:string}>("select amount from test_credit_grants where organization_id=$1",[a.org])).rows.map(r=>Number(r.amount))).toEqual([5000]);
  const s=(await db.query<{plan_code:string;metadata:{commercial_terms:{price_brl:number}}}>("select plan_code,metadata from organization_subscriptions where id=$1",[a.sub])).rows[0];expect(s.plan_code).toBe("pro");expect(s.metadata.commercial_terms.price_brl).toBe(247);
+});
+
+it('uses spendable credits for the automatic topup and claims only once',async()=>{
+ const a=await configuredTopup();await db.query('update credit_wallets set balance_credits=1500,reserved_credits=600 where organization_id=$1',[a.org]);
+ const first=(await db.query<{r:{claimed:boolean}}>('select claim_credit_topup($1) r',[a.org])).rows[0].r;expect(first.claimed).toBe(true);
+ expect((await db.query('select claim_credit_topup($1) r',[a.org])).rows[0]).toEqual({r:null});
+ expect((await db.query('select * from credit_topup_runs where organization_id=$1',[a.org])).rows).toHaveLength(1);
+});
+it('does not top up a paused wallet and preserves the monthly authorization',async()=>{const a=await configuredTopup();await db.query("update credit_wallets set status='paused' where organization_id=$1",[a.org]);expect((await db.query('select claim_credit_topup($1) r',[a.org])).rows[0]).toEqual({r:null});expect((await db.query('select enabled,monthly_cap_brl from credit_topup_policies where organization_id=$1',[a.org])).rows[0]).toMatchObject({enabled:true,monthly_cap_brl:'47.00'});});
+it('queues alerts when reservations change and reports the available amount',async()=>{const a=await account();await db.query('update credit_wallets set balance_credits=1000,reserved_credits=950 where organization_id=$1',[a.org]);const row=(await db.query<{r:{level:number;balance_credits:number}}>('select claim_wallet_alert($1) r',[a.org])).rows[0].r;expect(row).toMatchObject({level:10,balance_credits:50});});
+it('skips outdated daily reminders and superseded wallet alerts before dispatch',async()=>{const a=await account();const id=randomUUID();await db.query("insert into billing_notification_events(id,organization_id,subscription_id,event_type,status,created_at,next_attempt_at) values($1,$2,$3,'paid_plan_renewal_reminder','failed',now()-interval '2 days',now())",[id,a.org,a.sub]);expect((await db.query('select claim_billing_notice($1) claimed',[id])).rows[0]).toEqual({claimed:false});expect((await db.query('select status from billing_notification_events where id=$1',[id])).rows[0]).toEqual({status:'skipped'});});
+
+it('recovers only proven no-dispatch failures while preserving uncertain, delivered and opted-out notices',async()=>{
+ const a=await account(),ids=Array.from({length:4},()=>randomUUID());
+ for(let i=0;i<ids.length;i++)await db.query("insert into billing_notification_events(id,organization_id,subscription_id,event_type,status,attempts,delivery_uncertain,provider_message_id,error_message) values($1,$2,$3,'payment_pending',$4,5,$5,$6,'Nenhum WhatsApp disponível para enviar o aviso. O envio será tentado novamente.')",[ids[i],a.org,a.sub,i===2?'sent':i===3?'skipped':'failed',i===1,i===2?'provider-fixture':null]);
+ const migration=readFileSync('supabase/migrations/0213_billing_notice_recovery.sql','utf8');await db.exec(migration.slice(migration.indexOf('update public.billing_notification_events'),migration.indexOf('create or replace function')));
+ expect((await db.query('select attempts,delivery_blocked_reason from billing_notification_events where id=$1',[ids[0]])).rows[0]).toEqual({attempts:0,delivery_blocked_reason:'sender_unavailable'});
+ for(const id of ids.slice(1))expect((await db.query('select attempts,delivery_blocked_reason from billing_notification_events where id=$1',[id])).rows[0]).toEqual({attempts:5,delivery_blocked_reason:null});
+ const health=(await db.query<{r:{blockedNotices:number;uncertainNotices:number}}>('select billing_reliability_snapshot() r')).rows[0].r;expect(health.blockedNotices).toBeGreaterThan(0);expect(health.uncertainNotices).toBeGreaterThan(0);
+ expect((await db.query("select has_function_privilege('authenticated','billing_reliability_snapshot()','EXECUTE') ok")).rows[0]).toEqual({ok:false});
+});
+
+it.each(['CREATED','REFUSED'])('grants a received initial Pix exactly once while recurrence is %s, then links a later activation without granting again',async state=>{
+ const a=await account(),x=await invoice(a),id=randomUUID();
+ await db.query("insert into billing_plans(plan_code,name,monthly_price_brl,included_credits) values('pro','Pro',247,1000) on conflict do nothing");
+ await db.query("update organization_subscriptions set status='pending' where id=$1",[a.sub]);
+ await db.query("select begin_billing_pix_authorization($1,$2,$3,$4,$5,'sandbox',0,247,247,'MONTHLY','2035-10-17')",[a.org,a.user,a.sub,x.pay,id]);
+ await db.query("update billing_pix_authorizations set customer_id='cus_fixture',state='dispatching' where id=$1",[id]);
+ const remote={id:'auth_'+id,status:state,contractId:id.replaceAll('-',''),customerId:'cus_fixture',subscriptionId:'',value:247,frequency:'MONTHLY',startDate:'2035-10-17',paymentCreationMode:'SUBSCRIPTION',conciliationIdentifier:'txid_'+id};
+ await db.query('select sync_billing_pix_authorization($1,$2,null)',[id,remote]);
+ for(let i=0;i<2;i++){
+  await db.query("select bind_billing_pix_payment($1,$2,247,true,null,null)",[id,'pay_'+id]);
+  await db.query("update billing_payments set status='approved',paid_at=now() where id=$1",[x.pay]);
+  await db.query("select fulfill_confirmed_billing_payment($1,'pro',now(),now()+interval '30 days','{}')",[x.pay]);
+ }
+ expect((await db.query('select * from test_credit_grants where organization_id=$1',[a.org])).rows).toHaveLength(1);
+ expect((await db.query('select provider_subscription_id from organization_subscriptions where id=$1',[a.sub])).rows[0]).toEqual({provider_subscription_id:null});
+ await db.query('select sync_billing_pix_authorization($1,$2,null)',[id,{...remote,status:'ACTIVE',subscriptionId:'sub_'+id}]);
+ expect((await db.query('select provider_subscription_id from organization_subscriptions where id=$1',[a.sub])).rows[0]).toEqual({provider_subscription_id:state==='CREATED'?'sub_'+id:null});
+ expect((await db.query('select * from test_credit_grants where organization_id=$1',[a.org])).rows).toHaveLength(1);
 });

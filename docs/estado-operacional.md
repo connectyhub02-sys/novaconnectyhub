@@ -1,5 +1,49 @@
 # Estado operacional da ConnectyHub
 
+## Correções da auditoria de cobrança — 26/10/2026
+
+Implementadas nesta revisão, aguardando publicação: avisos bloqueados sem consumo
+indevido de tentativas, descarte de lembretes antigos, Pix inicial independente da
+ativação recorrente, origem canônica, recargas por saldo disponível e monitor
+financeiro no admin/Inngest. Migrações 0213–0216 ensaiadas com ROLLBACK e preservação
+do estado financeiro. Testes focalizados: 127 aprovados; tipos sem erros. Suíte
+completa: 4.491 aprovados e 15 falhas anteriores reproduzidas na revisão base.
+Eliane reconectada no painel e credencial confirmada em produção às 17h08 BRT.
+Nenhuma cobrança ou mensagem de teste. Homologação financeira real permanece
+pendente; Betel recusada pelo banco, dois avisos incertos e Pix sem vínculo comercial
+exigem tratamento específico. [Detalhes e evidências](correcao-confiabilidade-cobranca-2026-10-26.md).
+
+
+## Auditoria de cobrança — 26/10/2026
+
+Leitura de produção, Asaas e Inngest, aproximadamente 16h14–16h29 BRT, com aplicação
+`b8faced7` no slot b. **Cobrança ainda não certificada como integralmente saudável.**
+Sete avisos recentes de Vision/Pizzaria falharam por falta de remetente elegível e
+esgotaram cinco tentativas; remetente financeiro da plataforma arquivado. Dois
+avisos antigos permanecem em entrega incerta. As duas rotinas financeiras tiveram
+576 execuções concluídas cada nas 48 horas consultadas, mas conclusão da rotina
+oculta falhas de negócio. Recarga ignora erro do RPC de reserva em seu resultado.
+
+Reproduzidos localmente: origem interna do proxy rejeita criação de Pix Automático;
+primeiro Pix RECEIVED sem mandato ACTIVE não recebe fulfillment; erro de claim da
+recarga resulta em zero tentativas. RPC instalado da recarga usa saldo bruto sem
+reservas. Zero recargas executadas, zero mandatos Pix Automático ativos e zero
+tentativas de cartão com dia automático registrado: homologações pendentes.
+
+Betel: bloqueio temporário da campanha ausente após correção 0210; tentativa
+pontual de 23/10 recusada, cobrança ainda OVERDUE no Asaas e acesso paid_expired.
+Vision: recarga autorizada no cartão 7842, 5.000 créditos/R$47, gatilho100 e teto
+R$47/mês; verificada pelo worker, ainda acima do gatilho. Mensalidade permanece
+desativada por origem administrativa, acesso por exceção. Nenhuma condição alterada.
+
+Dois pagamentos aprovados conferidos no Asaas, com fulfillment; saldos fecham com
+o livro de créditos e não há duplicidade por pagamento/consumo nas consultas.
+Webhook ativo/não interrompido. Três Pix diretos sem vínculo local exigem conciliação
+comercial, sem presumir que pertençam a mensalidades. 370 testes existentes e três
+experimentos locais concluídos. Sem débito, mensagem, reparo ou deploy nesta tarefa.
+Correções e homologações permanecem pendentes.
+[Achados, prioridades, evidências e limites](auditoria-cobranca-2026-10-26.md).
+
 ## Voz expressiva e custo do Estúdio nos agentes — 23/10/2026
 
 Publicado às 14h38 BRT: `469f91cb`, slot a/3130; anterior `910dbe12` no b.

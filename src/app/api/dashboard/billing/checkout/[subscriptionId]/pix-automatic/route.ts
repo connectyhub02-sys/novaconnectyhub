@@ -8,6 +8,7 @@ import { PixAutomaticError } from "@/lib/billing/asaas-pix-automatic-api";
 import { assertAccountComplete, loadAccountDocument } from "@/lib/account/signup-completion";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { record } from "@/lib/sales-catalog/card-input";
+import { isSameOriginRequest } from "@/lib/security/same-origin-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest, context: Context) {
     const { workspace, subscriptionId } = await scope(context);
     const guard = validatePublicWriteRequest({ headers: request.headers, requestUrl: request.url, routeKey: "billing-pix-automatic", maxPayloadBytes: 3000, rateLimit: { limit: 10, windowMs: 60000 } });
     if (!guard.ok) return json({ error: guard.message }, guard.status);
-    if (request.headers.get("origin") !== new URL(request.url).origin || !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Origem ou formato não autorizado." }, 403);
+    if (!isSameOriginRequest(request) || !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Origem ou formato não autorizado." }, 403);
     const raw = await request.text();
     if (Buffer.byteLength(raw, "utf8") > 3000) return json({ error: "Payload grande demais." }, 413);
     let body: Record<string, unknown>;

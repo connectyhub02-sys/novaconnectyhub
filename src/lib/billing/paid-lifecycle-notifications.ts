@@ -178,6 +178,7 @@ export async function processPaidBillingLifecycleNotifications(
       if (cardAttempt.attempted) {
         summary.cardRenewalAttempts += 1;
       }
+      if (cardAttempt.failed) summary.failed += 1;
 
       if (cardAttempt.approved) {
         summary.cardRenewalApproved += 1;

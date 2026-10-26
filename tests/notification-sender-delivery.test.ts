@@ -91,3 +91,16 @@ it("preserves required buttons when a definite rejection permits the configured 
     expect(body.text).not.toMatch(/https?:\/\//);
   }
 });
+
+it("waits for a missing sender without consuming delivery attempts, then resumes through the authorized sender", async () => {
+  const f = setup(); f.resolver.resolveNotificationSender.mockResolvedValueOnce(null as never);
+  expect(await f.deliver()).toBe(false); expect(f.fetch).not.toHaveBeenCalled();
+  expect(f.updates.at(-1)).toMatchObject({status:"failed",delivery_blocked_reason:"sender_unavailable",delivery_uncertain:false,delivery_claimed_at:null});
+  expect(f.updates.at(-1)).not.toHaveProperty("attempts");
+  expect(await f.deliver()).toBe(true);expect(f.fetch).toHaveBeenCalledOnce();
+  expect(f.updates.at(-1)).toMatchObject({status:"sent",delivery_blocked_reason:null,attempts:1});
+});
+it("never resumes an unclaimed uncertain notice", async () => {
+  const f=setup();f.client.rpc.mockResolvedValueOnce({data:false});
+  expect(await f.deliver()).toBe(false);expect(f.fetch).not.toHaveBeenCalled();expect(f.resolver.resolveNotificationSender).not.toHaveBeenCalled();
+});
