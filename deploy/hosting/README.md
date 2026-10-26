@@ -87,3 +87,16 @@ quantidade e escala adaptativa azul, explicitamente sem limite contratado.
 testa pausa/retomada/quarentena/exclusão e remove apenas seus próprios recursos.
 Interrompe em caso de falha; revisar o estado antes de repetir. Nunca usar um cliente
 real para homologar exclusão.
+
+
+## Retenção de publicações
+
+A retenção limitada de artefatos e o timer estão descritos em
+[ARTIFACT-RETENTION.md](ARTIFACT-RETENTION.md). Ela não executa operações do broker,
+não para serviços e não remove volumes, backups ou dados de negócio.
+
+A partir de 26/10, a medição reconhece também os containers antigos/candidatos do
+admin Vision que usam exclusivamente uma release sob a raiz revisada. Essa exceção
+existe somente em measurement_inventory, sem ampliar a permissão de exclusão do
+executor. Montagens externas, volumes extras e famílias desconhecidas continuam
+sujeitos à recusa do inventário estrito.

@@ -1,0 +1,11 @@
+[Unit]
+Description=Bounded application artifact retention every six hours
+
+[Timer]
+OnCalendar=*-*-* 05,11,17,23:15:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+Unit=connectyhub-artifact-retention.service
+
+[Install]
+WantedBy=timers.target

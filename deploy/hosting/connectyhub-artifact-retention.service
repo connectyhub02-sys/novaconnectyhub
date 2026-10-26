@@ -1,0 +1,22 @@
+[Unit]
+Description=Retain recovery versions and remove old reproducible application artifacts
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/connectyhub/hosting/artifact_retention.py --apply
+TimeoutStartSec=3h
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=50%
+MemoryMax=768M
+User=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/connectyhub/app/releases /opt/connectyhub/app/release.lock
+ReadWritePaths=/opt/vision/app/releases /opt/vision/app/release.lock
+ReadWritePaths=/var/lib/connectyhub-artifact-retention /opt/connectyhub/monitoring/public /run/lock
+

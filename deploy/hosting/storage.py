@@ -76,8 +76,31 @@ def measure_paths(parts):
     return totals
 
 
+def measurement_inventory(project, all_containers=None):
+    """Attribute reviewed application releases for measurement only; never widen deletion ownership."""
+    all_containers = broker.containers() if all_containers is None else all_containers
+    cfg = broker.config(project)
+    extras = []
+    if project == 'vision':
+        root = Path('/opt/vision/app/releases')
+        for container in all_containers:
+            name = container['Name'].lstrip('/')
+            mounts = container.get('Mounts', [])
+            if (not broker.belongs(container, cfg)
+                    and re.fullmatch(r'vision-demo-admin-(?:candidate|rollback|failed)-[a-zA-Z0-9_-]+', name)
+                    and container['Config']['Image'] == 'node:22-alpine'
+                    and len(mounts) == 1 and mounts[0]['Type'] == 'bind'
+                    and Path(mounts[0]['Source']).parent == root
+                    and Path(mounts[0]['Source']).resolve() == Path(mounts[0]['Source'])
+                    and any(broker.inside(str(root), owned) for owned in cfg['directories'])):
+                extras.append(container)
+    extra_ids = {c['Id'] for c in extras}
+    selected, volumes = broker.inventory(project, [c for c in all_containers if c['Id'] not in extra_ids])
+    return selected + extras, volumes
+
+
 def local_storage(project, all_containers):
-    selected, volumes = broker.inventory(project, all_containers)
+    selected, volumes = measurement_inventory(project, all_containers)
     for line in Path('/proc/self/mountinfo').read_text().splitlines():
         mount = re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), line.split()[4])
         if any(broker.inside(mount, root) for root in broker.config(project)['directories']):
@@ -106,7 +129,7 @@ def local_storage(project, all_containers):
             writable += size
     totals['writable'] = writable
     # A deploy or another project's mount must not silently change the attribution during collection.
-    fresh, fresh_volumes = broker.inventory(project)
+    fresh, fresh_volumes = measurement_inventory(project)
     if {c['Id'] for c in fresh} != {c['Id'] for c in selected} or fresh_volumes != volumes:
         raise ValueError('inventory_changed')
     return dict(status='ok', observedAt=timestamp(), bytes=sum(totals.values()), components=components(totals))

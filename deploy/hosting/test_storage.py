@@ -21,6 +21,25 @@ def page(objects, truncated=False, token='next'):
 
 
 class StorageTests(unittest.TestCase):
+    def test_old_release_is_measured_without_expanding_destructive_inventory(self):
+        cfg = {'directories': ['/opt/vision']}
+        item = {'Id': 'old', 'Name': '/vision-demo-admin-rollback-20261001-example',
+                'Config': {'Image': 'node:22-alpine'},
+                'Mounts': [{'Type': 'bind', 'Source': '/opt/vision/app/releases/release-20261001-example'}]}
+        with patch.object(storage.broker, 'config', return_value=cfg), patch.object(storage.broker, 'belongs', return_value=False), patch.object(storage.Path, 'resolve', lambda self: self), patch.object(storage.broker, 'inventory', return_value=([], [])) as inventory:
+            selected, _ = storage.measurement_inventory('vision', [item])
+            self.assertEqual(selected, [item])
+            inventory.assert_called_once_with('vision', [])
+
+    def test_foreign_mount_still_reaches_strict_ownership_guard(self):
+        item = {'Id': 'foreign', 'Name': '/vision-demo-admin-rollback-20261001-example',
+                'Config': {'Image': 'node:22-alpine'},
+                'Mounts': [{'Type': 'bind', 'Source': '/opt/other/customer-data'}]}
+        with patch.object(storage.broker, 'config', return_value={'directories': ['/opt/vision']}), patch.object(storage.broker, 'belongs', return_value=False), patch.object(storage.broker, 'inventory', side_effect=ValueError('foreign_owner')) as inventory:
+            with self.assertRaisesRegex(ValueError, 'foreign_owner'):
+                storage.measurement_inventory('vision', [item])
+            inventory.assert_called_once_with('vision', [item])
+
     def test_pagination_and_safe_aggregate_only(self):
         with patch.object(storage, 'list_page', side_effect=[page([('private/person%20one.JPG', 10)], True), page([('private/voice.opus', 20)])]) as fetch:
             totals, count = storage.measure_bucket('account', 'bucket', 'access', 'secret')
