@@ -1,5 +1,24 @@
 # Estado operacional da ConnectyHub
 
+## Fotos dos leads renovadas — 26/10/2026
+
+Publicado `0c19c471` no slot b às 19h05 BRT; `04314db0` preservado no a.
+Migration 0219 aplicada após backup privado espelhado e ensaio com ROLLBACK.
+Links das fotos de Andre e Magno salvos em 12/10 retornavam 403; o atendimento
+não renovava URL existente. Consulta na própria conexão forneceu links novos
+HTTP 200, gravados somente nos campos de foto e datas. Fotos confirmadas no
+navegador na lista e nos cabeçalhos das conversas.
+
+Renovação de links WhatsApp antigos/próximos do vencimento ao carregar o CRM
+administrativo e na ingestão de mensagens; reserva exclusiva, intervalo entre
+tentativas, limite de seis consultas por abertura e cinco segundos por chamada.
+Conclusão atômica preserva metadados CRM concorrentes e fotos de webhook mais
+novas. Funções de banco restritas a service_role e à mesma organização. Imagem
+indisponível continua com iniciais. Nenhum envio, recarga ou cobrança de teste.
+62 testes em dez arquivos, tipos, ESLint, build, candidato/HTTPS, 19 assets,
+rotas protegidas e GET assinado Inngest (59 funções) aprovados. Não se provocou
+vencimento de imagem em produção. [Evidências e limites](fotos-leads-atendimento-2026-10-26.md).
+
 ## Identificação dos contatos no atendimento — 26/10/2026
 
 Publicado `04314db0` no slot a às 18h42 BRT, anterior `eda1eebf` no b preservado.
