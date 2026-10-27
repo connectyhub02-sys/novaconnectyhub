@@ -1,5 +1,36 @@
 # Estado operacional da ConnectyHub
 
+## Realtime recuperado e falha editorial da Vision diagnosticada — 27/10/2026
+
+Às 03h08 BRT foi iniciado somente `realtime-dev.supabase-realtime`, que estava
+encerrado desde 24/10. Docker registrava `no space left on device` tanto ao montar
+o runtime quanto ao executar o healthcheck. Após a folga de disco recuperada em
+26/10, voltou a running/healthy, sem reinícios subsequentes. Coleta de capacidade
+às 03h13 BRT não encontrou serviços unhealthy ou fora de running; disco 84,44%.
+Retenção agendada das 02h22 também concluída com sucesso. Outros serviços não
+foram reiniciados nesta recuperação.
+
+A análise editorial apresentada pelo titular chegou à API e foi liquidada, mas
+a resposta tinha `finishReason=MAX_TOKENS`. No release Vision em produção
+`release-20261027-paid-strategist-r9d`, a retomada restaurava o corpo original
+somente para campanhas pagas assistidas. A análise editorial reconstruía contexto
+com a mesma identidade e o adaptador local recusava a divergência. Isso é separado
+do Realtime da ConnectyHub: o conflito observado não comprova indisponibilidade
+geral da API. A correção editorial já está sendo trabalhada na tarefa Vision;
+não foi duplicada nem publicada por esta tarefa.
+
+Verificações sem geração: GET autenticado de modelos com a chave Vision retornou
+200/35 modelos; GET da operação original retornou 200/completed e MAX_TOKENS;
+health ConnectyHub e login Vision HTTP 200. Houve chamadas concluídas no período,
+mas isso não garante qualidade de todas as respostas. Na janela de oito horas,
+cinco operações falharam com código genérico e uma por crédito insuficiente,
+todas sem débito; os códigos genéricos não bastam para atribuir causa. Carteira
+Vision estava ativa e com saldo disponível na leitura atual. Sem nova geração,
+cobrança, envio WhatsApp, replay ou alteração dos registros financeiros nos testes.
+
+Pendência: validar a publicação da correção editorial na tarefa Vision; não
+declarar o erro da prévia resolvido apenas pela recuperação do Realtime.
+
 ## Limpeza segura e retenção automática de disco — 26/10/2026
 
 Concluída às 20h18 BRT: de aproximadamente 98% ocupado/7 GiB livres para
