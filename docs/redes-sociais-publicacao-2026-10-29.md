@@ -141,3 +141,78 @@ implantação detalhado fica no topo de `estado-operacional.md`.
 - Nenhum segredo registrado nesta documentação. Publicação externa real,
   agendamento, renovação e falha parcial continuam sem homologação. Cadastro
   de aplicativos e sucesso OAuth não comprovam publicação funcional.
+
+### Preparação da revisão pública — 29/10/2026
+
+Nova inspeção encontrou os campos de URLs/domínio do branding Google vazios,
+apesar do registro anterior de salvamento. Foram preenchidos novamente, com
+ícone oficial, site, privacidade, termos e domínio; desta vez a navegação para
+outra página e retorno confirmou a persistência. Acesso a dados foi salvo com
+`youtube.readonly` e `youtube.upload`, ambos exibidos como sensíveis. Público
+continua externo em **Testando**; nenhuma revisão pública foi enviada.
+
+Justificativas preparadas para o Google:
+
+- `youtube.readonly`: "Identify the channel authorized by the user, confirm the
+  selected destination before publishing, and read the processing status of
+  videos uploaded through ConnectyHub. The app does not collect unrelated
+  channel analytics or feed YouTube API data to its AI video analysis."
+- `youtube.upload`: "Upload the user's original video to the selected channel
+  only after explicit approval of its title, description, privacy, audience
+  and synthetic-content declaration, immediately or at the approved time."
+
+O Search Console tinha `https://connectyhub.com.br/` cadastrado, mas não
+verificado. O titular autorizou publicar a comprovação e confirmar a conta
+`connectyhub01@gmail.com` como proprietária. A identificação pública fornecida
+no método Tag HTML usa a configuração existente `GOOGLE_SITE_VERIFICATION`;
+não é credencial OAuth. A conclusão operacional fica no estado operacional.
+
+TikTok Production: importados dados do Sandbox para o formulário, com texto de
+revisão. **Save retorna "This form has 1 error" / "Please upload at least one
+video".** Assim, o preenchimento está apenas na aba aberta e não é um cadastro
+de produção salvo. O Sandbox permanece salvo. O portal inclui `video.upload`
+junto a Content Posting API; não foi encontrado controle individual de remoção.
+O sistema só solicita `user.info.basic` e `video.publish`. Resolver essa
+discrepância com o portal/suporte antes de declarar todos os escopos demonstrados.
+
+Ajustes locais do editor: consulta automática de creator_info ao selecionar
+TikTok/abrir rascunho, descarte de resposta obsoleta, nova escolha de privacidade
+e consentimento, controles comerciais com rótulos e bloqueio de privacidade
+SELF_ONLY para parceria paga. Validados com conta fictícia em prévia local;
+isso não constitui demonstração real para o provedor. Política e termos também
+têm texto local sobre YouTube/TikTok, finalidade dos dados, revogação e links
+oficiais. Esse conjunto **não faz parte da release de comprovação do domínio**.
+
+#### Requisitos que ainda bloqueiam o envio da revisão
+
+1. Concluir a implementação e operação de retenção/exclusão dos dados de API.
+   A desconexão atual remove tokens/perfil, mas resultados e identificadores
+   permanecem em `social_deliveries`. A falha de verificação marca `reconnect`;
+   não há limpeza periódica comprovada para revogação externa nem para dados
+   antigos. Validar o prazo exigido de sete dias e atualização/exclusão em 30
+   dias, com isolamento por empresa e proteção de publicações em andamento.
+   Não afirmar conformidade concluída nem publicar compromisso sem execução.
+2. Publicar e conferir os ajustes de interface e políticas; explicar o recurso
+   de redes sociais no site público. Validar renovação, entrega real e falha
+   parcial, além do OAuth já comprovado.
+3. Gravar demonstrações reais. YouTube: consentimento em inglês, nome do app,
+   barra de endereço com identificação do cliente, seleção de canal, upload e
+   resultado, disponibilizados em vídeo não listado. TikTok: primeiro envio
+   usando Sandbox, domínio real, consentimento, opções do criador, prévia,
+   aprovação e resultado; MP4/MOV até 50 MB, até cinco arquivos.
+4. O teste de publicação exige autorização específica para o vídeo e contas.
+   Foi criado apenas um clipe local de cinco segundos, sem áudio, com formas
+   geométricas originais, em `tmp/social-app-setup/connectyhub-review-test.mp4`.
+   Não é a gravação de demonstração e não foi enviado a redes. Para Sandbox
+   TikTok não auditado, conferir exigência atual de conta privada e SELF_ONLY;
+   não mudar a privacidade do perfil empresarial sem consentimento do titular.
+5. Verificar o prefixo R2 também em Production TikTok, salvar/submeter o app,
+   publicar o público OAuth Google e enviar revisão dos escopos somente após
+   completar os requisitos. Trocar credenciais Sandbox por Production apenas
+   quando a configuração aprovada permitir os testes finais de clientes.
+
+Fontes oficiais consultadas nesta preparação:
+[Google: escopos sensíveis](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification),
+[YouTube: políticas de desenvolvedor](https://developers.google.com/youtube/terms/developer-policies),
+[TikTok: revisão do app](https://developers.tiktok.com/docs/en/app-review-guidelines),
+[TikTok: requisitos de publicação](https://developers.tiktok.com/docs/en/content-sharing-guidelines).

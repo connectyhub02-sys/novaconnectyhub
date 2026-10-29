@@ -5,6 +5,7 @@ type LegalSection = {
   title: string;
   paragraphs: string[];
   items?: string[];
+  links?: { label: string; href: string }[];
 };
 
 export function LegalPage({
@@ -70,6 +71,17 @@ export function LegalPage({
                     ))}
                   </ul>
                 ) : null}
+                {section.links && (
+                  <ul className="mt-5 space-y-2 text-sm">
+                    {section.links.map((link) => (
+                      <li key={link.href}>
+                        <a href={link.href} className="text-emerald-300 underline underline-offset-4">
+                          {link.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
             ))}
           </div>

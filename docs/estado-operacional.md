@@ -1,5 +1,54 @@
 # Estado operacional da ConnectyHub
 
+## Aprovação pública YouTube/TikTok — preparação em 29/10/2026
+
+Google Search Console confirmou **Propriedade verificada** por Tag HTML para
+`https://connectyhub.com.br/` e **Propriedade verificada automaticamente** para
+o endereço canônico `https://www.connectyhub.com.br/`, na conta
+`connectyhub01@gmail.com`, após autorização específica do titular. As URLs,
+domínio e logo do branding OAuth foram preenchidos novamente e conferidos após
+navegar para outra página; os escopos `youtube.readonly` e `youtube.upload`
+também foram salvos. App permanece externo em **Testando**, sem revisão enviada.
+
+Para publicar a comprovação, release **712ba98ddcbd857a326ede1ee335bff8c1feebe9**
+preparada e ativada no slot **b/3131**, às 19:55 UTC. Código de aplicação igual
+ao publicado anteriormente, acrescido do ícone oficial de 1024 px/documentação;
+`GOOGLE_SITE_VERIFICATION` configurado em build.env e production.env privados.
+Backups dos dois arquivos: sufixo `.before-google-verification-20261029T194605Z`.
+Slot **a** preserva `35626c226ce62be48dfa4eacd17da86306e0395c` para retorno.
+Sem migration. Build/TypeScript passaram; candidato confirmou login/assets,
+401/307 nas rotas privadas, schema social e Inngest assinado com 59 funções.
+HTTPS público confirmou SHA e metatag. Builder parado ao concluir. Não remover
+a configuração de verificação em futuras releases; rollback anterior não inclui
+a metatag e exige manter a comprovação antes de depender da verificação Google.
+
+TikTok Production: formulário importado do Sandbox, mas **não salvo**. Save
+aponta erro obrigatório de vídeo demonstrativo. A aba foi preservada; não há
+submissão nem aprovação. O Sandbox continua salvo e suas credenciais continuam
+no cofre. Cadastro de app e OAuth real não demonstram publicação funcional.
+
+Ajustes locais, fora dessa release: opções atuais do criador carregadas
+automaticamente, invalidação de respostas antigas, privacidade/consentimento
+renovados e controles de conteúdo comercial; textos de privacidade/termos com
+YouTube/TikTok e links oficiais. TypeScript, ESLint e 47 testes sociais passaram;
+prévia local com dados fictícios confirmou carga automática, interações
+indisponíveis, escolha obrigatória de divulgação e rótulos, bloqueio de
+SELF_ONLY para parceria paga e ausência de erros de navegador.
+
+Pendências antes da revisão: retenção/exclusão de dados de API após revogação e
+para histórico antigo, publicação e validação do fluxo revisado, demonstração
+real com envio de vídeo, descrição pública do recurso, prefixo R2 de produção
+TikTok e revisão de escopos. Não declarar conformidade ou liberação concluídas.
+
+Conta TikTok @connectyhub.ia observada pública; nenhuma privacidade alterada.
+Titular escolheu **outra conta privada de testes** para a demonstração; aguardam-se
+o @ e o login direto no navegador. Vídeo técnico original de cinco segundos
+preparado apenas como arquivo local, sem áudio/dados de clientes; não publicado.
+Gravação exigida pelos provedores ainda não existe. [Requisitos e roteiro](redes-sociais-publicacao-2026-10-29.md#preparação-da-revisão-pública--29102026).
+Ao encerrar, o controle do Chrome passou a exigir atualização da extensão do
+ChatGPT; retomar após atualização. Abas de trabalho tinham sido marcadas para
+continuidade antes desse bloqueio. Servidor de prévia local encerrado.
+
 ## Publicação multiplataforma — publicada para testes, 29/10/2026
 
 Implementados editor unificado, biblioteca R2, diagnóstico técnico FFprobe/FFmpeg,

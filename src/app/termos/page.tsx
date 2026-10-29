@@ -12,7 +12,7 @@ export default function TermsPage() {
     <LegalPage
       title="Termos de Uso"
       description="Estes termos regulam o acesso e uso da ConnectyHub, incluindo paineis, agentes de IA, automacoes, WhatsApp, catalogos, pagamentos, trafego e integracoes com plataformas externas."
-      updatedAt="14 de julho de 2026"
+      updatedAt="29 de outubro de 2026"
       sections={[
         {
           title: "1. Uso da plataforma",
@@ -26,6 +26,12 @@ export default function TermsPage() {
           paragraphs: [
             "Alguns recursos dependem de plataformas externas, como Meta, Google, Mercado Pago, provedores de envio, bancos de dados, mensageria e servicos de IA.",
             "O usuario deve possuir permissao para conectar contas, ativos, paginas, contas de anuncios, catalogos, numeros e demais recursos vinculados a essas plataformas.",
+            "A ConnectyHub utiliza os Serviços de API do YouTube. Ao utilizar os recursos integrados ao YouTube, o usuário também concorda em cumprir os Termos de Serviço do YouTube. Os recursos do TikTok dependem das permissões da conta e das políticas aplicáveis do TikTok.",
+          ],
+          links: [
+            { label: "Termos de Serviço do YouTube", href: "https://www.youtube.com/t/terms" },
+            { label: "Termos de Serviço do TikTok", href: "https://www.tiktok.com/legal/page/row/terms-of-service/pt-BR" },
+            { label: "Política de Privacidade da ConnectyHub", href: "/privacidade" },
           ],
         },
         {
@@ -33,6 +39,8 @@ export default function TermsPage() {
           paragraphs: [
             "O usuario e responsavel pelo conteudo inserido na plataforma, mensagens enviadas, campanhas, prompts, produtos, politicas comerciais e dados de seus clientes.",
             "Agentes de IA podem auxiliar operacoes, mas devem ser configurados, revisados e monitorados pelo usuario, especialmente em decisoes comerciais, juridicas, financeiras ou sensiveis.",
+            "Na publicação em redes sociais, o usuário deve possuir os direitos do vídeo, das imagens e do áudio e revisar o arquivo, o canal de destino, a legenda, a privacidade, as declarações comerciais e o horário antes de aprovar. A conexão da conta não substitui a aprovação de cada publicação. O usuário é responsável pelas declarações sobre público infantil, conteúdo sintético, publicidade e uso de música quando exigidas pela rede.",
+            "Um envio para várias redes gera resultados independentes. A aprovação da ConnectyHub não garante alcance, monetização, aceite pela rede ou publicação simultânea. A análise editorial de IA pode conter erros e não garante desempenho.",
           ],
         },
         {
