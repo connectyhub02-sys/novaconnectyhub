@@ -49,6 +49,23 @@ Ao encerrar, o controle do Chrome passou a exigir atualização da extensão do
 ChatGPT; retomar após atualização. Abas de trabalho tinham sido marcadas para
 continuidade antes desse bloqueio. Servidor de prévia local encerrado.
 
+Retomada às 17:11 BRT: titular indicou **@vestebrasilshop.com.br**, conectada no
+outro perfil Chrome (ConnectyHub). A conta também estava pública; após autorização
+específica, Conta Privada foi ativada e o estado marcado confirmado na tela.
+Privacidade original: pública; comentários exibiam Todos e passaram a Seguidores
+com a alteração do TikTok. Manter o registro para restaurar após os testes,
+sem tornar públicos vídeos de teste. @connectyhub.ia não teve sua privacidade
+alterada. O controle voltou a funcionar pelo navegador, sem contornar bloqueios.
+
+Veste Brasil confirmou o cadastro como target user do Sandbox ConnectyHub Testes;
+portal recarregado confirmou duas contas: connectyhub.ia e vestebrasilshop.com.br.
+Isso **não é conexão OAuth do painel**. No navegador da Veste Brasil, a página
+`/dashboard/redes-sociais/contas` redirecionou ao login da ConnectyHub. Titular
+orientado a entrar na conta de teste BuffaloMass nesse mesmo perfil; aguardando.
+Nenhum vídeo publicado, token de usuário novo salvo ou credencial copiada entre
+perfis. Próximo passo: login no painel, consentimento da nova conta e conexão,
+antes de qualquer publicação de teste autorizada separadamente.
+
 ## Publicação multiplataforma — publicada para testes, 29/10/2026
 
 Implementados editor unificado, biblioteca R2, diagnóstico técnico FFprobe/FFmpeg,
