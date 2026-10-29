@@ -1500,6 +1500,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         }
       />
 
+      <Link href="/dashboard/redes-sociais/contas" className="mb-5 block rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Redes sociais: gerencie as conexões de Instagram, Facebook, YouTube e TikTok em <strong>Contas conectadas →</strong></Link>
       {notice ? <NoticeBar notice={notice} /> : null}
 
       {!state.schemaReady && state.schemaMessage ? (

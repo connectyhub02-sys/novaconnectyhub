@@ -17,6 +17,7 @@ export function isMetaReviewPath(path: string) {
     "/api/dashboard/social-automations", "/api/dashboard/meta-social",
     "/api/dashboard/social-approvals", "/api/dashboard/meta-ads-leads", "/api/dashboard/meta-pixel",
     "/dashboard/trafego-organico", "/dashboard/meta/calendario", "/dashboard/meta/criativos",
+    "/dashboard/redes-sociais/publicacoes", "/dashboard/redes-sociais/calendario", "/dashboard/redes-sociais/biblioteca",
     "/api/dashboard/meta-organic", "/api/dashboard/meta-organic/media",
     "/dashboard/trafego/meta-ads", "/api/dashboard/meta-analytics"].includes(path);
 }

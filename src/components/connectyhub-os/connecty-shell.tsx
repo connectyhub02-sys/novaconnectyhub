@@ -1,5 +1,6 @@
 "use client";
 import { metaWorkspaceItems } from "@/lib/meta/workspace-navigation";
+import { socialNavigation } from "@/lib/social/policy";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { isClientBillingRecoveryPage } from "@/lib/billing/recovery-paths";
 
@@ -195,11 +196,14 @@ const adminSections: NavSection[] = [
     ],
   },
   {
+    label: "Redes sociais",
+    items: socialNavigation("admin").map(item => ({ label: item.label, href: item.href, icon: item.key === "calendario" ? CalendarDays : item.key === "contas" ? PlugZap : Globe2, tone: "blue" })),
+  },
+  {
     label: "Meta e tráfego",
     items: [
       { label: "Meta Ads",    href: "/admin/trafego/meta-ads",   icon: Megaphone, tone: "fuchsia" },
       { label: "Meta e WhatsApp oficial", href: "/admin/meta", icon: MessageCircle, tone: "teal" },
-      { label: "Publicações e calendário", href: "/admin/meta/publicacoes", icon: CalendarDays, tone: "blue" },
       { label: "Google Ads",  href: "/admin/trafego/google-ads", icon: Search, tone: "blue" },
       { label: "Visao Geral", href: "/admin/trafego",            icon: BarChart3, tone: "sky" },
     ],
@@ -260,8 +264,12 @@ const clientSections: NavSection[] = [
     ],
   },
   {
+    label: "Redes sociais",
+    items: socialNavigation("client").map(item => ({ label: item.label, href: item.href, icon: item.key === "calendario" ? CalendarDays : item.key === "contas" ? PlugZap : Globe2, tone: "blue" })),
+  },
+  {
     label: "Meta",
-    items: metaWorkspaceItems.map(item => ({ label: item.label, href: item.href, icon: item.key === "ads" ? Megaphone : ["chat", "atendimento"].includes(item.key) ? MessageCircle : item.key === "calendario" ? CalendarDays : item.key === "analise" ? BarChart3 : Globe2, tone: "blue" })),
+    items: metaWorkspaceItems.map(item => ({ label: item.label, href: item.href, icon: item.key === "ads" ? Megaphone : ["chat", "atendimento"].includes(item.key) ? MessageCircle : item.key === "analise" ? BarChart3 : Globe2, tone: "blue" })),
   },
   {
     label: "Crescimento",

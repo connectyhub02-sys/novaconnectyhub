@@ -3,11 +3,9 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { MetaInstagramOverview } from "@/components/connectyhub-os/meta-instagram-overview";
-import { MetaOrganicConsole } from "@/components/connectyhub-os/meta-organic-console";
 import { MetaSocialInbox } from "@/components/connectyhub-os/meta-social-inbox";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
-import { getClientMetaOrganicOverview } from "@/lib/meta/organic-publishing";
 import { metaWorkspaceItems } from "@/lib/meta/workspace-navigation";
 export const metadata = { title: "Meta | ConnectyHub" };
 export default async function MetaArea({
@@ -17,11 +15,13 @@ export default async function MetaArea({
 }) {
   await connection();
   const { area } = await params;
+  if (area === "calendario") redirect("/dashboard/redes-sociais/calendario");
+  if (area === "criativos") redirect("/dashboard/redes-sociais/biblioteca");
   if (area === "campanhas") redirect("/dashboard/chat-meta?tab=campaigns");
   if (area === "agentes") redirect("/dashboard/whatsapp");
   if (area === "modelos") redirect("/dashboard/chat-meta?tab=models");
   if (
-    !["analise", "atendimento", "calendario", "criativos"].includes(
+    !["analise", "atendimento"].includes(
       area,
     )
   )
@@ -33,13 +33,6 @@ export default async function MetaArea({
     userId: workspace.user.id,
     companyId: workspace.organization.id,
   });
-  const organic =
-    area === "calendario" || area === "criativos"
-      ? await getClientMetaOrganicOverview({
-          userId: workspace.user.id,
-          organizationId: company.id,
-        })
-      : null;
   const title =
     metaWorkspaceItems.find((item) => item.key === area)?.label ?? "Meta";
   return (
@@ -70,13 +63,6 @@ export default async function MetaArea({
         </>
       )}
       {area === "atendimento" && <MetaSocialInbox />}
-      {organic && (
-        <MetaOrganicConsole
-          overview={organic}
-          companyId={company.id}
-          initialView={area === "calendario" ? "calendar" : "library"}
-        />
-      )}
     </ConnectyShell>
   );
 }

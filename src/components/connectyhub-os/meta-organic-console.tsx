@@ -19,6 +19,8 @@ import {
 import { KpiStat, NeonBadge, PageHeader, Panel } from "@/components/connectyhub-os/panel-primitives";
 import { cn } from "@/lib/utils";
 import { MetaCreativeStudio } from "./meta-creative-studio";
+import Link from "next/link";
+import { socialPath, type SocialShell } from "@/lib/social/policy";
 import type {
   ClientMetaOrganicMediaAsset,
   ClientMetaOrganicOverview,
@@ -58,7 +60,7 @@ const emptyDraft: DraftState = {
   title: "",
 };
 
-export function MetaOrganicConsole({ overview: initialOverview, initialView = "compose", companyId }: { companyId: string; overview: ClientMetaOrganicOverview; initialView?: "compose" | "calendar" | "library" }) {
+export function MetaOrganicConsole({ overview: initialOverview, initialView = "compose", companyId, socialShell }: { companyId: string; overview: ClientMetaOrganicOverview; initialView?: "compose" | "calendar" | "library"; socialShell?: SocialShell }) {
   const [view, setView] = useState(initialView);
   const [draft, setDraft] = useState<DraftState>(emptyDraft);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -189,8 +191,8 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
   return (
     <section>
       <PageHeader
-        eyebrow="Meta / Organico"
-        title="Publicações e calendário"
+        eyebrow={socialShell ? "Redes sociais" : "Meta / Orgânico"}
+        title={socialShell ? view === "calendar" ? "Calendário de posts" : view === "library" ? "Biblioteca de mídias" : "Publicações" : "Publicações e calendário"}
         description="Planeje posts, Reels, Stories, carrosséis e vídeos para Instagram e Facebook."
         actions={
           <button
@@ -205,7 +207,8 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
         }
       />
 
-      <div className="mb-5"><MetaCreativeStudio companyId={companyId}/></div>
+      {socialShell && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><p>Histórico e formatos exclusivos de Instagram e Facebook. Para vídeos em várias redes, use o editor principal de Publicações.</p><Link className="font-medium underline" href={socialPath(socialShell, "contas")}>Gerenciar contas</Link></div>}
+      <div className="mb-5"><MetaCreativeStudio companyId={companyId} publicationsHref={socialShell ? socialPath(socialShell) : undefined}/></div>
       <nav aria-label="Planejamento de publicações" className="mb-5 flex flex-wrap gap-2">
         {([["compose","Criar publicação"],["calendar","Calendário"],["library","Biblioteca de criativos"]] as const).map(([key,label]) => <button key={key} className={`rounded-xl border px-4 py-2 text-sm ${view===key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`} onClick={()=>setView(key)}>{label}</button>)}
       </nav>

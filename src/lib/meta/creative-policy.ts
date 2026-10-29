@@ -5,10 +5,12 @@ export type CreativeBrief = {
   dailyBudget: number | null; currency: string | null; adCount: number; analyze: boolean;
   assistance?: "automatic" | "guided";
   mediaIds?: string[]; productId?: string | null; sourceAnalysisId?: string | null;
+  socialPlatforms?: string[];
 };
 export const creativeCriteria = ["Gancho", "Clareza", "Ritmo e composição", "Oferta e relevância", "Chamada para ação"] as const;
 export type CreativeReport = {
   title: string; summary: string; score: number | null;
+  platforms?: {platform:string;verdict:string;reason:string}[];
   criteria: { name: string; score: number | null; evidence: string; improvement: string }[];
   strengths: string[]; improvements: string[]; limitations: string[];
   captions: { platform: string; text: string }[];
@@ -75,6 +77,7 @@ export function parseCreativeReport(raw: unknown, brief: CreativeBrief): Creativ
     adSets.forEach((a, i) => { a.dailyBudget = (share + (i === 0 ? totalCents - share * adSets.length : 0)) / 100; });
   }
   return { title: txt(r.title, 150), summary: txt(r.summary), score, criteria,
+    platforms: brief.socialPlatforms?.map(platform=>{const entry=(Array.isArray(r.platforms)?r.platforms:[]).map(obj).find(p=>p.platform===platform);return {platform,...suitability(entry)};}),
     suitability: { organic: suitability(obj(r.suitability).organic), paid: suitability(obj(r.suitability).paid), audience: txt(obj(r.suitability).audience, 1500), productFit: txt(obj(r.suitability).productFit,1500) },
     hashtags: list(r.hashtags, 8).filter(tag => /^#[\p{L}\p{N}_]{1,60}$/u.test(tag)),
     strengths: list(r.strengths), improvements: list(r.improvements), limitations: list(r.limitations),
@@ -88,6 +91,7 @@ export function creativeMediaIds(brief: CreativeBrief) { return brief.mediaIds?.
 export function creativePrompt(brief: CreativeBrief, productContext: unknown = null, priorAnalysis: unknown = null) {
   return `Você é estrategista de conteúdo e mídia da ConnectyHub. Responda em pt-BR, JSON estrito.
 Adapte os critérios do Viral Check: gancho inicial, clareza, ritmo/composição, oferta e relevância, CTA.
+Se brief.socialPlatforms estiver presente, avalie TODAS essas redes em uma única análise: inclua platforms:[{platform,verdict,reason}] com a adequação editorial por rede e captions por rede. Não confunda parecer editorial com validação técnica ou aprovação da plataforma.
 Cada score deve estar na escala inteira de ZERO A CEM (0 a 100, nunca 0 a 10). 0 representa ausência do critério; 50 execução mediana; 100 execução excelente comprovada pela mídia.
 Moeda: use EXCLUSIVAMENTE brief.currency no texto monetário. Nunca deduza BRL pelo idioma ou localização. Se currency=null, não use símbolo monetário e informe moeda a definir. A moeda da proposta ainda precisa ser compatibilizada com a conta Meta antes de qualquer execução.
 O arquivo é fornecido como mídia real. Analise imagem e, no vídeo, conteúdo visual e áudio disponível. Cite timestamps quando houver evidência. Não afirme ouvir áudio ausente. Não invente métricas, clientes, resultados, horários ideais ou aprovação da Meta. Score é avaliação editorial, não probabilidade de viralizar, ROAS nem garantia de vendas. Não deduza atributos sensíveis de pessoas retratadas.

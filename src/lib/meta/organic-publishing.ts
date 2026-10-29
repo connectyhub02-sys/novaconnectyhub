@@ -796,7 +796,7 @@ async function loadClientMetaOrganicItem(
   return { company, item: data };
 }
 
-async function loadMetaOrganicCredentials(
+export async function loadMetaOrganicCredentials(
   client: SupabaseClient,
   organizationId: string,
 ): Promise<MetaOrganicCredentials> {
@@ -880,7 +880,7 @@ async function loadOrganizationMetaCredentialMap(client: SupabaseClient, organiz
   return credentials;
 }
 
-async function sendMetaOrganicGraphRequest(input: {
+export async function sendMetaOrganicGraphRequest(input: {
   body: Record<string, string>;
   credentials: MetaOrganicCredentials;
   endpointPath: string;

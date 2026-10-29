@@ -22,6 +22,7 @@ import {
   metaSocialMessageReceivedEventName,
 } from "@/lib/meta/social-agent-policy";
 import { processScheduledMetaOrganicPosts } from "@/lib/meta/organic-publishing";
+import { processSocialDeliveries } from "@/lib/social/publishing";
 import { processScheduledWhatsappOutbounds } from "@/lib/whatsapp/channel-operations";
 import {
   processWhatsappHandoffNotification,
@@ -364,10 +365,12 @@ export const connectyhubMetaOrganicPublishSweep = inngest.createFunction(
     const summary = await step.run("process-scheduled-meta-organic-posts", () =>
       processScheduledMetaOrganicPosts({ limit: 10 }),
     );
+    const social = await step.run("process-multiplatform-video-deliveries", processSocialDeliveries);
 
     return {
       status: "swept",
       summary,
+      social,
     };
   },
 );

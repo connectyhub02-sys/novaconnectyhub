@@ -18,6 +18,18 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ### Expansão social e WhatsApp oficial — decisão de 11/10/2026
 
+Em 29/10 o titular autorizou implementar o fluxo completo e publicar para testes: vídeo único, validação técnica, análise editorial compartilhada, aprovação versionada e entregas independentes. A homologação externa permanece separada da publicação do código. [Escopo e operação](redes-sociais-publicacao-2026-10-29.md).
+
+Em 29/10 o titular aprovou antecipar YouTube e TikTok enquanto a revisão Meta
+segue separadamente. Publicações, calendário, biblioteca e contas passam a uma
+seção **Redes sociais** nos painéis cliente e admin; agentes continuam em Agentes,
+e anúncios/atendimento permanecem nos módulos existentes. Uma publicação terá
+entregas independentes por rede. Conexão OAuth não equivale a publicação liberada.
+A [primeira fase](redes-sociais-fase-1-2026-10-29.md) está implementada localmente;
+SQL, configuração externa, piloto e publicação em produção têm estado próprio.
+Esta decisão substitui a organização anterior do conteúdo exclusivamente em Meta
+e a dependência de concluir toda a Meta antes de iniciar as novas conexões.
+
 Direção ampliada pelo titular em 11/10: gestor de tráfego por IA usando os dados
 autorizados de cada empresa, com conexão guiada de Página, Instagram, anúncios,
 Pixel/Dataset e catálogo. A loja e as páginas de cada cliente devem alimentar

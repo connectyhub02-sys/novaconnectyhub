@@ -327,6 +327,32 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     ],
   },
   {
+    id: "youtube",
+    name: "YouTube · publicação social",
+    sector: "Redes sociais",
+    owner: "Administrador da plataforma",
+    description: "Aplicativo OAuth dedicado ao YouTube, separado do Google Ads. Configuração não comprova verificação Google ou publicação habilitada.",
+    tone: "cyan",
+    modules: ["Redes sociais", "YouTube Data API"],
+    fields: [
+      { label: "YouTube OAuth Client ID", env: "YOUTUBE_CLIENT_ID", kind: "identifier", requirement: "required", help: "Cliente Web no Google Cloud com YouTube Data API habilitada. Retorno: domínio da aplicação + /api/dashboard/social/youtube/callback." },
+      { label: "YouTube OAuth Client Secret", env: "YOUTUBE_CLIENT_SECRET", kind: "secret", requirement: "required", help: "Segredo do cliente OAuth dedicado ao YouTube. Não exige Developer Token do Google Ads." },
+    ],
+  },
+  {
+    id: "tiktok",
+    name: "TikTok · publicação social",
+    sector: "Redes sociais",
+    owner: "Administrador da plataforma",
+    description: "Login Kit e Content Posting API. A auditoria e o domínio de entrega de mídias precisam ser validados no portal TikTok.",
+    tone: "cyan",
+    modules: ["Redes sociais", "TikTok Login Kit"],
+    fields: [
+      { label: "TikTok Client Key", env: "TIKTOK_CLIENT_KEY", kind: "identifier", requirement: "required", help: "Chave do app com user.info.basic e video.publish. Retorno HTTPS: domínio da aplicação + /api/dashboard/social/tiktok/callback." },
+      { label: "TikTok Client Secret", env: "TIKTOK_CLIENT_SECRET", kind: "secret", requirement: "required", help: "Segredo do aplicativo; permanece criptografado no servidor." },
+    ],
+  },
+  {
     id: "google-ads",
     name: "App ConnectyHub Google",
     sector: "OAuth guiado Google",

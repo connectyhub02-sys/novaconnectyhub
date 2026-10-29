@@ -12,18 +12,6 @@ export const metaWorkspaceItems = [
     description: "Campanhas, investimento e desempenho dos anúncios.",
   },
   {
-    key: "publicacoes",
-    label: "Publicações",
-    href: "/dashboard/trafego-organico",
-    description: "Prepare conteúdo e envie para Facebook e Instagram.",
-  },
-  {
-    key: "calendario",
-    label: "Calendário de posts",
-    href: "/dashboard/meta/calendario",
-    description: "Organize rascunhos, aprovações e postagens programadas.",
-  },
-  {
     key: "chat",
     label: "Chat Meta oficial",
     href: "/dashboard/chat-meta",
@@ -41,11 +29,5 @@ export const metaWorkspaceItems = [
     label: "Direct e Messenger",
     href: "/dashboard/meta/atendimento",
     description: "Conversas sociais, revisão de respostas e recibos.",
-  },
-  {
-    key: "criativos",
-    label: "Biblioteca de criativos",
-    href: "/dashboard/meta/criativos",
-    description: "Mídias e composição dos próximos posts.",
   },
 ] as const;

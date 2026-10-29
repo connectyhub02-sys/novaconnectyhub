@@ -40,6 +40,7 @@ export function MetaWorkspaceHome({
               : "Conecte seus ativos pelo login oficial. Não é necessário copiar credenciais."}
         </p>
       </header>
+      <Link href="/dashboard/redes-sociais/publicacoes" className="block rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-900">Publicações, calendário e biblioteca agora ficam em <strong>Redes sociais → Publicações</strong>.</Link>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {metaWorkspaceItems
           .filter((item) => item.key !== "overview")

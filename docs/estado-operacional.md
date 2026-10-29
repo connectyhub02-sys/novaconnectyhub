@@ -1,5 +1,22 @@
 # Estado operacional da ConnectyHub
 
+## Publicação multiplataforma — versão em preparação para testes, 29/10/2026
+
+Implementados editor unificado, biblioteca R2, diagnóstico técnico FFprobe/FFmpeg,
+análise Gemini única para quatro destinos com créditos existentes, OAuth
+YouTube/TikTok, aprovação versionada, agenda, fila e confirmação por destino.
+A revisão de release parte do código ativo `0c19c471`, preservando as correções
+publicadas de cobrança e WhatsApp. Migrations novas: 0220 e 0221.
+
+Validação local: 104 testes em 12 arquivos aprovados; TypeScript e build Next
+passaram; prévia cliente/admin em desktop e celular sem erros ou overflow.
+
+Aplicativos TikTok/YouTube ainda sem credenciais no cofre e no ambiente ativo
+(verificação apenas de presença). Homologação real de OAuth, análise paga e
+publicação externa não executada. Não considerar as integrações operacionais
+apenas pela implementação. [Escopo, testes e configuração](redes-sociais-publicacao-2026-10-29.md).
+
+
 ## Identificação dos contatos no atendimento — 26/10/2026
 
 Publicado `04314db0` no slot a às 18h42 BRT, anterior `eda1eebf` no b preservado.
