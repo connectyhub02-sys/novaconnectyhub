@@ -50,8 +50,8 @@ estava ativo na verificação, preservando essas alterações.
 
 Na manutenção: `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`,
 `TIKTOK_CLIENT_SECRET`, usando os campos próprios do cofre. OAuth Google de
-YouTube é independente do Ads. Os quatro valores estavam ausentes tanto do
-cofre quanto do ambiente do container ativo na verificação de 29/10.
+YouTube é independente do Ads. Os quatro valores estavam ausentes na verificação
+inicial de 29/10; foram cadastrados posteriormente conforme registro abaixo.
 
 Callbacks de produção:
 
@@ -85,3 +85,59 @@ Referências oficiais consultadas: [TikTok Direct Post](https://developers.tikto
 Versão `35626c22` publicada no slot a, migrations instaladas, health público
 e Inngest assinado conferidos. 104 testes locais aprovados. O estado de
 implantação detalhado fica no topo de `estado-operacional.md`.
+
+### Configuração assistida dos provedores — 29/10/2026
+
+- Titular autorizou configurar aplicativos e testar conexões das próprias contas
+  na organização BuffaloMass, com desconexão depois dos testes. Navegador
+  autenticado confirmou essa organização e as integrações ainda em preparação.
+- Google: branding/consentimento inicial ConnectyHub criado no projeto existente
+  `gen-lang-client-0089240657`, público externo em testes, após autorização
+  específica do aceite da política de dados. UI confirmou a criação do OAuth.
+  Cliente web `ConnectyHub YouTube` criado com o callback acima; credencial
+  armazenada e conferida no cofre criptografado, após autorização explícita.
+  YouTube Data API v3 ativada e usuário `connectyhub01@gmail.com` adicionado aos
+  testes. Não houve publicação pública do aplicativo.
+  Nome, links públicos do site/privacidade/termos e domínio `connectyhub.com.br`
+  salvos no branding com confirmação do Google. App permanece em testes;
+  cadastramento do domínio não comprova propriedade verificada pelo Google.
+- Console Google mostra aviso genérico de possível violação de política em
+  vários projetos. Não se confirmou suspensão nem bloqueio deste projeto.
+- YouTube real: titular corrigiu a conta de destino para ConnectyHub, pois o
+  canal YouTube BuffaloMass está excluído. Nova tentativa concluiu consentimento,
+  seleção do canal `UCZxrEBjTBx4HDDBlaCLR_Qw` e Verificar conexão no painel
+  BuffaloMass. Banco confirmou status connected, tokens criptografados e seleção
+  do canal às 19:11 UTC. Depois o painel confirmou desconexão e revogação.
+  Primeira tentativa retornou erro após longa espera; a nova sessão funcionou.
+  Nenhum vídeo enviado, crédito Gemini consumido ou renovação forçada.
+- TikTok: titular concluiu cadastro de desenvolvedor. Organização ConnectyHub
+  `7702151276024464392`, app `7702129647836678196` e Sandbox `ConnectyHub Testes`
+  (`7702121750129084422`) criados. Chave e segredo do Sandbox no cofre criptografado
+  com conferência dos valores, sem registros em código/documentação.
+  Sandbox salvo com ícone oficial redimensionado sem IA para 1024 px, categoria
+  Business, descrição, site, termos/privacidade, Login Kit e callback acima,
+  Content Posting API/Direct Post. Scopes disponíveis user.info.basic,
+  video.publish e video.upload; o sistema solicita apenas basic e publish.
+  Produção permanece rascunho, sem revisão/submissão; não está liberada a clientes.
+- Prefixo TikTok `https://www.connectyhub.com.br/` confirmado Verified.
+  Regra exata no Caddy serve o arquivo público
+  `tiktokmpV0w9KFrbgYSMVdXsz0zBeO5waud0FH.txt`; validação/reload e HTTPS com
+  corpo exato confirmados. Backup em
+  `/opt/connectyhub/proxy/Caddyfile.before-tiktok-20261029T185801Z`.
+  Prefixo de mídia `https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/meta/organic/`
+  verificado no Sandbox após upload do arquivo
+  `meta/organic/tiktoksQG6Ce8lWM44nWuQRCvfGkHmvZQIeeLU.txt` e GET HTTPS com
+  conteúdo exato. O portal confirmou Verified. Produção ainda precisa da
+  configuração correspondente e revisão.
+- TikTok real: @connectyhub.ia cadastrada como target user após login do titular.
+  Consentimento para perfil/publicação e termos autorizado especificamente.
+  Retorno OAuth, seleção de ConnectyHub e Verificar conexão concluídos no painel
+  BuffaloMass. Banco confirmou status connected, tokens criptografados, conta
+  selecionada e scopes user.info.basic/video.publish às 19:18 UTC. Ao concluir,
+  painel confirmou desconexão e revogação. Nenhum vídeo enviado.
+- Ícone final: `public/brand/connectyhub-app-icon-1024.png`, redimensionado por
+  Sharp/Lanczos3 a partir do original de 512 px, por escolha explícita do titular,
+  sem IA. Tentativa gerada descartada; não usada no app. Original preservado.
+- Nenhum segredo registrado nesta documentação. Publicação externa real,
+  agendamento, renovação e falha parcial continuam sem homologação. Cadastro
+  de aplicativos e sucesso OAuth não comprovam publicação funcional.

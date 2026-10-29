@@ -24,12 +24,50 @@ API social sem sessão retorna 401; GET Inngest assinado autenticado, app
 `connectyhub`, 59 funções (sem criar outro app). FFprobe/FFmpeg aceitaram MP4
 sintético de 3 segundos e rejeitaram o mesmo arquivo truncado. Navegador sem
 sessão confirmou login com retorno para a nova área. Dashboard autenticado e
-publicação real ainda dependem do piloto do titular.
+publicação real ainda dependiam do piloto do titular nessa etapa. Na configuração
+assistida posterior, o navegador autenticado confirmou a área Contas conectadas
+da BuffaloMass, ainda com YouTube/TikTok em preparação.
 
-Aplicativos TikTok/YouTube ainda sem credenciais no cofre e no ambiente ativo
-(verificação apenas de presença). Homologação real de OAuth, análise paga e
-publicação externa não executada. Não considerar as integrações operacionais
-apenas pela implementação. [Escopo, testes e configuração](redes-sociais-publicacao-2026-10-29.md).
+Configuração assistida em 29/10: credenciais Google/YouTube e TikTok Sandbox
+salvas no cofre de plataforma, criptografadas e conferidas por descriptografia
+sem exibição dos valores. Não foi necessário outro deploy. [Escopo e evidências](redes-sociais-publicacao-2026-10-29.md).
+
+Google: cliente web `ConnectyHub YouTube` criado no projeto
+`gen-lang-client-0089240657`, callback de produção exclusivo e YouTube Data API v3
+ativada, após autorizações específicas do titular. Branding, URLs públicas e
+domínio salvos; aplicativo externo permanece em testes, com
+`connectyhub01@gmail.com` como usuário de teste. Console exibe alerta genérico
+de possível violação de política em vários projetos; não se comprovou bloqueio
+deste projeto. Isso não equivale a aprovação pública ou verificação do domínio.
+
+OAuth YouTube real validado no painel BuffaloMass usando o canal **ConnectyHub**
+(`UCZxrEBjTBx4HDDBlaCLR_Qw`), por correção expressa do titular: o antigo canal
+YouTube BuffaloMass está excluído. Conta autorizada, canal selecionado e botão
+Verificar conexão retornou sucesso; banco confirmou tokens criptografados e
+canal correto às 19:11 UTC. Nenhum vídeo enviado. Após o teste, o painel confirmou
+"Conta desconectada e autorização revogada"; conexão temporária encerrada.
+
+TikTok: cadastro de desenvolvedor concluído pelo titular; organização ConnectyHub
+`7702151276024464392` e app `7702129647836678196` criados com autorização explícita.
+Sandbox `ConnectyHub Testes` (`7702121750129084422`) salvo com ícone oficial
+redimensionado convencionalmente para 1024 px, URLs públicas, Login Kit,
+callback de produção e Content Posting API/Direct Post. Produção permanece
+rascunho, sem submissão/revisão. Titular entrou em @connectyhub.ia, cadastrada
+como conta alvo do Sandbox. Consentimento específico autorizado; OAuth TikTok,
+seleção da conta e Verificar conexão passaram no painel BuffaloMass. Banco
+confirmou status connected, tokens criptografados, seleção e scopes
+user.info.basic/video.publish às 19:18 UTC. Após o teste, o painel confirmou
+desconexão e revogação; nenhum vídeo enviado.
+
+Prefixo `https://www.connectyhub.com.br/` verificado no portal TikTok. Arquivo
+público de comprovação servido por regra exata persistente no Caddy; validação,
+reload e GET HTTPS 200 com conteúdo exato confirmados. Backup:
+`/opt/connectyhub/proxy/Caddyfile.before-tiktok-20261029T185801Z`. Prefixo de mídia
+`https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/meta/organic/` também confirmado
+Verified no Sandbox, após upload do arquivo público de assinatura e conferência
+HTTPS do conteúdo exato. Produção precisa da configuração correspondente e da
+revisão. Análise paga, publicação externa, agendamento real e renovação de tokens
+ainda não homologados. OAuth real das duas redes foi validado e encerrado.
 
 
 ## Identificação dos contatos no atendimento — 26/10/2026
