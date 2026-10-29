@@ -82,4 +82,6 @@ Referências oficiais consultadas: [TikTok Direct Post](https://developers.tikto
 [status TikTok](https://developers.tiktok.com/doc/content-posting-api-reference-get-video-status),
 [upload resumível YouTube](https://developers.google.com/youtube/v3/guides/using_resumable_upload_protocol).
 
-O estado de implantação verificado fica no topo de `estado-operacional.md`.
+Versão `35626c22` publicada no slot a, migrations instaladas, health público
+e Inngest assinado conferidos. 104 testes locais aprovados. O estado de
+implantação detalhado fica no topo de `estado-operacional.md`.

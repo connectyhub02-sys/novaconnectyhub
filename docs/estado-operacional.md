@@ -1,6 +1,6 @@
 # Estado operacional da ConnectyHub
 
-## Publicação multiplataforma — versão em preparação para testes, 29/10/2026
+## Publicação multiplataforma — publicada para testes, 29/10/2026
 
 Implementados editor unificado, biblioteca R2, diagnóstico técnico FFprobe/FFmpeg,
 análise Gemini única para quatro destinos com créditos existentes, OAuth
@@ -10,6 +10,21 @@ publicadas de cobrança e WhatsApp. Migrations novas: 0220 e 0221.
 
 Validação local: 104 testes em 12 arquivos aprovados; TypeScript e build Next
 passaram; prévia cliente/admin em desktop e celular sem erros ou overflow.
+
+Release `35626c226ce62be48dfa4eacd17da86306e0395c` ativada no slot **a**,
+com saúde e SHA confirmados por HTTPS público. Slot b preservado com
+`0c19c47156ae96e2730058f38804297485dd1b65` para retorno. Builder parado após
+concluir o deploy. Migrations 0220/0221 aplicadas e registradas; backup de schema
++ registro de migrations em `/opt/connectyhub/app/backups/social-before-20261029T155202Z-*`.
+As tabelas têm RLS e acesso negado a anon/authenticated; REST com service role
+confirmou o schema. Não havia conexões, posts ou entregas sociais ao instalar.
+
+No container final: login/assets OK; páginas privadas redirecionam ao login;
+API social sem sessão retorna 401; GET Inngest assinado autenticado, app
+`connectyhub`, 59 funções (sem criar outro app). FFprobe/FFmpeg aceitaram MP4
+sintético de 3 segundos e rejeitaram o mesmo arquivo truncado. Navegador sem
+sessão confirmou login com retorno para a nova área. Dashboard autenticado e
+publicação real ainda dependem do piloto do titular.
 
 Aplicativos TikTok/YouTube ainda sem credenciais no cofre e no ambiente ativo
 (verificação apenas de presença). Homologação real de OAuth, análise paga e
