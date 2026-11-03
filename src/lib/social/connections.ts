@@ -45,7 +45,12 @@ export async function changeSocialConnection(client: SupabaseClient, organizatio
     if (pending.error) throw Error("Não foi possível encerrar a autorização pendente.");
     const removed = await client.from("social_connections").delete().eq("organization_id", organizationId).eq("provider", provider);
     if (removed.error) throw Error("Não foi possível desconectar a conta.");
-    if (!row) return { message: "Conta desconectada." };
+    // Also clean historical API data if an older release already removed the connection.
+    if (!row) {
+      const cleanup = await client.rpc('erase_social_provider_data', { p_org: organizationId, p_provider: provider });
+      if (cleanup.error) throw Error('Não foi possível concluir a exclusão dos dados da integração.');
+      return { message: "Conta desconectada e dados da integração removidos." };
+    }
     const revoked = await (async () => {
       const config = await loadSocialConfig(provider, client);
       return config ? revokeSocialTokens(config, JSON.parse(decryptCredentialValue(row.encrypted_tokens))) : false;

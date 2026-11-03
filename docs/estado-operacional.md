@@ -1,5 +1,46 @@
 # Estado operacional da ConnectyHub
 
+## Preparação técnica para revisão — 03/11/2026 (ainda local)
+
+Migration 0222 acrescenta exclusão dos dados de API na desconexão, limpeza de
+recibos em 29 dias e de autorizações sem revalidação por seis dias. Tombstones
+bloqueiam retorno de dados por workers antigos e retomada de envios apagados;
+guardas de conexão impedem aprovação concorrente após desconexão. Originais,
+rascunhos do usuário e resultados/datas internos permanecem separados.
+Manutenção no job existente revalida diariamente contas ativas e executa a
+limpeza independentemente das filas Meta. Agendamento limitado a 28 dias.
+Site público, políticas e controles explicam publicação, desconexão e retenção.
+52 testes sociais e um teste adicional de manutenção passaram; TypeScript e
+lint passaram. Ainda falta aplicar SQL, publicar, verificar em produção e
+gravar/submeter as demonstrações. Não é aprovação externa.
+
+## Auditoria de aprovação YouTube/TikTok — 03/11/2026
+
+Conferência autenticada dos portais, sem submissão, alteração de permissões ou
+publicação de vídeo nesta auditoria:
+
+- TikTok app `7702129647836678196`: **Production / Draft**, botão Submit for
+  review disponível; histórico visível registra somente Created App de 29/10.
+  Produção tem descrição/URLs vazias, nenhum produto/escopo configurado e exige
+  demonstração em vídeo. Não está aprovado nem consta envio para análise.
+- Google projeto `gen-lang-client-0089240657`: Central de verificação informa
+  que a verificação não é necessária enquanto o status é Teste. Público-alvo
+  confirma **Testando / Externo**, com apenas `connectyhub01@gmail.com` como
+  usuário de teste. Não há liberação pública verificada. Alerta genérico de
+  possível violação em vários projetos permanece; não prova bloqueio deste app.
+- Consulta somente leitura ao banco de produção, limitada à BuffaloMass:
+  TikTok `vestebrasilshop.com.br` consta `connected`, mas última verificação é
+  de **29/10/2026 20:19 UTC**, não um teste de validade do token em 03/11.
+  Nenhuma conexão YouTube, nenhum `social_posts` e nenhum `social_deliveries`
+  nessa organização. O OAuth Veste Brasil avançou após o registro abaixo,
+  porém a publicação privada não foi concluída.
+
+Evidências locais em `tmp/social-app-setup/`: `tiktok-draft-20261103.png`,
+`google-verification-20261103.png` e `google-testing-20261103.png`.
+Pendências: concluir requisitos técnicos/documentais e demonstrações reais,
+submeter os apps e depois validar aprovação e publicação por destino. Não
+classificar a multiplataforma como homologada ou liberada para todos os clientes.
+
 ## Aprovação pública YouTube/TikTok — preparação em 29/10/2026
 
 Google Search Console confirmou **Propriedade verificada** por Tag HTML para

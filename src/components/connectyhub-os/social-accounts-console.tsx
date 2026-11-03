@@ -66,7 +66,7 @@ export function SocialAccountsConsole({ overview, shell, companyId, outcome }: {
             {account.status !== "disconnected" && <button type="button" className={secondary} disabled={disabled} onClick={() => setDisconnecting(account.provider)}>Desconectar</button>}
           </div>
           {disconnecting === account.provider && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-            <p>Remover esta conexão e revogar a autorização? Para usar a conta novamente, será necessário reconectar.</p>
+            <p>Desconectar, revogar a autorização e excluir os dados recebidos desta rede na ConnectyHub? Isso remove tokens, perfil e identificadores dos envios, interrompe entregas pendentes e mantém seus vídeos originais e o resultado do histórico. Um envio já recebido pela rede pode concluir; confira no próprio perfil. Os vídeos publicados na rede não serão apagados. Para voltar a usar a conta, será necessário reconectar.</p>
             <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={secondary} disabled={disabled} onClick={() => void act(account.provider, "disconnect")}>Confirmar desconexão</button><button type="button" className={secondary} disabled={disabled} onClick={() => setDisconnecting(null)}>Cancelar</button></div>
           </div>}
           {shell === "admin" && !account.configured && <Link className="mt-4 text-sm text-blue-700 underline" href="/admin/maintenance">Configurar aplicativo na manutenção</Link>}
@@ -74,5 +74,6 @@ export function SocialAccountsConsole({ overview, shell, companyId, outcome }: {
       })}
     </div>
     <p className="text-sm text-slate-500">As autorizações e os arquivos pertencem à empresa selecionada. Gestores podem remover as conexões por esta tela.</p>
+    <p className="text-sm text-slate-500">Antes de conectar, consulte os <Link href="/termos" className="underline">Termos de Uso</Link> e a <Link href="/privacidade" className="underline">Política de Privacidade</Link>. A conexão autoriza o acesso ao perfil e o envio de vídeos que você aprovar. Você pode excluir os dados da integração ao desconectar.</p>
   </section>;
 }

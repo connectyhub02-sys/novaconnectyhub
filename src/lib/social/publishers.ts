@@ -15,6 +15,7 @@ export type Delivery = {id:string;organization_id:string;post_id:string;target:'
 export class PublishError extends Error {constructor(message:string,public retryable=false,public restartSafe=false){super(message);}}
 export async function socialToken(client:SupabaseClient,org:string,provider:SocialProvider,connectionId?:string|null,accountId?:string){
  let row=await client.from('social_connections').select('*').eq('organization_id',org).eq('provider',provider).single();
+ if(row.data?.status==='checking')throw new PublishError('A conta está sendo verificada. O envio aguardará a conclusão.',true);
  const valid=()=>!row.error&&row.data?.status==='connected'&&row.data.selected_account_id&&(!connectionId||row.data.id===connectionId)&&(!accountId||row.data.selected_account_id===accountId);
  if(!valid())throw new PublishError('Conecte e selecione novamente a conta original em Contas conectadas.');
  let tokens=JSON.parse(decryptCredentialValue(row.data.encrypted_tokens)) as SocialTokens;

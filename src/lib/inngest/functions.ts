@@ -23,6 +23,7 @@ import {
 } from "@/lib/meta/social-agent-policy";
 import { processScheduledMetaOrganicPosts } from "@/lib/meta/organic-publishing";
 import { processSocialDeliveries } from "@/lib/social/publishing";
+import { maintainSocialConnections } from "@/lib/social/maintenance";
 import { processScheduledWhatsappOutbounds } from "@/lib/whatsapp/channel-operations";
 import {
   processWhatsappHandoffNotification,
@@ -362,15 +363,18 @@ export const connectyhubMetaOrganicPublishSweep = inngest.createFunction(
     triggers: [{ cron: "*/5 * * * *" }],
   },
   async ({ step }) => {
-    const summary = await step.run("process-scheduled-meta-organic-posts", () =>
-      processScheduledMetaOrganicPosts({ limit: 10 }),
-    );
-    const social = await step.run("process-multiplatform-video-deliveries", processSocialDeliveries);
+    // Independent steps: an unrelated provider/queue failure must not skip retention.
+    const [summary, social, socialMaintenance] = await Promise.all([
+      step.run("process-scheduled-meta-organic-posts", () => processScheduledMetaOrganicPosts({ limit: 10 })),
+      step.run("process-multiplatform-video-deliveries", processSocialDeliveries),
+      step.run("maintain-social-authorizations", () => maintainSocialConnections(createServiceClient())),
+    ]);
 
     return {
       status: "swept",
       summary,
       social,
+      socialMaintenance,
     };
   },
 );

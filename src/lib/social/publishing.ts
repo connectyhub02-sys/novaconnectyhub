@@ -12,7 +12,7 @@ import { parseSocialDraft,targets,validateCreator,videoBlocks } from './publishi
 import { socialMedia,checkStoredVideo } from './media';
 import { socialToken,creatorInfo,advanceSocialDelivery,PublishError,type Delivery,type Progress } from './publishers';
 
-const deliveryFields='id,post_id,target,status,account_id,provider_id,result_url,error_message,updated_at,next_attempt_at';
+const deliveryFields='id,post_id,target,status,account_id,provider_id,result_url,error_message,updated_at,next_attempt_at,api_data_deleted_at';
 export async function publishingOverview(client:SupabaseClient,org:string){
  const [posts,deliveries,media,analyses,tariffs]=await Promise.all([
   client.from('social_posts').select('id,revision,draft,state,scheduled_for,timezone,approved_at,created_at').eq('organization_id',org).order('created_at',{ascending:false}).limit(100),
@@ -53,7 +53,7 @@ export async function approveSocialPost(client:SupabaseClient,org:string,user:st
  if(post.error||post.data.state!=='draft'||post.data.revision!==revision)throw Error('O rascunho mudou. Confira antes de aprovar.');
  const draft=parseSocialDraft(post.data.draft),check=await checkStoredVideo(client,org,draft.mediaId);
  let scheduled:string|null=null;
- if(when){if(typeof when!=='string'||!Number.isFinite(Date.parse(when))||Date.parse(when)<Date.now()+60000||Date.parse(when)>Date.now()+90*86400000)throw Error('Agende entre um minuto e 90 dias no futuro.');scheduled=new Date(when).toISOString();}
+ if(when){if(typeof when!=='string'||!Number.isFinite(Date.parse(when))||Date.parse(when)<Date.now()+60000||Date.parse(when)>Date.now()+28*86400000)throw Error('Agende entre um minuto e 28 dias no futuro.');scheduled=new Date(when).toISOString();}
  const deliveries=[];
  const expected=await reviewSocialDestinations(client,org,id);
  if(!Array.isArray(reviewed)||expected.length!==reviewed.length||expected.some(e=>!reviewed.some(r=>r.target===e.target&&r.accountId===e.accountId&&r.connectionId===e.connectionId)))throw Error('As contas de destino mudaram. Revise novamente.');

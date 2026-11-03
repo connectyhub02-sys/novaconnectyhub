@@ -748,6 +748,21 @@ export default function Home() {
         <p className="mt-5 text-xs leading-6 text-zinc-400">Disponibilidade, créditos e armazenamento seguem o contrato da conta. A documentação informa os recursos suportados; o catálogo do projeto confirma o que está liberado para uso.</p>
       </PageSection>
 
+      <PageSection id="redes-sociais" bg="#0d0d0d">
+        <GreenPill>{"// Redes sociais"}</GreenPill>
+        <h2 className="section-heading mt-4">Seu vídeo, nas contas que você escolher.</h2>
+        <p className="mt-5 max-w-3xl text-sm leading-7 text-zinc-300 sm:text-base">A ConnectyHub reúne a preparação de vídeos originais para YouTube, TikTok, Instagram e Facebook. Conecte suas próprias contas pela autorização oficial de cada rede, envie seu arquivo, revise as opções e aprove cada publicação.</p>
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          {[
+            ['Prepare seu vídeo', 'Biblioteca de mídias, verificação do arquivo e análise editorial opcional com IA, com o consumo informado no painel.'],
+            ['Escolha e aprove', 'Confira a conta, a legenda, a privacidade e as declarações exigidas pela rede. Publique após aprovar ou agende para até 28 dias.'],
+            ['Acompanhe cada destino', 'O histórico mostra o andamento de cada rede separadamente. Você pode desconectar suas contas e excluir os dados das integrações pelo painel.'],
+          ].map(([title,description])=><article key={title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h3 className="text-lg font-semibold text-white">{title}</h3><p className="mt-3 text-sm leading-7 text-zinc-300">{description}</p></article>)}
+        </div>
+        <p className="mt-6 text-sm leading-7 text-zinc-400">Integrações em homologação: a disponibilidade depende das aprovações dos aplicativos e das permissões de cada conta. O processamento pode levar alguns minutos; não há garantia de publicação simultânea ou de alcance. O recurso é destinado a empresas e criadores que publicam conteúdo próprio.</p>
+        <div className="mt-5 flex flex-wrap gap-6 text-sm"><Link href="/dashboard/redes-sociais/contas" className="text-white underline underline-offset-4">Acessar Redes sociais</Link><Link href="/privacidade" className="text-white underline underline-offset-4">Privacidade</Link><Link href="/termos" className="text-white underline underline-offset-4">Termos de uso</Link></div>
+      </PageSection>
+
       {/* ── 7. PLANOS ────────────────────────────────── */}
       <PageSection id="planos" bg="#0a0a0a">
         <GreenPill>{"// Planos"}</GreenPill>

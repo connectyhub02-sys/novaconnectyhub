@@ -12,7 +12,7 @@ export default function PrivacyPage() {
     <LegalPage
       title="Politica de Privacidade"
       description="Esta politica explica como a ConnectyHub coleta, usa, protege e permite a exclusao de dados em seus paineis, automacoes, integracoes e agentes de atendimento."
-      updatedAt="29 de outubro de 2026"
+      updatedAt="3 de novembro de 2026"
       sections={[
         {
           title: "1. Dados que coletamos",
@@ -73,8 +73,9 @@ export default function PrivacyPage() {
         {
           title: "7. Desconexão e exclusão de dados das redes sociais",
           paragraphs: [
-            "Em Redes sociais > Contas conectadas, o usuário pode desconectar uma conta. Essa ação remove os tokens e o vínculo da conta na ConnectyHub e solicita a revogação à plataforma. O painel informa quando a revogação externa não puder ser confirmada. Também é possível revogar o acesso diretamente nas configurações da conta Google ou TikTok.",
-            "Para solicitar a exclusão dos dados de integração que permanecem em rascunhos ou registros de publicação, entre em contato com connectyhub02@gmail.com, identificando a empresa e a conta. Os vídeos originais enviados à biblioteca e os registros comerciais da empresa têm finalidade própria; a solicitação pode incluir sua exclusão, observadas obrigações legais aplicáveis.",
+            "Em Redes sociais > Contas conectadas, o usuário pode desconectar uma conta e excluir os dados recebidos dessa integração. A ação remove tokens, perfil, vínculos de conta, identificadores e endereços de resultados de publicação na ConnectyHub, interrompe entregas pendentes e solicita a revogação à plataforma. Um envio já recebido pela rede pode concluir e deve ser conferido no próprio perfil. O painel informa quando a revogação externa não puder ser confirmada. Também é possível revogar o acesso diretamente nas configurações da conta Google ou TikTok.",
+            "As autorizações ativas são verificadas periodicamente, com revalidação diária. Conexões sem confirmação bem-sucedida por seis dias são removidas com os dados associados. Os dados recebidos das APIs nos registros de entrega são removidos em até 30 dias; por isso, links e identificadores antigos podem deixar de aparecer. O histórico preserva o destino, o resultado e as datas da operação, sem os dados de identificação recebidos da rede.",
+            "Você também pode solicitar a exclusão por connectyhub02@gmail.com, identificando a empresa e a conta. Os dados recebidos das APIs do YouTube relacionados à solicitação são excluídos assim que possível, em até sete dias. Os vídeos originais enviados por você à biblioteca, seus títulos, legendas e registros comerciais têm finalidade própria; a solicitação pode incluir sua exclusão, observadas as obrigações legais aplicáveis.",
             "Desconectar ou excluir dados na ConnectyHub não apaga os vídeos já publicados no YouTube ou TikTok. Para remover uma publicação dessas redes, utilize os controles da própria plataforma.",
             "Utilizamos cookies de sessão e de segurança para autenticação e proteção do fluxo de conexão. Arquivos destinados à publicação são disponibilizados ao provedor pelo endereço necessário para a transferência; não envie conteúdo sem autorização para esse processamento.",
           ],

@@ -12,11 +12,12 @@ export default function DataDeletionPage() {
     <LegalPage
       title="Exclusao de Dados"
       description="Esta pagina informa como usuarios e empresas podem solicitar a exclusao de dados tratados pela ConnectyHub, inclusive dados associados a integracoes externas."
-      updatedAt="14 de julho de 2026"
+      updatedAt="3 de novembro de 2026"
       sections={[
         {
           title: "1. Como solicitar",
           paragraphs: [
+            "Para YouTube e TikTok, acesse Redes sociais > Contas conectadas e escolha Desconectar. A confirmação exclui tokens, perfil e identificadores de publicação recebidos dessa rede e interrompe entregas pendentes. Isso não apaga os vídeos publicados no YouTube ou TikTok nem os arquivos originais da sua biblioteca; utilize a própria rede para remover os vídeos publicados.",
             "Envie uma solicitacao para connectyhub02@gmail.com usando o assunto Exclusao de Dados ConnectyHub.",
             "Informe o email da conta, nome da empresa, identificacao do workspace e quais dados deseja excluir ou desconectar.",
           ],
@@ -32,6 +33,7 @@ export default function DataDeletionPage() {
           title: "3. Prazos e confirmacao",
           paragraphs: [
             "Apos recebermos a solicitacao, poderemos pedir informacoes adicionais para confirmar a titularidade ou autorizacao da empresa.",
+            "Dados recebidos das APIs do YouTube são excluídos assim que possível e em até sete dias da solicitação. A desconexão pelo painel remove esses dados na própria operação.",
             "Quando a exclusao for concluida, enviaremos confirmacao pelo email informado na solicitacao.",
           ],
         },
