@@ -28,4 +28,12 @@ Tokens em `src/lib/ui/panel-theme.ts`; o tema fica restrito aos painéis autenti
 
 Publicação via `deploy/release.sh`: preparar slot inativo, conferir versão, páginas/assets, proteção das rotas e GET assinado Inngest; ativar somente após os checks. Sem migrations, mensagens, pagamentos ou novas inscrições Inngest. Manter o slot anterior para rollback. Resultado efetivo e SHA final serão registrados após a ativação.
 
-A primeira imagem candidata `37e0e679` foi preparada, mas não deve ser ativada: o titular solicitou fundo branco e texto preto durante o build. A revisão seguinte incorpora essa decisão antes da publicação.
+A primeira compilação candidata `37e0e679` foi cancelada sem ativação após o titular solicitar fundo branco e texto preto. A revisão `3fb7961c360c6213f62d52a62ef89814e152b468` incorpora essa decisão antes da publicação.
+
+Conferência adicional: fundo calculado `rgb(255,255,255)` e título `rgb(0,0,0)` no cliente em 390 px e no admin em 320 px, sem rolagem horizontal. A área de conexões sociais também foi conferida em 390 px. Cinco testes existentes de contraste/navegação passaram novamente após a revisão branca.
+
+## Resultado da publicação
+
+**PUBLICADO** em 07/11/2026: `3fb7961c360c6213f62d52a62ef89814e152b468`, slot b. Build completo aprovado na VPS. Health público confirmou SHA; smoke do candidato e público aprovados, incluindo 19 assets, proteções de acesso e GET assinado Inngest com 59 funções. Slot a (`9c591dd0`) permanece disponível para rollback pelo script de release.
+
+Cliente autenticado conferido em produção: início e automações, fundo branco real, título preto real, logotipo azul, seis objetivos e ausência de overflow em 390 px. Sem erros de console na leitura final. Admin validado localmente; sessão administrativa real não estava disponível. Nenhuma edição de automação ou envio real foi usado como teste. Evidências: `production-build.log`, `candidate-smoke.json`, `production-smoke.json`, `validation.json`, `producao-cliente-desktop.png` e `producao-automacoes-390.png` em `output/color-release-20261107/`.

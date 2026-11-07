@@ -16,6 +16,14 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ## Arquitetura de referência
 
+### Navegação e cores dos painéis — 07/11/2026
+
+Navegação por tarefas, com prioridade ao celular, grupos recolhíveis, busca e
+favoritos, preservando permissões e motores de automação. O titular aprovou a prévia e a publicação em 07/11. Direção visual final: fundo
+branco, texto principal preto, logotipo azul e cores discretas nos ícones por
+finalidade. Rótulos e estados explícitos acompanham as cores. Publicação e limites
+em [cores-e-publicacao-paineis-2026-11-07.md](cores-e-publicacao-paineis-2026-11-07.md).
+
 ### Expansão social e WhatsApp oficial — decisão de 11/10/2026
 
 Em 29/10 o titular autorizou implementar o fluxo completo e publicar para testes: vídeo único, validação técnica, análise editorial compartilhada, aprovação versionada e entregas independentes. A homologação externa permanece separada da publicação do código. [Escopo e operação](redes-sociais-publicacao-2026-10-29.md).

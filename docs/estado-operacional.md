@@ -1,5 +1,28 @@
 # Estado operacional da ConnectyHub
 
+## Painéis publicados: fundo branco, texto preto e navegação por tarefas — 07/11/2026
+
+Titular aprovou a reorganização, autorizou produção e pediu substituir o fundo
+acinzentado por branco, com texto preto, logotipo azul e ícones por finalidade.
+Publicado `3fb7961c360c6213f62d52a62ef89814e152b468` na VPS, **slot b**, após build,
+TypeScript, 69 testes focados e lint. A revisão branca repetiu cinco testes de
+contraste/navegação. Slot a preservado com `9c591dd0` para rollback. Nenhuma migration.
+
+Health público confirmou a revisão; páginas públicas e 19 assets responderam 200,
+rotas protegidas redirecionaram para autenticação e APIs sem sessão retornaram 401.
+GET assinado Inngest confirmou autenticação e as mesmas 59 funções da versão anterior.
+Navegador autenticado do cliente confirmou início reorganizado, seis objetivos de
+automação, fundo branco, título preto e logotipo azul. Automações em 390 px sem
+rolagem horizontal e sem erros de console na leitura final. Admin conferido na
+prévia local em desktop e 320 px; não havia sessão administrativa aberta disponível.
+
+Não foram alteradas configurações de automação reais nem enviados testes de
+mensagem/pagamento. Salvamento protegido foi validado pelos testes do handler com
+banco simulado; a observação de uma edição real continua para o uso do titular.
+Fonte isolada da revisão de produção, na branch `codex/panel-navigation-color-release`;
+as outras alterações do checkout principal ficaram fora do release.
+[Paleta, evidências e publicação](cores-e-publicacao-paineis-2026-11-07.md).
+
 ## Painéis: navegação, rascunhos, automações e cores — release preparada, 07/11/2026
 
 Titular aprovou a prévia e autorizou produção após refinamento das cores.
