@@ -12,7 +12,7 @@ O titular aprovou a reorganização e autorizou produção, solicitando antes um
 | Vendas e financeiro | Dourado `#895C19` | `#FBF1DC` |
 | Conta e sistema | Azul acinzentado `#486485` | `#EBF0F7` |
 
-Ícones do menu lateral, menu móvel e atalhos inferiores usam o mesmo mapa de áreas. A seleção conserva indicação explícita e as cores sempre acompanham rótulos/ícones. As áreas de automação ganham ícones, fundo suave e borda de seleção. O início ganha uma faixa clara e indicadores com destaque pequeno. Salvar no admin passa ao azul de ação principal; verde, âmbar e vermelho continuam sinalizando estados de sucesso, atenção e erro.
+Ícones do menu lateral, menu móvel e atalhos inferiores usam o mesmo mapa de áreas. A seleção conserva indicação explícita e as cores sempre acompanham rótulos/ícones. As áreas de automação ganham ícones, fundo suave e borda de seleção. Após a correção de direção do titular, o fundo da plataforma é branco, o texto principal é preto e o texto auxiliar usa contraste forte. O logotipo do painel aparece azul, sem o filtro antigo que o deixava cinza/preto. Não há faixa em degradê no início; as cores ficam concentradas nos ícones e estados de seleção. Salvar no admin passa ao azul de ação principal; verde, âmbar e vermelho continuam sinalizando estados de sucesso, atenção e erro.
 
 Tokens em `src/lib/ui/panel-theme.ts`; o tema fica restrito aos painéis autenticados. Não altera marcas das lojas ou conteúdo de clientes. A finalidade é melhorar orientação e hierarquia; não há promessa de efeito psicológico ou produtividade comprovada.
 
@@ -27,3 +27,5 @@ Tokens em `src/lib/ui/panel-theme.ts`; o tema fica restrito aos painéis autenti
 ## Operação
 
 Publicação via `deploy/release.sh`: preparar slot inativo, conferir versão, páginas/assets, proteção das rotas e GET assinado Inngest; ativar somente após os checks. Sem migrations, mensagens, pagamentos ou novas inscrições Inngest. Manter o slot anterior para rollback. Resultado efetivo e SHA final serão registrados após a ativação.
+
+A primeira imagem candidata `37e0e679` foi preparada, mas não deve ser ativada: o titular solicitou fundo branco e texto preto durante o build. A revisão seguinte incorpora essa decisão antes da publicação.

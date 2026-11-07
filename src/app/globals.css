@@ -115,7 +115,7 @@ main section[id] {
 }
 
 [data-connecty-shell-root="true"] .connecty-shell-logo-image {
-  filter: grayscale(1) contrast(1.2) brightness(0.46);
+  filter: brightness(0) saturate(100%) invert(28%) sepia(73%) saturate(2669%) hue-rotate(219deg) brightness(96%) contrast(90%);
 }
 
 .connecty-shell-content {
@@ -4707,12 +4707,12 @@ html {
 [data-connecty-mode] .ch-task-choice:hover { border-color: var(--ch-area); }
 [data-connecty-mode] .ch-task-choice[aria-current="true"] { border-color: var(--ch-area); background: var(--ch-area-soft); box-shadow: inset 0 -2px 0 var(--ch-area); }
 [data-connecty-mode] .ch-task-choice[aria-current="true"] .ch-area-icon { background: var(--ch-area); color: white; }
-[data-connecty-mode] .ch-home-heading { border-radius: 16px; padding: 18px; border: 1px solid #dbe5f6; background: linear-gradient(110deg, #e9f1ff, #f1edfb 65%, #e7f5f3); }
-[data-connecty-mode] .ch-home-heading h1 { color: #244488; }
+[data-connecty-mode] .ch-home-heading { padding: 0; border: 0; background: #ffffff; }
+[data-connecty-mode] .ch-home-heading h1 { color: #000000; }
 [data-connecty-mode] .ch-home-metrics a { border-top: 3px solid var(--ch-area); }
 [data-connecty-mode] .ch-home-card > header { background: var(--ch-surface-2); border-bottom: 1px solid var(--ch-border); }
 @media (max-width: 767px) {
-  [data-connecty-mode] .ch-home-heading { padding: 14px 12px; }
+  [data-connecty-mode] .ch-home-heading { padding: 0; }
   [data-connecty-mode] .ch-task-choice .ch-area-icon { width: 24px; height: 28px; border-radius: 7px; }
   [data-connecty-mode] .ch-task-choice { padding: 9px 8px; }
   [data-connecty-mode] .ch-task-choice > span > span:last-child { font-size: 12px; line-height: 1.4; }
@@ -4720,3 +4720,9 @@ html {
 @media (max-width: 1023px) {
   [data-connecty-shell-root]:has(.ch-attendance[data-pane="chat"]) [data-panel-context-nav] { display: none; }
 }
+
+/* White canvas requested by the owner; keep color local to orientation and states. */
+[data-connecty-shell-sidebar], [data-connecty-shell-topbar] { background: #fff !important; box-shadow: none !important; backdrop-filter: none !important; }
+[data-connecty-mode] .ch-navigation-menu, [data-connecty-mode] .ch-navigation-menu > div > div { background: #fff; }
+[data-connecty-mode] .ch-home-card, [data-connecty-mode] .ch-home-metrics a { box-shadow: none; }
+[data-connecty-mode] .connecty-mobile-dock > div { box-shadow: 0 -2px 12px #0000000a !important; background: #fff !important; }

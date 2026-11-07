@@ -3,9 +3,9 @@ import { panelNavigation } from "./panel-navigation";
 
 /** Shared semantic palette for both authenticated panels. Keep storefront branding separate. */
 export const panelColors = {
-  canvas: "#F2F6FC", surface: "#FFFFFF", subtle: "#F6F9FE", inset: "#EAF0FA",
+  canvas: "#FFFFFF", surface: "#FFFFFF", subtle: "#FFFFFF", inset: "#F8FAFC",
   border: "#DEE4ED", borderStrong: "#CBD4E1",
-  text: "#1F2937", muted: "#586779",
+  text: "#000000", muted: "#303030",
   primary: "#3156D3", primaryHover: "#2544AC", primarySoft: "#EDF2FF",
   success: "#18765D", successSoft: "#EBF5F0",
   warning: "#916215", warningSoft: "#FBF4E7",
@@ -62,6 +62,8 @@ const utilityTokens = Object.fromEntries([
 ]);
 export const panelTheme = {
   ...utilityTokens,
+  // White working surfaces and strong neutral text; area colors remain in icons.
+  ...Object.fromEntries(["slate", "gray", "zinc"].flatMap(family => Object.entries({ 50: "#FFFFFF", 100: "#FFFFFF", 500: "#303030", 600: "#222222", 700: "#111111", 800: "#000000", 900: "#000000" }).map(([step, value]) => [`--color-${family}-${step}`, value]))),
   background: c.canvas, colorScheme: "light",
   "--ch-bg": c.canvas, "--ch-surface": c.surface, "--ch-surface-2": c.subtle, "--ch-surface-3": c.inset,
   "--ch-border": c.border, "--ch-border-soft": "#E9EDF3", "--ch-border-strong": c.borderStrong,
@@ -72,7 +74,7 @@ export const panelTheme = {
   "--ch-ai": panelAreas.automation.color, "--ch-ai-rgb": "112,70,184", "--ch-ai-cyan": panelAreas.service.color, "--ch-ai-cyan-rgb": "8,117,122", "--ch-ai-soft": panelAreas.automation.soft,
   "--ch-accent": c.primary, "--ch-accent-rgb": "49,86,211", "--ch-accent-2": c.primaryHover, "--ch-accent-2-rgb": "37,68,172",
   "--ch-panel": c.surface, "--ch-panel-2": c.surface,
-  "--ch-text": c.text, "--ch-text-rgb": "31,41,55", "--ch-muted": c.muted, "--ch-subtle": c.muted,
+  "--ch-text": c.text, "--ch-text-rgb": "0,0,0", "--ch-muted": c.muted, "--ch-subtle": c.muted,
   "--ch-hover": c.inset, "--ch-dropdown-bg": c.surface,
   "--ch-success": c.success, "--ch-success-rgb": "24,118,93", "--ch-success-soft": c.successSoft,
   "--ch-warning": c.warning, "--ch-warning-rgb": "145,98,21", "--ch-warning-soft": c.warningSoft,
