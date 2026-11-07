@@ -3,7 +3,8 @@ import { readOperationHours, validateOperationHours } from "@/lib/sales-catalog/
 import { deliveryMoneyCents } from "@/lib/sales-catalog/local-delivery";
 import { validateProductAgenda } from "@/lib/sales-catalog/appointment-policy";
 import { applyDestinationToAllProducts, isBulkDestination } from "@/lib/sales-catalog/bulk-destination";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { assertCatalogSettingsRevision, catalogSettingsInput, catalogSettingsMetadata, CatalogSettingsConflict } from "@/lib/sales-catalog/settings-write";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError, getOrganizationBillingAccess } from "@/lib/billing/trial";
@@ -783,7 +784,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       return NextResponse.json(result);
     }
 
-    if (action === "save_catalog_settings") {
+    if (action === "save_catalog_settings" || action === "save_automation_settings") {
       const result = await saveCatalogSettings({
         client,
         companyId,
@@ -791,6 +792,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
         body,
       });
 
+      revalidatePath("/dashboard/automacoes");
       revalidatePath("/dashboard/links");
       revalidatePath("/dashboard/whatsapp");
       revalidatePath(`/loja/${company.slug ?? company.id}`);
@@ -1161,49 +1163,53 @@ async function saveCatalogSettings(input: {
     companyId: input.companyId,
     client: input.client,
   });
-  const businessType = normalizeBusinessType(readFormString(input.body?.businessType));
-  const template = salesCatalogBusinessTemplates.find((item) => item.value === businessType)
-    ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
-  const categories = normalizeStringList(input.body?.categories, [], 30, 80);
   const { data: existing, error: existingError } = await input.client
     .from("intelligence_memory")
-    .select("id, metadata")
+    .select("id, metadata, updated_at")
     .eq("scope", "organization")
     .eq("organization_id", company.id)
     .eq("memory_type", "sales_catalog_settings")
+    .order("updated_at", { ascending: false })
     .limit(1)
-    .maybeSingle<{ id: string; metadata: JsonRecord | null }>();
+    .maybeSingle<{ id: string; metadata: JsonRecord | null; updated_at: string | null }>();
 
   if (existingError) {
     throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
   }
 
   const existingMetadata = readRecord(existing?.metadata) ?? {};
-  const attributes = normalizeSettingsAttributes(input.body?.attributes, []);
-  const storefront = normalizeStorefrontSettings(input.body?.storefront, categories);
-  const trackInventory = readBoolean(input.body?.trackInventory) ?? false;
-  const variationMedia = readBoolean(input.body?.variationMedia) ?? false;
+  assertCatalogSettingsRevision(input.body ?? {}, existing?.updated_at ?? null);
+  const automationOnly = input.body?.action === "save_automation_settings";
+  const body = catalogSettingsInput(input.body ?? {}, existingMetadata, automationOnly);
+  const businessType = normalizeBusinessType(readFormString(body?.businessType));
+  const template = salesCatalogBusinessTemplates.find((item) => item.value === businessType)
+    ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
+  const categories = normalizeStringList(body?.categories, [], 30, 80);
+  const attributes = normalizeSettingsAttributes(body?.attributes, []);
+  const storefront = normalizeStorefrontSettings(body?.storefront, categories);
+  const trackInventory = readBoolean(body?.trackInventory) ?? false;
+  const variationMedia = readBoolean(body?.variationMedia) ?? false;
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
-  const paymentMethods = normalizePaymentMethods(input.body?.paymentMethods, commerceDefaults.paymentMethods);
+  const paymentMethods = normalizePaymentMethods(body?.paymentMethods, commerceDefaults.paymentMethods);
   const pagBank = normalizePagBankSettings(
-    input.body?.pagBank ?? input.body?.pagbank ?? existingMetadata.pagbank ?? existingMetadata.pag_bank ?? existingMetadata.pagBank,
+    body?.pagBank ?? body?.pagbank ?? existingMetadata.pagbank ?? existingMetadata.pag_bank ?? existingMetadata.pagBank,
     commerceDefaults.pagBank,
   );
   const asaas = normalizeAsaasSettings(
-    input.body?.asaas ?? input.body?.asaasSettings ?? existingMetadata.asaas ?? existingMetadata.asaas_settings ?? existingMetadata.asaasSettings,
+    body?.asaas ?? body?.asaasSettings ?? existingMetadata.asaas ?? existingMetadata.asaas_settings ?? existingMetadata.asaasSettings,
     commerceDefaults.asaas,
   );
-  const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
+  const orderPolicy = normalizeOrderPolicy(body?.orderPolicy, commerceDefaults.orderPolicy);
   const operationError = orderPolicy.operations && validateOperationHours(orderPolicy.operations);
   if (operationError) throw new Error(operationError);
-  const leadDataPolicy = normalizeLeadDataPolicy(input.body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
-  const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
-  const automationSettings = normalizeAutomationSettings(input.body?.automationSettings, commerceDefaults.automationSettings);
-  const orderBumps = normalizeOrderBumps(input.body?.orderBumps, createDefaultSalesCatalogOrderBumps());
-  const commerceAgent = normalizeCommerceAgentSettings(input.body?.commerceAgent, commerceDefaults.commerceAgent);
+  const leadDataPolicy = normalizeLeadDataPolicy(body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
+  const messageTemplates = normalizeMessageTemplates(body?.messageTemplates, commerceDefaults.messageTemplates);
+  const automationSettings = normalizeAutomationSettings(body?.automationSettings, commerceDefaults.automationSettings);
+  const orderBumps = normalizeOrderBumps(body?.orderBumps, createDefaultSalesCatalogOrderBumps());
+  const commerceAgent = normalizeCommerceAgentSettings(body?.commerceAgent, commerceDefaults.commerceAgent);
   const enabledPayments = paymentMethods.filter((method) => method.enabled);
   const now = new Date().toISOString();
-  const metadata = {
+  const normalizedMetadata = {
     configured: true,
     business_type: businessType,
     categories,
@@ -1226,6 +1232,7 @@ async function saveCatalogSettings(input: {
     updated_by: input.userId,
     updated_from: "sales_catalog_setup",
   };
+  const metadata = catalogSettingsMetadata(existingMetadata, normalizedMetadata, automationOnly, Boolean(existing));
   const content = [
     `Tipo: ${template.label}`,
     categories.length ? `Categorias: ${categories.join(", ")}` : "",
@@ -1260,8 +1267,10 @@ async function saveCatalogSettings(input: {
       : "Agente na loja: inativo",
   ].filter(Boolean).join("\n");
   const previousCategories = normalizeStringList(existingMetadata.categories, [], 30, 80);
-  const categoryRenames = normalizeCategoryRenames(input.body?.categoryRenames ?? input.body?.category_renames, previousCategories, categories);
-  const settingsId = existing?.id ?? randomUUID();
+  const categoryRenames = normalizeCategoryRenames(body?.categoryRenames ?? body?.category_renames, previousCategories, categories);
+  // Stable identity prevents simultaneous first saves from creating two settings records.
+  const seed = createHash("sha256").update(`sales_catalog_settings:${company.id}`).digest("hex");
+  const settingsId = existing?.id ?? `${seed.slice(0,8)}-${seed.slice(8,12)}-5${seed.slice(13,16)}-a${seed.slice(17,20)}-${seed.slice(20,32)}`;
   const payload = {
     id: settingsId,
     scope: "organization",
@@ -1274,13 +1283,19 @@ async function saveCatalogSettings(input: {
     metadata,
     updated_at: now,
   };
-  const query = existing
-    ? input.client.from("intelligence_memory").update(payload).eq("id", existing.id)
-    : input.client.from("intelligence_memory").insert({ ...payload, created_at: now });
+  let query;
+  if (existing) {
+    const update = input.client.from("intelligence_memory").update(payload)
+      .eq("id", existing.id).eq("organization_id", company.id).eq("memory_type", "sales_catalog_settings");
+    query = existing.updated_at ? update.eq("updated_at", existing.updated_at) : update.is("updated_at", null);
+  } else {
+    query = input.client.from("intelligence_memory").insert({ ...payload, created_at: now });
+  }
   const { data, error } = await query
     .select("id, organization_id, title, content, metadata, created_at, updated_at")
-    .single<SalesCatalogMemoryRow>();
+    .maybeSingle<SalesCatalogMemoryRow>();
 
+  if (error?.code === "23505" || (!error && !data)) throw new CatalogSettingsConflict();
   if (error || !data) {
     throw new Error(error?.message ?? "Nao foi possivel salvar a configuracao do catalogo.");
   }
@@ -5648,6 +5663,7 @@ function formatRouteError(error: unknown, fallback: string) {
 }
 
 function statusForRouteError(error: unknown, fallback: number) {
+  if (error instanceof CatalogSettingsConflict) return 409;
   const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
   if (scopeStatus) return scopeStatus;
 

@@ -1,3 +1,4 @@
+import { panelColors } from "@/lib/ui/panel-theme";
 import type { ReactNode } from "react";
 import { AgentPhoto } from "./agent-photo";
 import type { LucideIcon } from "lucide-react";
@@ -17,21 +18,12 @@ import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 // ─── Tone map ─────────────────────────────────────────────────────────────────
 
 const toneMap: Record<Tone, { text: string; border: string; bg: string; fill: string; dot: string }> = {
-  green:  { text: "text-emerald-700", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: "#128c7e", dot: "bg-emerald-500" },
-  cyan:   { text: "text-blue-700",    border: "border-blue-500/25",    bg: "bg-blue-500/10",    fill: "#1877f2", dot: "bg-blue-500"    },
-  amber:  { text: "text-amber-700",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: "#b45309", dot: "bg-amber-500"  },
-  rose:   { text: "text-rose-700",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: "#dc2626", dot: "bg-rose-500"   },
-  violet: { text: "text-indigo-700",  border: "border-indigo-500/25",  bg: "bg-indigo-500/10",  fill: "#4f46e5", dot: "bg-indigo-500" },
-  zinc:   { text: "text-slate-600",   border: "border-slate-300",      bg: "bg-slate-100",      fill: "#64748b", dot: "bg-slate-400"  },
-};
-
-const panelToneMap: Record<Tone, { rgb: string; fill: string }> = {
-  green:  { rgb: "18,140,126", fill: "#128c7e" },
-  cyan:   { rgb: "24,119,242", fill: "#1877f2" },
-  amber:  { rgb: "180,83,9", fill: "#b45309" },
-  rose:   { rgb: "220,38,38", fill: "#dc2626" },
-  violet: { rgb: "79,70,229", fill: "#4f46e5" },
-  zinc:   { rgb: "100,116,139", fill: "#64748b" },
+  green:  { text: "text-emerald-700", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: panelColors.success, dot: "bg-emerald-500" },
+  cyan:   { text: "text-blue-700",    border: "border-blue-500/25",    bg: "bg-blue-500/10",    fill: panelColors.primary, dot: "bg-blue-500"    },
+  amber:  { text: "text-amber-700",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: panelColors.warning, dot: "bg-amber-500"  },
+  rose:   { text: "text-rose-700",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: panelColors.danger, dot: "bg-rose-500"   },
+  violet: { text: "text-indigo-700",  border: "border-indigo-500/25",  bg: "bg-indigo-500/10",  fill: panelColors.primary, dot: "bg-indigo-500" },
+  zinc:   { text: "text-slate-600",   border: "border-slate-300",      bg: "bg-slate-100",      fill: panelColors.muted, dot: "bg-slate-400"  },
 };
 
 const statusMap: Record<StatusTone, { label: string; tone: Tone; icon: LucideIcon }> = {
@@ -83,7 +75,6 @@ export function Panel({
   action,
   children,
   className,
-  tone = "cyan",
   compact = false,
   collapsible = false,
   defaultOpen = false,
@@ -99,7 +90,7 @@ export function Panel({
   collapsible?: boolean;
   defaultOpen?: boolean;
 }) {
-  const toneStyle = panelToneMap[tone];
+  const toneStyle = { fill: "var(--ch-border-strong)", rgb: "203,212,225" };
   const chromeStyle = {
     background: "var(--ch-surface, #ffffff)",
     border: "1px solid var(--ch-border, #e2e8f0)",
@@ -113,7 +104,7 @@ export function Panel({
     <>
       <div
         className="pointer-events-none absolute left-0 top-0 h-full w-1"
-        style={{ background: toneStyle.fill, boxShadow: `0 0 18px rgba(${toneStyle.rgb},0.55)` }}
+        style={{ background: "transparent" }}
       />
       <div className="min-w-0">
         {eyebrow && (
@@ -129,7 +120,7 @@ export function Panel({
     return (
       <details
         id={id}
-        className={cn("group overflow-hidden rounded-2xl", className)}
+        className={cn("ch-panel group overflow-hidden rounded-2xl", className)}
         style={chromeStyle}
         {...(defaultOpen ? { open: true } : {})}
       >
@@ -138,7 +129,7 @@ export function Panel({
           style={headerStyle}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: toneStyle.fill, boxShadow: `0 0 18px rgba(${toneStyle.rgb},0.45)` }} />
+            <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: "var(--ch-border)" }} />
             <div className="min-w-0">
               {eyebrow && (
                 <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
@@ -162,7 +153,7 @@ export function Panel({
   }
 
   return (
-    <div id={id} className={cn("overflow-hidden rounded-2xl", className)} style={chromeStyle}>
+    <div id={id} className={cn("ch-panel overflow-hidden rounded-2xl", className)} style={chromeStyle}>
       <div
         className="relative flex flex-col items-start justify-between gap-3 px-3 py-3 sm:flex-row sm:items-center sm:px-4 sm:py-3"
         style={headerStyle}
@@ -183,7 +174,6 @@ export function MetricCard({
   detail: string; trend: string; tone: Tone; series: number[];
 }) {
   const t    = toneMap[tone];
-  const toneStyle = panelToneMap[tone];
   const isUp = trend.startsWith("+");
   const isDn = trend.startsWith("-");
 
@@ -191,9 +181,9 @@ export function MetricCard({
     <div
       className="min-w-0 rounded-xl p-3 sm:rounded-2xl sm:p-5"
       style={{
-        background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.10), rgba(255,255,255,0.72)), var(--ch-panel)`,
-        border: `1px solid rgba(${toneStyle.rgb},0.24)`,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78), 0 10px 24px rgba(15,23,42,0.06)",
+        background: "var(--ch-surface)",
+        border: "1px solid var(--ch-border)",
+        boxShadow: "0 2px 8px rgba(31,41,55,0.03)",
       }}
     >
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
@@ -228,8 +218,8 @@ export function HeroMetricCard({
   sub1Label: string; sub1Value: string; sub2Label: string; sub2Value: string;
   series: number[]; accent?: "cyan" | "emerald";
 }) {
-  const color  = accent === "cyan" ? "#1877f2" : "#128c7e";
-  const colorB = accent === "cyan" ? "#eaf3ff" : "#e7f8ef";
+  const color = accent === "cyan" ? panelColors.primary : panelColors.success;
+  const colorB = accent === "cyan" ? panelColors.primarySoft : panelColors.successSoft;
 
   return (
     <div
@@ -377,7 +367,7 @@ export function StatusBar({ items }: { items: { label: string; status: StatusTon
         const t    = toneMap[s.tone];
         return (
           <div key={item.label} className="flex items-center gap-2">
-            <div className={cn("h-2 w-2 rounded-full", t.dot)} style={{ boxShadow: `0 0 6px ${t.fill}` }} />
+            <div className={cn("h-2 w-2 rounded-full", t.dot)}  />
             <span className="text-[12px] text-slate-400">{item.label}</span>
             <span className={cn("font-mono text-[11px]", t.text)}>{s.label}</span>
           </div>
@@ -397,7 +387,7 @@ export function TelemetryFeed({ items }: { items: { time: string; actor: string;
         return (
           <div key={`${item.time}-${item.action}`} className="grid grid-cols-[52px_10px_1fr] items-start gap-x-3 py-3 first:pt-0 last:pb-0">
             <span className="pt-0.5 font-mono text-[11px] text-slate-600">{item.time}</span>
-            <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", t.dot)} style={{ boxShadow: `0 0 5px ${t.fill}` }} />
+            <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", t.dot)}  />
             <div>
               <span className="text-[12px] font-medium" style={{ color: "var(--ch-text)" }}>{item.actor}</span>
               <span className="mx-2 text-slate-400">·</span>

@@ -1,4 +1,5 @@
 "use client";
+import { TaskSections, selectTaskSection } from "./task-sections";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -83,7 +84,7 @@ export function PlatformAutomationsCenter({
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyState, setPolicyState] = useState<ActionState>({ tone: "idle", message: "" });
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(catalog.flows.length === 0);
   const firstFlow = catalog.flows[0] ?? null;
   const [selectedFlowId, setSelectedFlowId] = useState(firstFlow?.id ?? "");
   const selectedFlow = catalog.flows.find((flow) => flow.id === selectedFlowId) ?? firstFlow;
@@ -112,6 +113,7 @@ export function PlatformAutomationsCenter({
   }
 
   function startCreate() {
+    selectTaskSection("fluxos");
     setCreating(true);
     setSelectedFlowId("");
     setDraft(draftFromEvent(catalog));
@@ -191,21 +193,19 @@ export function PlatformAutomationsCenter({
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/automacoes">
       <PageHeader
         eyebrow="Admin OS / Automacoes"
-        title="Automacoes de receita"
+        title="Automações da plataforma"
         description="Controle mensagens automaticas, gatilhos de venda e agente WhatsApp para cada etapa do cliente."
         actions={
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={startCreate}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-cyan-200 transition hover:bg-cyan-500/20"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-cyan-200 transition hover:bg-cyan-500/20"
             >
               <Plus className="h-3.5 w-3.5" />
               Nova automacao
             </button>
-            <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>
-              {catalog.schemaReady ? "Schema pronto" : "Aguardando SQL"}
-            </NeonBadge>
+            {!catalog.schemaReady && <NeonBadge tone="amber">Configuração pendente</NeonBadge>}
           </div>
         }
       />
@@ -222,110 +222,19 @@ export function PlatformAutomationsCenter({
         </Panel>
       )}
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <details className="mb-4 rounded-xl border border-slate-200 bg-white p-3"><summary className="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-slate-700">Resumo · {catalog.stats.activeFlows} automações habilitadas · {catalog.stats.pendingNotifications} pendentes</summary>
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <AutomationMetric icon={Zap} label="Fluxos" value={formatNumber(catalog.stats.totalFlows)} detail="templates comerciais" tone="cyan" />
-        <AutomationMetric icon={PlayCircle} label="Ativas" value={formatNumber(catalog.stats.activeFlows)} detail="enviando agora" tone="green" />
+        <AutomationMetric icon={PlayCircle} label="Ativas" value={formatNumber(catalog.stats.activeFlows)} detail="habilitadas" tone="green" />
         <AutomationMetric icon={PauseCircle} label="Pausadas" value={formatNumber(catalog.stats.pausedFlows)} detail="guardadas" tone="amber" />
         <AutomationMetric icon={Bot} label="Agentes" value={formatNumber(catalog.stats.connectedAgents)} detail="WhatsApp online" tone="violet" />
         <AutomationMetric icon={Send} label="24h" value={formatNumber(catalog.stats.sent24h)} detail="mensagens enviadas" tone="green" />
         <AutomationMetric icon={Activity} label="Fila" value={formatNumber(catalog.stats.pendingNotifications)} detail="pendentes" tone="amber" />
       </div>
+      </details>
 
-      <Panel
-        className="mb-4"
-        title="Regua financeira"
-        eyebrow="planos / pix / cartao"
-        tone="amber"
-        action={
-          <button
-            type="button"
-            disabled={savingPolicy || !catalog.schemaReady || !policyChanged}
-            onClick={saveRenewalPolicy}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-300 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {savingPolicy ? "Salvando" : "Salvar regua"}
-          </button>
-        }
-      >
-        <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Pix avisa antes">
-              <DaySelect
-                value={policyDraft.pixReminderStartDays}
-                min={1}
-                max={15}
-                suffix="dia(s)"
-                onChange={(value) => setPolicyDraft((current) => ({ ...current, pixReminderStartDays: value }))}
-              />
-            </Field>
-            <Field label="Cartao tenta antes">
-              <DaySelect
-                value={policyDraft.cardChargeAttemptDays}
-                min={1}
-                max={15}
-                suffix="dia(s)"
-                onChange={(value) => setPolicyDraft((current) => ({ ...current, cardChargeAttemptDays: value }))}
-              />
-            </Field>
-            <Field label="Carencia">
-              <DaySelect
-                value={policyDraft.gracePeriodDays}
-                min={0}
-                max={15}
-                suffix="dia(s)"
-                onChange={(value) => setPolicyDraft((current) => ({ ...current, gracePeriodDays: value }))}
-              />
-            </Field>
-            <Field label="Suspender apos">
-              <DaySelect
-                value={policyDraft.suspendAfterDays}
-                min={0}
-                max={30}
-                suffix="dia(s)"
-                onChange={(value) => setPolicyDraft((current) => ({ ...current, suspendAfterDays: value }))}
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-2">
-            <RenewalToggle
-              label="Lembrete diario no WhatsApp"
-              checked={policyDraft.dailyWhatsAppReminders}
-              onChange={(checked) => setPolicyDraft((current) => ({ ...current, dailyWhatsAppReminders: checked }))}
-            />
-            <RenewalToggle
-              label="Tentativa antecipada no cartao"
-              checked={policyDraft.cardChargeAttemptEnabled}
-              onChange={(checked) => setPolicyDraft((current) => ({ ...current, cardChargeAttemptEnabled: checked }))}
-            />
-            <RenewalToggle
-              label="Falha no cartao oferece Pix"
-              checked={policyDraft.cardFailureUsesPixFallback}
-              onChange={(checked) => setPolicyDraft((current) => ({ ...current, cardFailureUsesPixFallback: checked }))}
-            />
-            <RenewalToggle
-              label="Avisar responsaveis humanos"
-              checked={policyDraft.notifyResponsibleHumans}
-              onChange={(checked) => setPolicyDraft((current) => ({ ...current, notifyResponsibleHumans: checked }))}
-            />
-          </div>
-        </div>
-
-        {policyState.message ? (
-          <div
-            className={cn(
-              "mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5",
-              policyState.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-              policyState.tone === "error" && "border-rose-200 bg-rose-50 text-rose-700",
-              policyState.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
-            )}
-          >
-            {policyState.message}
-          </div>
-        ) : null}
-      </Panel>
-
+      <TaskSections label="Automações da plataforma" sections={[
+        { id: "fluxos", title: "Relacionamento", description: "Mensagens por etapa do cliente", content: <>
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <Panel
           title="Fluxos de follow-up"
@@ -375,7 +284,7 @@ export function PlatformAutomationsCenter({
                 <button
                   type="submit"
                   disabled={saving || !canSave}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-400 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl ch-action px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
                   {saving ? "Salvando" : "Salvar"}
@@ -397,11 +306,9 @@ export function PlatformAutomationsCenter({
                 </div>
               )}
 
-              <FlowJourneyCanvas
-                draft={draft}
-                selectedEvent={selectedEvent}
-                selectedAgent={selectedAgent}
-              />
+              <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-slate-700">Como este fluxo funciona</summary>
+                <FlowJourneyCanvas draft={draft} selectedEvent={selectedEvent} selectedAgent={selectedAgent} />
+              </details>
 
               <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
                 <Field label="Nome">
@@ -442,7 +349,7 @@ export function PlatformAutomationsCenter({
                 />
               </Field>
 
-              <div className="grid gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <Field label="Status">
                   <select
                     value={draft.status}
@@ -564,7 +471,7 @@ export function PlatformAutomationsCenter({
                   </div>
                 </Panel>
 
-                <Panel title="Regras do gatilho" eyebrow="condicoes / frequencia" tone="amber" compact>
+                <Panel title="Regras avançadas" eyebrow="condicoes / frequencia" tone="amber" compact collapsible>
                   <div className="grid gap-3">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field label="Atraso min.">
@@ -644,6 +551,105 @@ export function PlatformAutomationsCenter({
         </form>
       </div>
 
+        </> },
+        { id: "financeiro", title: "Cobrança e renovação", description: "Política financeira da plataforma", content: <>
+      <Panel
+        className="mb-4"
+        title="Regua financeira"
+        eyebrow="planos / pix / cartao"
+        tone="amber"
+        action={
+          <button
+            type="button"
+            disabled={savingPolicy || !catalog.schemaReady || !policyChanged}
+            onClick={saveRenewalPolicy}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl ch-action px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {savingPolicy ? "Salvando" : "Salvar regua"}
+          </button>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="Pix avisa antes">
+              <DaySelect
+                value={policyDraft.pixReminderStartDays}
+                min={1}
+                max={15}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, pixReminderStartDays: value }))}
+              />
+            </Field>
+            <Field label="Cartao tenta antes">
+              <DaySelect
+                value={policyDraft.cardChargeAttemptDays}
+                min={1}
+                max={15}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, cardChargeAttemptDays: value }))}
+              />
+            </Field>
+            <Field label="Carencia">
+              <DaySelect
+                value={policyDraft.gracePeriodDays}
+                min={0}
+                max={15}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, gracePeriodDays: value }))}
+              />
+            </Field>
+            <Field label="Suspender apos">
+              <DaySelect
+                value={policyDraft.suspendAfterDays}
+                min={0}
+                max={30}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, suspendAfterDays: value }))}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-2">
+            <RenewalToggle
+              label="Lembrete diario no WhatsApp"
+              checked={policyDraft.dailyWhatsAppReminders}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, dailyWhatsAppReminders: checked }))}
+            />
+            <RenewalToggle
+              label="Tentativa antecipada no cartao"
+              checked={policyDraft.cardChargeAttemptEnabled}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, cardChargeAttemptEnabled: checked }))}
+            />
+            <RenewalToggle
+              label="Falha no cartao oferece Pix"
+              checked={policyDraft.cardFailureUsesPixFallback}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, cardFailureUsesPixFallback: checked }))}
+            />
+            <RenewalToggle
+              label="Avisar responsaveis humanos"
+              checked={policyDraft.notifyResponsibleHumans}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, notifyResponsibleHumans: checked }))}
+            />
+          </div>
+        </div>
+
+        {policyState.message ? (
+          <div
+            className={cn(
+              "mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5",
+              policyState.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+              policyState.tone === "error" && "border-rose-200 bg-rose-50 text-rose-700",
+              policyState.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
+            )}
+          >
+            {policyState.message}
+          </div>
+        ) : null}
+      </Panel>
+
+        </> },
+        { id: "historico", title: "Histórico e eventos", description: "Envios, falhas e gatilhos disponíveis", content: <>
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_360px]">
         <Panel title="Historico de automacoes" eyebrow="whatsapp / fila" tone="cyan">
           {catalog.notifications.length > 0 ? (
@@ -687,6 +693,8 @@ export function PlatformAutomationsCenter({
         </Panel>
       </div>
 
+        </> },
+      ]} />
       {catalog.warnings.length > 0 && (
         <Panel className="mt-4" title="Avisos tecnicos" eyebrow="automacoes / banco" tone="amber">
           <ul className="list-disc space-y-1 pl-5 text-[12px] leading-5 text-amber-100">

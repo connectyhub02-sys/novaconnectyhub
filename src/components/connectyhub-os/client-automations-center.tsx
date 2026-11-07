@@ -7,6 +7,8 @@ import {
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
+import Link from "next/link";
+import { TaskSections } from "./task-sections";
 import { AgentPhoto } from "./agent-photo";
 import { MetaCommentAutomations } from "./meta-comment-automations";
 import { ClientWhatsappAutomationStudio, type ClientAutomationAgent } from "./client-whatsapp-automation-studio";
@@ -118,25 +120,15 @@ export function ClientAutomationsCenter({
     setNotice(null);
 
     try {
-      const defaults = createDefaultSalesCatalogCommerceSettings();
-      const source = selectedSettings;
       const response = await fetch("/api/dashboard/sales-catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "save_catalog_settings",
+          action: "save_automation_settings",
           companyId: selectedCompanyId,
-          businessType: source?.businessType ?? "simple",
-          categories: source?.categories ?? [],
-          attributes: source?.attributes ?? [],
-          trackInventory: source?.trackInventory ?? false,
-          variationMedia: source?.variationMedia ?? false,
-          paymentMethods: source?.paymentMethods ?? defaults.paymentMethods,
-          orderPolicy: source?.orderPolicy ?? defaults.orderPolicy,
-          leadDataPolicy: source?.leadDataPolicy ?? defaults.leadDataPolicy,
+          expectedUpdatedAt: selectedSettings?.updatedAt ?? null,
           messageTemplates: draft.messageTemplates,
           automationSettings: draft.automationSettings,
-          orderBumps: source?.orderBumps ?? draft.orderBumps ?? defaults.orderBumps,
         }),
       });
       const data = await response.json().catch(() => null) as { settings?: ClientSalesCatalogSettings; error?: string } | null;
@@ -172,7 +164,7 @@ export function ClientAutomationsCenter({
       <div className="p-4 sm:p-6">
         <PageHeader
           eyebrow="Workspace / automacoes"
-          title="Automacoes"
+          title="Automações"
           description="Cadastre sua empresa antes de configurar mensagens automaticas."
         />
       </div>
@@ -180,25 +172,17 @@ export function ClientAutomationsCenter({
   }
 
   return (
-    <form onSubmit={saveAutomations} className="space-y-4 p-4 sm:p-6">
+    <div className="space-y-4 py-2 sm:py-3">
       <PageHeader
         eyebrow="Workspace / automacoes"
-        title="Automacoes"
-        description="Relacionamento, campanhas e mensagens dos seus pedidos em um só lugar."
-        actions={
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Salvando" : "Salvar configurações"}
-          </button>
-        }
+        title="Automações"
+        description="Escolha o que você quer automatizar. Cada área mantém seus controles e seu próprio salvamento."
+
       />
 
       {notice ? (
         <div
+          role="status"
           className={cn(
             "rounded-xl border px-4 py-3 text-sm",
             notice.tone === "success"
@@ -216,33 +200,47 @@ export function ClientAutomationsCenter({
             {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
           </select>
         ) : <strong>{selectedCompany?.name ?? "Workspace"}</strong>}
-        <span>Mensagens ao lead: mesmo agente do atendimento</span>
+        <details className="w-full text-xs text-slate-500"><summary className="min-h-8 cursor-pointer py-2">Remetente e conexão</summary>
+        <p className="py-1">Mensagens ao lead: mesmo agente do atendimento</p>
         <span className="text-xs text-slate-500">Campanhas e novos contatos: {selectedAgent?.personaName || selectedAgent?.name || "sem agente padrão"}</span>
         <span className="inline-flex items-center gap-1.5 text-xs"><Smartphone className="h-4 w-4" />{selectedWhatsapp?.status === "connected" ? "Conectado" : selectedWhatsapp ? "Verificar conexão" : "Sem WhatsApp padrão"}</span>
+        </details>
       </div>
 
+      <TaskSections label="Objetivos das automações" sections={[
+        { id: "relacionamento", title: "Retomar conversas", description: "Follow-up, retornos e recuperação de vendas", content: <>
+      <IntelligentFollowUpPanel key={selectedCompanyId} companyId={selectedCompanyId} />
+
+        </> },
+        { id: "redes-sociais", title: "Comentários e Direct", description: "Instagram e Facebook", content: <>
+      <MetaCommentAutomations key={`meta-${selectedCompanyId}`} companyId={selectedCompanyId} agents={agents} />
+
+        </> },
+        { id: "whatsapp", title: "Grupos e status", description: "Campanhas, canais e publicações no WhatsApp", content: <>
+      <ClientWhatsappAutomationStudio
+        key={`${selectedCompanyId}:${draft.automationSettings.defaultAgentId ?? "conversation"}`}
+        agents={agents}
+        companyId={selectedCompanyId}
+        companyName={selectedCompany?.name ?? "Workspace"}
+        products={companyProducts}
+        selectedAutomationAgentId={draft.automationSettings.defaultAgentId ?? selectedWhatsapp?.agentId ?? null}
+        selectedAutomationWhatsappLabel={selectedWhatsapp?.label ?? null}
+        whatsappOptions={companyWhatsappInstances.filter((instance) => instance.agentId && instance.status !== "archived")
+          .map((instance) => ({ agentId: instance.agentId as string, label: instance.label, status: instance.status,
+            avatarUrl: agents.find((agent) => agent.id === instance.agentId)?.avatarUrl ?? null }))}
+      />
+
+        </> },
+        { id: "pedidos", title: "Avisos de pedidos", description: "Remetente e mensagens de pagamento", content: <form onSubmit={saveAutomations}>
+          <fieldset disabled={saving} className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-500">Estas alterações são salvas juntas.</p><button type="submit" disabled={saving} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50"><Save className="size-4" />{saving ? "Salvando…" : "Salvar avisos de pedidos"}</button></div>
       <Panel
         title="Configurações de envio"
         collapsible
         tone="cyan"
-        action={<NeonBadge tone={draft.automationSettings.paymentStatusNotifications ? "green" : "amber"}>{draft.automationSettings.paymentStatusNotifications ? "ativo" : "pausado"}</NeonBadge>}
+        action={<NeonBadge tone={draft.automationSettings.paymentStatusNotifications ? "green" : "amber"}>{draft.automationSettings.paymentStatusNotifications ? "habilitados" : "pausados"}</NeonBadge>}
       >
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <label className="block">
-            <FieldLabel>Empresa</FieldLabel>
-            <select
-              value={selectedCompanyId}
-              disabled={saving}
-              onChange={(event) => selectCompany(event.target.value)}
-              className="h-11 w-full rounded-xl border bg-transparent px-3 text-sm outline-none"
-              style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
-            >
-              {companies.map((company) => (
-                <option key={company.id} value={company.id}>{company.name}</option>
-              ))}
-            </select>
-          </label>
-
+        <div className="grid gap-3 lg:grid-cols-2">
           <label className="block">
             <FieldLabel>Agente para campanhas e contatos sem atendimento anterior</FieldLabel>
             <span className="flex items-center gap-2">
@@ -282,23 +280,6 @@ export function ClientAutomationsCenter({
         </div>
       </Panel>
 
-      <IntelligentFollowUpPanel key={selectedCompanyId} companyId={selectedCompanyId} />
-
-      <MetaCommentAutomations key={`meta-${selectedCompanyId}`} companyId={selectedCompanyId} agents={agents} />
-
-      <ClientWhatsappAutomationStudio
-        key={`${selectedCompanyId}:${draft.automationSettings.defaultAgentId ?? "conversation"}`}
-        agents={agents}
-        companyId={selectedCompanyId}
-        companyName={selectedCompany?.name ?? "Workspace"}
-        products={companyProducts}
-        selectedAutomationAgentId={draft.automationSettings.defaultAgentId ?? selectedWhatsapp?.agentId ?? null}
-        selectedAutomationWhatsappLabel={selectedWhatsapp?.label ?? null}
-        whatsappOptions={companyWhatsappInstances.filter((instance) => instance.agentId && instance.status !== "archived")
-          .map((instance) => ({ agentId: instance.agentId as string, label: instance.label, status: instance.status,
-            avatarUrl: agents.find((agent) => agent.id === instance.agentId)?.avatarUrl ?? null }))}
-      />
-
       <Panel
         title="Mensagens de pedidos"
         tone="violet"
@@ -337,8 +318,12 @@ export function ClientAutomationsCenter({
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-800">{messagePreview}</p>
         </div>
       </Panel>
-
-    </form>
+          </fieldset>
+        </form> },
+        { id: "agenda", title: "Agenda e lembretes", description: "Horários, compromissos e avisos", content: <Panel title="Uma agenda para todos os canais"><p className="mb-4 text-sm text-slate-600">Configure disponibilidade e lembretes na mesma agenda usada pela loja e pelo atendimento.</p><Link href="/dashboard/agenda" className="inline-flex min-h-11 items-center rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Abrir agenda</Link></Panel> },
+        { id: "ofertas", title: "Ofertas e benefícios", description: "Descontos e regras comerciais", content: <Panel title="Ofertas da sua empresa"><p className="mb-4 text-sm text-slate-600">A oferta é configurada em Vendas. Campanhas de mensagens mantêm sua própria revisão antes de enviar.</p><Link href="/dashboard/campanhas-comerciais" className="inline-flex min-h-11 items-center rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Abrir ofertas e benefícios</Link><Link href="/dashboard/chat-meta?tab=campaigns" className="ml-3 inline-flex min-h-11 items-center text-sm text-blue-700">Mensagens oficiais</Link></Panel> },
+      ]} />
+    </div>
   );
 }
 

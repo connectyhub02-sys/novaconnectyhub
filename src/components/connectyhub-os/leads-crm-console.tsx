@@ -1,4 +1,5 @@
 "use client";
+import { attendanceDraftKey, acknowledgeAttendanceDraft } from "@/lib/client-os/attendance-drafts";
 import { readHumanMessageText } from '@/lib/whatsapp/message-text';
 import { whatsappConversationBackgroundUrl } from "@/lib/whatsapp/chat-appearance";
 import { LeadFinancialArchive } from "./lead-financial-archive";
@@ -474,7 +475,7 @@ export function LeadCrmConsole({
 
   return (
     <section>
-      <PageHeader eyebrow={header.eyebrow} title={header.title} description={header.description} />
+      {mode !== "atendimento" ? <PageHeader eyebrow={header.eyebrow} title={header.title} description={header.description} /> : null}
       {warnings.length ? <LeadWorkspaceWarning warnings={warnings} /> : null}
 
       {mode !== "conversas" && mode !== "atendimento" ? <LeadStats workspace={workspace} /> : null}
@@ -1020,20 +1021,21 @@ function AttendanceCenterView({
   workspace: ClientLeadCrmWorkspace;
 }) {
   const router = useRouter();
-  const paneRef = useAvailablePaneHeight();
+  const paneRef = useAvailablePaneHeight(conversationPane);
   const [mobileBagOpen, setMobileBagOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
   const canResetLead = useAssistedLeadReset(!conversationPanelScope);
   const [resetLeadIds, setResetLeadIds] = useState<Set<string>>(() => new Set());
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
-  const [manualReply, setManualReply] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [leadCarts, setLeadCarts] = useState<Record<string, AttendanceCartItem[]>>({});
   const [deletedCatalogItemIds, setDeletedCatalogItemIds] = useState<Set<string>>(() => new Set());
   const [cartCheckoutBusy, setCartCheckoutBusy] = useState(false);
   const [catalogDeleteBusyId, setCatalogDeleteBusyId] = useState<string | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
-  const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [handoffNotices, setHandoffNotices] = useState<Record<string, { tone: "success" | "error"; message: string } | null>>({});
   const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
   const [manualMessages, setManualMessages] = useState<Record<string, ClientLeadMessage[]>>({});
   const [handoffTick, setHandoffTick] = useState(() => Date.now());
@@ -1052,6 +1054,7 @@ function AttendanceCenterView({
   const notificationSeeded = useRef(false);
   const syncedPushContextKeys = useRef(new Set<string>());
 
+  const allThreads = useMemo(() => buildAttendanceThreads(workspace.leads.filter(lead => !resetLeadIds.has(lead.id))), [workspace.leads, resetLeadIds]);
   const attendanceThreads = useMemo(() => buildAttendanceThreads(filteredLeads.filter((lead) => !resetLeadIds.has(lead.id))), [filteredLeads, resetLeadIds]);
   const queueFilters = useMemo(
     () => buildAttendanceQueueFilters(workspace.attendanceQueues, attendanceThreads),
@@ -1069,16 +1072,62 @@ function AttendanceCenterView({
     () => queueThreads.filter((thread) => matchesAttendanceThreadTab(thread, inboxTab, handoffOverrides)),
     [handoffOverrides, inboxTab, queueThreads],
   );
-  const activeThread = visibleThreads.find((thread) => thread.key === selectedThreadKey)
-    ?? visibleThreads.find((thread) => thread.lead.id === selectedLeadId)
-    ?? visibleThreads[0]
-    ?? queueThreads[0]
-    ?? (effectiveQueueKey === "all" ? attendanceThreads[0] : null)
-    ?? null;
+  const activeThread = selectedThreadKey
+    ? allThreads.find(thread => thread.key === selectedThreadKey) ?? null
+    : visibleThreads.find(thread => thread.lead.id === selectedLeadId) ?? visibleThreads[0] ?? null;
   const activeLead = activeThread?.lead ?? null;
   const activeConversation = activeThread?.conversation ?? null;
   const activeHumanIntervention = activeThread ? getThreadHumanIntervention(activeThread, handoffOverrides) : emptyClientHumanIntervention();
   const activeConversationId = activeThread?.conversationId ?? null;
+  const draftKey = attendanceDraftKey(conversationPanelScope, activeLead?.companyId, activeConversation?.channel ?? activeLead?.channel, activeConversationId, activeLead?.id);
+  const noticeKey = draftKey ?? "none";
+  const handoffNotice = handoffNotices[noticeKey] ?? null;
+  function setHandoffNotice(value: { tone: "success" | "error"; message: string } | null) {
+    setHandoffNotices(current => ({ ...current, [noticeKey]: value }));
+  }
+  const manualReply = draftKey ? drafts[draftKey] ?? "" : "";
+  function setManualReply(value: string) {
+    if (draftKey) setDrafts(current => ({ ...current, [draftKey]: value }));
+  }
+  const threadSnapshot = useRef(allThreads);
+  useEffect(() => { threadSnapshot.current = allThreads; }, [allThreads]);
+  useEffect(() => {
+    function restoreConversation() {
+      const params = new URLSearchParams(window.location.search);
+      const conversation = params.get("conversation");
+      const lead = params.get("lead");
+      if (!conversation && !lead) { setConversationPane("inbox"); setMobileBagOpen(false); return; }
+      const thread = threadSnapshot.current.find(item => conversation ? item.conversationId === conversation : item.lead.id === lead);
+      setSelectedThreadKey(thread?.key ?? "unavailable");
+      if (thread) setSelectedLeadId(thread.lead.id);
+      setConversationPane("chat");
+      setMobileBagOpen(false);
+    }
+    restoreConversation();
+    window.addEventListener("popstate", restoreConversation);
+    return () => window.removeEventListener("popstate", restoreConversation);
+  }, [setConversationPane, setSelectedLeadId]);
+
+  function openThread(thread: AttendanceThread) {
+    const url = new URL(window.location.href);
+    const hadConversation = url.searchParams.has("conversation") || url.searchParams.has("lead");
+    url.searchParams.delete("conversation"); url.searchParams.delete("lead");
+    url.searchParams.set(thread.conversationId ? "conversation" : "lead", thread.conversationId ?? thread.lead.id);
+    if (hadConversation) window.history.replaceState(window.history.state, "", url);
+    else window.history.pushState({ ...window.history.state, attendanceFromInbox: true }, "", url);
+    setSelectedThreadKey(thread.key); setSelectedLeadId(thread.lead.id); setConversationPane("chat");
+    setHandoffNotice(null);
+  }
+  function returnToInbox() {
+    if (window.history.state?.attendanceFromInbox) window.history.back();
+    else {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("conversation"); url.searchParams.delete("lead");
+      window.history.replaceState(window.history.state, "", url);
+      setConversationPane("inbox"); setMobileBagOpen(false);
+    }
+  }
+
   const activeAgentIdentity = getAttendanceAgentIdentity(activeThread, activeQueueFilter, effectiveQueueKey);
   const activePushContext = useMemo(
     () => buildAttendancePushContext(activeLead, activeConversation),
@@ -1108,7 +1157,7 @@ function AttendanceCenterView({
       return;
     }
 
-    const maxHeight = 220;
+    const maxHeight = 120;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
@@ -1674,7 +1723,7 @@ function AttendanceCenterView({
         }));
       }
 
-      setManualReply("");
+      if (textOverride === undefined) setDrafts(current => acknowledgeAttendanceDraft(current, draftKey, manualReply));
       setHandoffNotice({ tone: "success", message: successMessage });
       router.refresh();
       return true;
@@ -1702,7 +1751,7 @@ function AttendanceCenterView({
   }
 
   return (
-    <div className="space-y-3" onPointerDown={primeAttendanceSoundFromUserGesture}>
+    <div className="ch-attendance space-y-3" data-pane={conversationPane} onPointerDown={primeAttendanceSoundFromUserGesture}>
       {canResetLead && resetTarget && <ResetLeadDialog leadId={resetTarget.id} name={resetTarget.name} panelScope={conversationPanelScope}
         onClose={() => setResetTarget(null)} onDeleted={(leadIds) => {
           setResetLeadIds((current) => new Set([...current, ...leadIds]));
@@ -1723,7 +1772,7 @@ function AttendanceCenterView({
         className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
         style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
       >
-        <div ref={paneRef} className="ch-attendance-grid grid">
+        <div ref={paneRef} className="ch-attendance-grid grid" data-bag-open={mobileBagOpen}>
           <aside
             className={cn(
               "flex h-full min-h-0 min-w-0 flex-col border-b bg-white xl:border-b-0 xl:border-r",
@@ -1731,81 +1780,15 @@ function AttendanceCenterView({
             )}
             style={{ borderColor: "var(--ch-border)" }}
           >
-            <div className="border-b bg-[#f0f2f5] px-4 py-4" style={{ borderColor: "#d1d7db" }}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#25D366]">Central WhatsApp</p>
-                  <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    {queueThreads.length} conversas / {queueThreads.filter((thread) => thread.lead.status === "active").length} em atendimento
-                  </p>
-                </div>
-                <Link
-                  className="grid h-11 w-11 place-items-center rounded-full border border-[#25D366]/45 bg-white shadow-sm transition hover:border-[#25D366] hover:bg-[#effff4]"
-                  href="/dashboard/whatsapp"
-                  title={`Configurar agente ${activeAgentIdentity.name}`}
-                >
-                  <AgentAvatar avatarUrl={activeAgentIdentity.avatarUrl} name={activeAgentIdentity.name} size="sm" />
-                </Link>
+            <div className="ch-inbox-toolbar">
+              <div className="ch-inbox-title"><div><h1>Atendimento</h1><span>{queueThreads.length} conversas{conversationPanelScope ? " · interno" : ""}</span></div>
+                <button type="button" aria-label="Filtros de atendimento" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}><Filter size={18}/></button>
+                <Link aria-label="Configurar agentes" href={conversationPanelScope ? "/admin/agentes" : "/dashboard/whatsapp"}><Bot size={19}/></Link>
               </div>
-
-              {queueFilters.length > 1 ? (
-                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                  {queueFilters.map((queue) => (
-                    <button
-                      key={queue.key}
-                      className={cn(
-                        "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
-                        effectiveQueueKey === queue.key
-                          ? "border-[#25D366] bg-white text-slate-950 shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
-                      )}
-                      onClick={() => {
-                        setSelectedQueueKey(queue.key);
-                        setSelectedThreadKey(null);
-                      }}
-                      title={queue.detail ?? queue.label}
-                      type="button"
-                    >
-                      {queue.key !== "all" ? <AgentAvatar avatarUrl={queue.avatarUrl} name={queue.label} size="xs" /> : null}
-                      <span className="truncate">{queue.label}</span>
-                      <span className={cn("font-mono text-[11px]", effectiveQueueKey === queue.key ? "text-slate-700" : "text-slate-400")}>
-                        {queue.count}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              <label className="relative mt-4 block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#25D366]" />
-                <input
-                  className="h-11 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-[#25D366] focus:bg-white"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Pesquisar ou comecar atendimento"
-                  type="search"
-                  value={search}
-                />
-              </label>
-
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {tabItems.map((item) => (
-                  <button
-                    key={item.value}
-                    className={cn(
-                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
-                      inboxTab === item.value
-                        ? "border-[#25D366] bg-white text-slate-950 shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
-                    )}
-                    onClick={() => setInboxTab(item.value)}
-                    type="button"
-                  >
-                    {item.label}
-                    <span className={cn("font-mono text-[11px]", inboxTab === item.value ? "text-slate-700" : "text-slate-400")}>{item.count}</span>
-                  </button>
-                ))}
-              </div>
+              <label className="ch-inbox-search"><Search size={17}/><input aria-label="Buscar conversas" type="search" placeholder="Buscar conversa…" value={search} onChange={event => setSearch(event.target.value)}/></label>
+              <div className="ch-inbox-tabs">{tabItems.filter(item => item.value === "all" || item.value === "unread").map(item => <button key={item.value} type="button" aria-pressed={inboxTab === item.value} onClick={() => setInboxTab(item.value)}>{item.value === "all" ? "Todas" : "Não lidas"}<span>{item.count}</span></button>)}
+              <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}>{inboxTab !== "all" && inboxTab !== "unread" ? tabItems.find(item => item.value === inboxTab)?.label : effectiveQueueKey !== "all" ? "Filtrado" : "Mais"}<ChevronDown size={14}/></button></div>
+              {filtersOpen && <div className="ch-inbox-filters"><label>Fila<select value={effectiveQueueKey} onChange={event => setSelectedQueueKey(event.target.value)}>{queueFilters.map(queue => <option key={queue.key} value={queue.key}>{queue.label} ({queue.count})</option>)}</select></label><label>Status<select value={inboxTab} onChange={event => setInboxTab(event.target.value as AttendanceInboxTab)}>{tabItems.map(item => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select></label></div>}
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1819,14 +1802,13 @@ function AttendanceCenterView({
                 return (
                   <button
                     key={thread.key}
+                    aria-current={selected ? "true" : undefined}
                     className={cn(
-                      "grid w-full grid-cols-[48px_minmax(0,1fr)] gap-3 border-b px-4 py-3 text-left transition",
-                      selected ? "bg-[#e7f8ef]" : "bg-white hover:bg-[#f4fbf7]",
+                      "ch-thread-row grid w-full grid-cols-[40px_minmax(0,1fr)] gap-3 border-b px-3 py-2 text-left transition",
+                      selected ? "bg-blue-50" : "bg-white hover:bg-slate-50",
                     )}
                     onClick={() => {
-                      setSelectedThreadKey(thread.key);
-                      setSelectedLeadId(lead.id);
-                      setConversationPane("chat");
+                      openThread(thread);
                     }}
                     style={{ borderColor: "var(--ch-border)" }}
                     type="button"
@@ -1840,19 +1822,15 @@ function AttendanceCenterView({
                       <p className="mt-1 truncate text-[12px] text-slate-600">
                         {latestMessage ? formatThreadMessagePreview(latestMessage) : thread.conversation?.preview ?? lead.conversation.preview ?? lead.summary}
                       </p>
-                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                        <NeonBadge tone="zinc">{queueLabel}</NeonBadge>
-                        <StatusPill status={lead.status} />
-                        {humanIntervention.active ? <NeonBadge tone="amber">IA pausada</NeonBadge> : null}
-                        {hasUnreadThreadSignal(thread) ? <NeonBadge tone="cyan">lead respondeu</NeonBadge> : null}
-                      </div>
+                      <div className="ch-thread-meta"><span>{queueLabel}</span><span>{humanIntervention.active ? "IA pausada" : statusOptions.find(item => item.value === lead.status)?.label}</span>{hasUnreadThreadSignal(thread) && <b aria-label="Não lida">●</b>}</div>
                     </div>
                   </button>
                 );
               })}
               {!visibleThreads.length ? (
                 <div className="p-4">
-                  <EmptyState title="Nada neste filtro" detail="Troque o filtro ou aguarde novas mensagens chegarem pelo WhatsApp." />
+                  <EmptyState title={search ? "Nenhuma conversa encontrada" : "Nada neste filtro"} detail={search ? "Tente outro nome ou limpe a busca." : "Troque o filtro para ver outras conversas."} />
+                  {search && <button type="button" className="mt-3 text-sm font-semibold text-blue-700" onClick={() => setSearch("")}>Limpar busca</button>}
                 </div>
               ) : null}
             </div>
@@ -1861,11 +1839,12 @@ function AttendanceCenterView({
           <main className={cn("min-h-0 min-w-0 bg-[#efeae2]", (conversationPane === "inbox" || mobileBagOpen) && "hidden xl:block")}>
             {activeLead ? (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex min-h-[70px] flex-col gap-3 border-b bg-[#f0f2f5] px-4 py-3 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: "#d1d7db" }}>
+                <div className="ch-chat-header flex flex-col border-b" style={{ borderColor: "#d1d7db" }}>
                   <div className="flex min-w-0 items-center gap-3">
                     <button
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-full border text-slate-700 xl:hidden"
-                      onClick={() => setConversationPane("inbox")}
+                      onClick={returnToInbox}
+                      aria-label="Voltar às conversas"
                       style={{ borderColor: "var(--ch-border)" }}
                       type="button"
                     >
@@ -1880,11 +1859,7 @@ function AttendanceCenterView({
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
-                    <AttendanceHeaderNotices
-                      countdown={handoffCountdown}
-                      handoffNotice={handoffNotice}
-                      humanIntervention={activeHumanIntervention}
-                    />
+
                     <button
                       className={cn(
                         "inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-70",
@@ -1905,20 +1880,21 @@ function AttendanceCenterView({
                       type="button"
                     >
                       <FileText className="h-4 w-4" />
-                      CRM do lead
+                      Detalhes
                     </button>
                     {canResetLead && <button type="button" onClick={() => setResetTarget({ id: activeLead.id, name: activeLead.name })}
                       className="inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50">
                       <RotateCcw className="h-4 w-4" /> Resetar lead
                     </button>}
-                    <button type="button" className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 xl:hidden" onClick={() => setMobileBagOpen(true)}>
-                      {commerceEnabled ? "Sacola / pedido" : "Conta do cliente"}
+                    <button type="button" className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700" onClick={() => setMobileBagOpen(true)}>
+                      {commerceEnabled ? "Sacola" : "Conta"}
                     </button>
                   </div>
                 </div>
 
+                {(handoffNotice || activeHumanIntervention.active) && <div className="ch-chat-feedback" role="status"><AttendanceHeaderNotices countdown={handoffCountdown} handoffNotice={handoffNotice} humanIntervention={activeHumanIntervention}/></div>}
                 <div
-                  className="relative min-h-0 flex-1 overflow-hidden"
+                  className="ch-chat-history relative min-h-0 flex-1 overflow-hidden"
                   style={{
                     backgroundColor: "#efeae2",
                     backgroundImage:
@@ -1929,7 +1905,7 @@ function AttendanceCenterView({
                   }}
                 >
                   <div className={cn("h-full overflow-y-auto px-3 py-4 sm:px-6", chatLockedByPush && "pointer-events-none opacity-35 blur-[1px]")}>
-                    <ChatMessages key={activeConversationId} leadId={activeLead?.id} conversationId={activeConversationId} leadName={activeLead?.name} messages={activeMessages} />
+                    <ChatMessages key={`${activeConversationId}:${conversationPane}`} leadId={activeLead?.id} conversationId={activeConversationId} leadName={activeLead?.name} messages={activeMessages} />
                   </div>
                   {chatLockedByPush ? (
                     <AttendancePushRequiredOverlay
@@ -1950,15 +1926,18 @@ function AttendanceCenterView({
                       permission={pushPrompt.permission}
                     />
                   ) : null}
-                  <form className="flex flex-col gap-2 lg:flex-row lg:items-end" onSubmit={handleManualReplySubmit}>
+                  <p className="ch-reply-recipient">Responder para <strong>{activeLead.name}</strong></p>
+                  <form className="ch-reply-form flex items-end gap-2" onSubmit={handleManualReplySubmit}>
                     <label className="relative block min-w-0 flex-1">
                       <textarea
                         ref={manualReplyTextareaRef}
+                        rows={1}
+                        aria-label={`Resposta para ${activeLead.name}`}
                         className="max-h-[220px] min-h-10 w-full resize-none overflow-hidden rounded-2xl border border-transparent bg-white px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55"
                         disabled={replyBusy || chatLockedByPush}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
-                        placeholder="Digite uma resposta aqui no painel..."
+                        placeholder="Sua mensagem…"
                         value={manualReply}
                       />
                     </label>
@@ -1974,7 +1953,7 @@ function AttendanceCenterView({
                         type="submit"
                       >
                         {replyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        {replyBusy ? "Enviando" : "Responder"}
+                        <span className="sr-only sm:not-sr-only">{replyBusy ? "Enviando" : "Responder"}</span>
                       </button>
                     </div>
                   </form>
@@ -1982,13 +1961,13 @@ function AttendanceCenterView({
               </div>
             ) : (
               <div className="grid h-full min-h-0 place-items-center p-6">
-                <EmptyState title="Sem conversa selecionada" detail="Escolha um lead na inbox para acompanhar o atendimento ao vivo." />
+                <div><EmptyState title="Conversa indisponível nesta lista" detail="Volte à lista e selecione uma conversa disponível para sua conta." /><button type="button" className="mt-4 min-h-11 text-blue-700" onClick={returnToInbox}>Voltar às conversas</button></div>
               </div>
             )}
           </main>
 
-          <aside className={cn("min-h-0 min-w-0 flex-col border-l bg-white xl:flex", mobileBagOpen ? "flex" : "hidden")} style={{ borderColor: "var(--ch-border)" }}>
-            <button type="button" onClick={() => setMobileBagOpen(false)} className="min-h-11 shrink-0 border-b border-slate-200 px-4 text-left font-semibold text-blue-700 xl:hidden">← Voltar à conversa</button>
+          <aside className={cn("min-h-0 min-w-0 flex-col border-l bg-white", mobileBagOpen ? "flex" : "hidden")} style={{ borderColor: "var(--ch-border)" }}>
+            <button type="button" onClick={() => setMobileBagOpen(false)} className="min-h-11 shrink-0 border-b border-slate-200 px-4 text-left font-semibold text-blue-700">← Voltar à conversa</button>
             <div className="min-h-0 flex-1 overflow-y-auto">
             {activeLead ? (
               commerceEnabled ? (
@@ -2883,7 +2862,7 @@ function formatThreadQueueLabel(thread: AttendanceThread) {
 
 function hasUnreadThreadSignal(thread: AttendanceThread) {
   const latest = thread.latestMessage;
-  return latest?.direction === "inbound" || (latest?.author === "lead" && latest.direction !== "outbound");
+  return thread.lead.status === "new" || latest?.author === "lead" || latest?.direction === "inbound";
 }
 
 function getThreadHumanIntervention(
@@ -3812,15 +3791,13 @@ function LeadDetailsModal({
           <aside id="lead-file-details" aria-labelledby="lead-file-tab-details" className={cn("min-h-0 border-b border-slate-200 bg-slate-50 p-3 sm:p-4 lg:block lg:overflow-y-auto lg:border-b-0 lg:border-r", mobileTab !== "details" && "hidden")}>
             <div className="space-y-3">
               <InfoPanel title="Resumo inteligente" text={lead.summary} />
-              <QualificationGrid lead={lead} />
-              <LeadTechnicalFile lead={lead} />
+              <details className="ch-lead-disclosure"><summary>Qualificação</summary><QualificationGrid lead={lead} /></details>
+              <details className="ch-lead-disclosure"><summary>Contato e dados técnicos</summary><LeadTechnicalFile lead={lead} /></details>
+              <details className="ch-lead-disclosure"><summary>Financeiro e pedidos</summary>
               <LeadFinancialArchive key={lead.id} leadId={lead.id} companyId={lead.companyId} />
               <LeadReturnsPanel key={`returns:${lead.id}`} leadId={lead.id} companyId={lead.companyId} />
-              <TrackingArchive events={lead.leadFile.trackingEvents} />
-              <LeadFileSnapshot lead={lead} />
-              <LeadCheckoutSnapshot records={checkoutRecords} />
-              <ActivityTimeline activities={lead.activities} />
-              <HistoryPageControl history={history} label="Consultar eventos anteriores" />
+              <LeadCheckoutSnapshot records={checkoutRecords} /></details>
+              <details className="ch-lead-disclosure"><summary>Histórico e rastreamento</summary><TrackingArchive events={lead.leadFile.trackingEvents} /><LeadFileSnapshot lead={lead} /><ActivityTimeline activities={lead.activities} /><HistoryPageControl history={history} label="Consultar eventos anteriores" /></details>
             </div>
           </aside>
           <main id="lead-file-messages" aria-labelledby="lead-file-tab-messages" className={cn("min-h-0 bg-white p-3 sm:p-4 lg:block lg:overflow-hidden", mobileTab !== "messages" && "hidden")}>
@@ -3912,19 +3889,18 @@ function LeadIdentity({ lead }: { lead: ClientLeadRecord }) {
 
 function LeadAvatar({ lead, size = "md" }: { lead: ClientLeadRecord; size?: "md" | "lg" }) {
   const dimensions = size === "lg" ? "h-12 w-12" : "h-10 w-10";
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  if (lead.avatarUrl && lead.avatarUrl !== failedUrl) {
+  if (lead.avatarUrl) {
     return (
       <span className={cn("relative block shrink-0 overflow-hidden rounded-xl border border-emerald-300 bg-emerald-50", dimensions)}>
-        <Image alt={`Foto do lead ${lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.avatarUrl} onError={() => setFailedUrl(lead.avatarUrl)} unoptimized />
+        <Image alt={`Foto do lead ${lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.avatarUrl} unoptimized />
       </span>
     );
   }
 
   return (
     <span className={cn("flex shrink-0 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 font-mono font-bold text-emerald-700", dimensions)}>
-      {getInitials(lead.name)}
+      {lead.name.slice(0, 1).toUpperCase()}
     </span>
   );
 }
@@ -3938,7 +3914,6 @@ function AgentAvatar({
   name: string;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const dimensions = {
     lg: "h-12 w-12",
     md: "h-10 w-10",
@@ -3958,10 +3933,10 @@ function AgentAvatar({
     xs: "20px",
   }[size];
 
-  if (avatarUrl && avatarUrl !== failedUrl) {
+  if (avatarUrl) {
     return (
       <span className={cn("relative block shrink-0 overflow-hidden rounded-full border border-[#25D366]/55 bg-[#effff4]", dimensions)}>
-        <Image alt={`Foto do agente ${name}`} className="object-cover" fill sizes={imageSize} src={avatarUrl} onError={() => setFailedUrl(avatarUrl)} unoptimized />
+        <Image alt={`Foto do agente ${name}`} className="object-cover" fill sizes={imageSize} src={avatarUrl} unoptimized />
       </span>
     );
   }
@@ -4665,8 +4640,8 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
         const bubbleStyle = isSystem
           ? { backgroundColor: "#fff7d6", borderColor: "#f6dc8c", color: "#3b3320" }
           : isOutbound
-            ? { backgroundColor: "#d9fdd3", borderColor: "#b7e9ad", color: "#111b21" }
-            : { backgroundColor: "#ffffff", borderColor: "#e3ddd4", color: "#111b21" };
+            ? { backgroundColor: "var(--ch-info-soft, #EDF2FF)", borderColor: "var(--ch-border, #DEE4ED)", color: "var(--ch-text, #1F2937)" }
+            : { backgroundColor: "var(--ch-surface, #FFFFFF)", borderColor: "var(--ch-border, #DEE4ED)", color: "var(--ch-text, #1F2937)" };
 
         return (
           <div key={message.id} className={cn("flex", isSystem ? "justify-center" : isOutbound ? "justify-end" : "justify-start")}>

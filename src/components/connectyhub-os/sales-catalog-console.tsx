@@ -1701,6 +1701,7 @@ export function SalesCatalogConsole({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "save_catalog_settings",
+          expectedUpdatedAt: selectedSettings?.updatedAt ?? null,
           companyId: selectedCompanyId,
           businessType: settingsDraft.businessType,
           categories,

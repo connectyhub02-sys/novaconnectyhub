@@ -1,5 +1,14 @@
 # Estado operacional da ConnectyHub
 
+## Painéis: navegação, rascunhos, automações e cores — release preparada, 07/11/2026
+
+Titular aprovou a prévia e autorizou produção após refinamento das cores.
+Preparado conjunto isolado sobre a revisão ativa, com 69 testes focados e lint
+aprovados. Inclui salvamento restrito/versionado das automações e navegação móvel
+nos dois painéis. Sem migration, ativação de automações ou testes de envio.
+A preparação não comprova publicação. Ver resultado posterior e detalhes em
+[cores e publicação](cores-e-publicacao-paineis-2026-11-07.md).
+
 ## Preparação técnica para revisão — 03/11/2026 (ainda local)
 
 Migration 0222 acrescenta exclusão dos dados de API na desconexão, limpeza de

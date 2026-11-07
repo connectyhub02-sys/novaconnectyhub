@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { DashboardDetails } from "./dashboard-details";
+import { AdminHomeStart } from "./panel-home";
 import {
   Activity,
   Check,
@@ -20,10 +23,8 @@ import { cn } from "@/lib/utils";
 import { AreaChartPanel, BarChartPanel } from "./charts";
 import { ConnectyShell } from "./connecty-shell";
 import {
-  CommandButton,
   KpiStat,
   NeonBadge,
-  PageHeader,
   Panel,
   TelemetryFeed,
   toneClass,
@@ -69,37 +70,9 @@ export function AdminConsole({
 
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel}>
-      <PageHeader
-        eyebrow="ConnectyHub / Admin OS"
-        title="Dashboard executivo"
-        description="Visao curta da operacao, clientes, receita e canais criticos."
-        actions={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-slate-500 transition hover:text-blue-700"
-              style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
-            >
-              Atualizado {formatShortDate(overview.generatedAt)}
-            </button>
-            <button
-              type="button"
-              title={overview.warnings.join("\n")}
-              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-slate-500 transition hover:text-blue-700"
-              style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
-            >
-              Base {overview.warnings.length ? `${overview.warnings.length} aviso` : "ok"}
-            </button>
-            <button
-              type="button"
-              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium"
-              style={{ background: "var(--ch-accent)", color: "#ffffff" }}
-            >
-              Exportar dados
-            </button>
-          </div>
-        }
-      />
+      <AdminHomeStart overview={overview} />
+      <p className="mb-3 text-xs text-slate-500">Atualizado em {formatShortDate(overview.generatedAt)}.{overview.warnings.length ? " Alguns indicadores não puderam ser atualizados. Consulte os avisos nos relatórios." : ""}</p>
+      <DashboardDetails>
 
       <div className="mb-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_270px]">
         <section
@@ -154,7 +127,7 @@ export function AdminConsole({
           id="clientes"
           title="Clientes recentes"
           eyebrow="contas SaaS"
-          action={<CommandButton tone="cyan">Abrir clientes</CommandButton>}
+          action={<Link href="/admin/clientes" className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-blue-700">Abrir clientes</Link>}
           compact
         >
           <ClientStatusGrid items={overview.clientStatus} />
@@ -218,6 +191,7 @@ export function AdminConsole({
           <InfraList stats={overview.infraStats} />
         </div>
       </Panel>
+      </DashboardDetails>
     </ConnectyShell>
   );
 }

@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { DashboardDetails } from "./dashboard-details";
+import { ClientHomeStart } from "./panel-home";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
@@ -17,10 +20,8 @@ import { ConnectyShell } from "./connecty-shell";
 import { AreaChartPanel } from "./charts";
 import {
   AgentCard,
-  CommandButton,
   KpiStat,
   NeonBadge,
-  PageHeader,
   Panel,
   ProgressBar,
   toneClass,
@@ -66,12 +67,8 @@ export function ClientDashboard({
       userLabel={userLabel}
       workspaceName={workspaceName}
     >
-      <PageHeader
-        eyebrow={`Workspace / ${workspaceName}`}
-        title="Dashboard"
-        description={`Dados isolados desta empresa. Atualizado em ${generatedAt}.`}
-        actions={<CommandButton tone="violet">+ Criar agente</CommandButton>}
-      />
+      <ClientHomeStart overview={overview} name={workspaceName} />
+      <p className="mb-3 text-xs text-slate-500">Atualizado em {generatedAt}.</p>
 
       {overview.warnings.length ? (
         <div
@@ -82,6 +79,7 @@ export function ClientDashboard({
         </div>
       ) : null}
 
+      <DashboardDetails>
       {overview.storage ? <StorageUsageBanner storage={overview.storage} /> : null}
 
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -317,27 +315,7 @@ export function ClientDashboard({
                 <p className="text-[11px] leading-4 text-slate-500">{insight.draft}</p>
               </div>
               <div className="mt-3 flex gap-2">
-                {[
-                  { label: "Enviar pelo agente", accent: true },
-                  { label: "Editar rascunho", accent: false },
-                ].map((button) => (
-                  <button
-                    key={button.label}
-                    type="button"
-                    className="flex-1 rounded-xl py-2 font-mono text-[11px] uppercase tracking-wide transition"
-                    style={
-                      button.accent
-                        ? { background: "var(--ch-accent)", color: "#fff" }
-                        : {
-                            background: "var(--ch-surface-2)",
-                            border: "1px solid var(--ch-border)",
-                            color: "var(--ch-muted)",
-                          }
-                    }
-                  >
-                    {button.label}
-                  </button>
-                ))}
+                <Link href="/dashboard/atendimento" className="inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-xs font-semibold" style={{ background: "var(--ch-accent)", color: "#fff" }}>Abrir atendimento</Link>
               </div>
             </div>
           </div>
@@ -395,6 +373,7 @@ export function ClientDashboard({
           </div>
         </Panel>
       </div>
+      </DashboardDetails>
     </ConnectyShell>
   );
 }

@@ -14,7 +14,7 @@ const adminWhatsappAtendimentoTabs: Array<{
   label: string;
   value: AdminWhatsappAtendimentoView;
 }> = [
-  { icon: MessageCircle, label: "Atendimento manual", value: "attendance" },
+  { icon: MessageCircle, label: "Conversas", value: "attendance" },
   { icon: Bot, label: "Agentes internos", value: "agents" },
 ];
 
@@ -26,8 +26,8 @@ export function AdminWhatsappAtendimentoConsole({
   const [activeView, setActiveView] = useState<AdminWhatsappAtendimentoView>("attendance");
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-2 rounded-2xl border border-blue-100 bg-white/90 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.05)] sm:inline-flex sm:flex-row">
+    <div className="ch-admin-attendance space-y-2">
+      <div className="ch-admin-attendance-tabs flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
         {adminWhatsappAtendimentoTabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeView === tab.value;

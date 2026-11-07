@@ -1,4 +1,6 @@
 "use client";
+import { panelTheme, panelAreas, panelAreaForHref } from "@/lib/ui/panel-theme";
+import { groupPanelNavigation, matchesMenuSearch, panelContextLinks, panelDockHrefs } from "@/lib/ui/panel-navigation";
 import { metaWorkspaceItems } from "@/lib/meta/workspace-navigation";
 import { socialNavigation } from "@/lib/social/policy";
 import { DialogFrame } from "@/components/ui/dialog-frame";
@@ -38,6 +40,7 @@ import {
   Search,
   Server,
   ShieldCheck,
+  Star,
   ShoppingBag,
   SlidersHorizontal,
   UserCheck,
@@ -152,33 +155,6 @@ export function useConnectyShellNotifications() {
   return useContext(ConnectyShellNotificationsContext);
 }
 
-type AccentPalette = {
-  accent: string;
-  accentRgb: string;
-  accent2: string;
-  accent2Rgb: string;
-};
-
-const neutralAccentPalette: AccentPalette = {
-  accent: "#1d4ed8",
-  accentRgb: "29,78,216",
-  accent2: "#1e40af",
-  accent2Rgb: "30,64,175",
-};
-
-const accentPalettes: Record<AccentTone, AccentPalette> = {
-  red: neutralAccentPalette,
-  teal: neutralAccentPalette,
-  emerald: neutralAccentPalette,
-  sky: neutralAccentPalette,
-  blue: neutralAccentPalette,
-  violet: neutralAccentPalette,
-  amber: neutralAccentPalette,
-  rose: neutralAccentPalette,
-  fuchsia: neutralAccentPalette,
-  slate: neutralAccentPalette,
-};
-
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 const adminSections: NavSection[] = [
@@ -187,6 +163,7 @@ const adminSections: NavSection[] = [
     items: [
       { label: "Dashboard",   href: "/admin",              icon: BarChart3, tone: "blue" },
       { label: "Agentes",     href: "/admin/agentes",      icon: Bot, tone: "violet" },
+      { label: "Direct e comentários", href: "/admin/meta/atendimento", icon: MessageCircle, tone: "blue" },
       { label: "WhatsApp Interno", href: "/admin/whatsapp/atendimento", icon: MessageCircle, tone: "emerald" },
       { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit, tone: "violet" },
       { label: "Criativos IA", href: "/admin/conteudo",     icon: Globe2, tone: "sky" },
@@ -285,6 +262,7 @@ const clientSections: NavSection[] = [
       { label: "Estúdio de Voz e Áudio AI",              href: "/dashboard/voz",              icon: Megaphone, tone: "violet" },
       { label: "Créditos e recargas", href: "/dashboard/creditos", icon: Coins, tone: "amber" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
+      { label: "Minhas compras", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "blue" },
       { label: "Minha Conta",      href: "/dashboard/minha-conta",      icon: CreditCard, tone: "blue" },
     ],
   },
@@ -361,14 +339,9 @@ function ConnectyShellRoot({
   const active    = activeHref ?? pathname ?? "/";
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const restricted = billingAccess && ["paid_expired", "trial_expired", "inactive"].includes(billingAccess.state);
-  const sections = mode === "admin" ? adminSections : restricted ? restrictedClientSections : clientSections;
+  const sections = groupPanelNavigation(mode === "admin" ? adminSections : restricted ? restrictedClientSections : clientSections, mode);
   const activeItem = resolveActiveItem(sections, active);
   const activeTone: AccentTone = activeItem?.tone ?? "blue";
-  const activePalette = accentPalettes[activeTone];
-  const accent    = activePalette.accent;
-  const accentRgb = activePalette.accentRgb;
-  const accent2   = activePalette.accent2;
-  const accent2Rgb = activePalette.accent2Rgb;
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
   const role      = mode === "admin" ? "Platform Admin" : (userLabel ?? "workspace");
   const switchTo  = "/admin";
@@ -376,9 +349,11 @@ function ConnectyShellRoot({
   const canSwitch = mode === "client" && isPlatformAdmin;
   const pageLabel = activeItem?.label ?? "Dashboard";
   const mobileDockItems = getMobileDockItems(sections, mode);
+  const contextNavigation = panelContextLinks(active, mode);
+  const contextLinks = contextNavigation?.items.filter(item => sections.some(section => section.items.some(allowed => allowed.href === item.href.split("#")[0]))) ?? [];
   const logoTone  = "blue";
   const isAccountPage = active === "/dashboard/minha-conta" || active.startsWith("/dashboard/minha-conta/");
-  const isAttendancePage = active === "/dashboard/atendimento";
+  const isAttendancePage = active === "/dashboard/atendimento" || active === "/admin/whatsapp/atendimento";
   const isBillingRecoveryPage = isClientBillingRecoveryPage(active);
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -665,7 +640,7 @@ function ConnectyShellRoot({
   const handleComingSoonClick = useCallback((item: NavItem) => {
     setComingSoonItem(item);
     setMobileMenuOpen(false);
-  }, []);
+  }, [setComingSoonItem, setMobileMenuOpen]);
 
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -699,85 +674,7 @@ function ConnectyShellRoot({
     }
   }
 
-  const shellTheme = {
-    background: "#f5f7fb",
-    colorScheme: "light",
-    "--ch-bg":         "#f5f7fb",
-    "--ch-surface":    "rgba(255,255,255,0.96)",
-    "--ch-surface-2":  "#f8fafc",
-    "--ch-surface-3":  "#f1f5f9",
-    "--ch-border":     "rgba(24,24,27,0.10)",
-    "--ch-border-soft":"rgba(24,24,27,0.07)",
-    "--ch-border-strong":"rgba(24,24,27,0.14)",
-    "--ch-brand-blue": "#1d4ed8",
-    "--ch-brand-blue-rgb": "29,78,216",
-    "--ch-brand-primary": "#1d4ed8",
-    "--ch-brand-primary-rgb": "29,78,216",
-    "--ch-brand-action": "#6d28d9",
-    "--ch-brand-action-rgb": "109,40,217",
-    "--ch-brand-soft": "#f1f5f9",
-    "--ch-whatsapp": "#16a34a",
-    "--ch-whatsapp-rgb": "22,163,74",
-    "--ch-whatsapp-deep": "#166534",
-    "--ch-whatsapp-deep-rgb": "22,101,52",
-    "--ch-whatsapp-soft": "#f0fdf4",
-    "--ch-ai": "#6d28d9",
-    "--ch-ai-rgb": "109,40,217",
-    "--ch-ai-cyan": "#71717a",
-    "--ch-ai-cyan-rgb": "113,113,122",
-    "--ch-ai-soft": "#f1f5f9",
-    "--ch-accent":     accent,
-    "--ch-accent-rgb": accentRgb,
-    "--ch-accent-2":   accent2,
-    "--ch-accent-2-rgb": accent2Rgb,
-    "--ch-panel":      "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.94)), rgba(255,255,255,0.96)",
-    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,244,245,0.88)), #ffffff",
-    "--ch-text":       "#0f172a",
-    "--ch-text-rgb":   "15,23,42",
-    "--ch-muted":      "#475569",
-    "--ch-subtle":     "#64748b",
-    "--ch-hover":      "rgba(24,24,27,0.06)",
-    "--ch-dropdown-bg":"rgba(255,255,255,0.98)",
-    "--ch-success": "#059669",
-    "--ch-success-rgb": "5,150,105",
-    "--ch-warning": "#b45309",
-    "--ch-warning-rgb": "180,83,9",
-    "--ch-danger": "#dc2626",
-    "--ch-danger-rgb": "220,38,38",
-    "--ch-info": "#52525b",
-    "--ch-info-rgb": "82,82,91",
-    "--ch-chart-1": "#1d4ed8",
-    "--ch-chart-2": "#047857",
-    "--ch-chart-3": "#7c3aed",
-    "--ch-chart-4": "#b45309",
-    "--ch-chart-5": "#0e7490",
-    "--ch-chart-warning": "#d97706",
-    "--ch-chart-danger": "#e11d48",
-    "--ch-chart-grid": "#e4e4e7",
-    "--ch-chart-axis": "#71717a",
-    "--background":    "#f5f7fb",
-    "--foreground":    "#0f172a",
-    "--card":          "#ffffff",
-    "--card-foreground":"#0f172a",
-    "--popover":       "#ffffff",
-    "--popover-foreground":"#0f172a",
-    "--primary":       accent,
-    "--primary-foreground":"#ffffff",
-    "--secondary":     "#f8fafc",
-    "--secondary-foreground":"#0f172a",
-    "--muted":         "#f1f5f9",
-    "--muted-foreground":"#475569",
-    "--accent":        "#f1f5f9",
-    "--accent-foreground":"#0f172a",
-    "--border":        "rgba(15,23,42,0.10)",
-    "--input":         "rgba(15,23,42,0.14)",
-    "--ring":          `rgba(${accentRgb},0.36)`,
-    "--chart-1":       "var(--ch-chart-1)",
-    "--chart-2":       "var(--ch-chart-2)",
-    "--chart-3":       "var(--ch-chart-3)",
-    "--chart-4":       "var(--ch-chart-4)",
-    "--chart-5":       "var(--ch-chart-5)",
-  } as CSSProperties;
+  const shellTheme = panelTheme;
   const accountDropdownStyle = {
     ...shellTheme,
     background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,250,250,0.98) 100%)",
@@ -795,6 +692,7 @@ function ConnectyShellRoot({
         className="connecty-shell flex min-h-svh"
         data-connecty-accent={activeTone}
         data-connecty-mode={mode}
+        data-attendance-page={isAttendancePage || undefined}
         data-connecty-shell-root="true"
         style={shellTheme}
       >
@@ -817,7 +715,7 @@ function ConnectyShellRoot({
           <Link href="/" className="min-w-0 flex-1">
             <ConnectyLogo className="h-[24px] w-[182px]" imageClassName="connecty-shell-logo-image" tone={logoTone} type="full" />
             <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: "var(--ch-accent)" }}>
-              {mode === "admin" ? "Admin OS" : "Client OS"}
+              {mode === "admin" ? "Administração" : "Minha empresa"}
             </div>
           </Link>
           <div
@@ -829,13 +727,13 @@ function ConnectyShellRoot({
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
           {sections.map((section) => (
-            <div key={section.label}>
-              <div
+            <details key={section.label} open={section.label === "Início" || section.items.some(item => item.href === activeItem?.href)} className="ch-sidebar-group">
+              <summary
                 className="mb-2 px-2 font-mono text-[11px] uppercase tracking-[0.2em]"
                 style={{ color: "var(--ch-subtle)" }}
               >
                 {section.label}
-              </div>
+              </summary>
               <div className="space-y-0.5">
                 {section.items.map((item) => (
                   <SidebarLink
@@ -846,7 +744,7 @@ function ConnectyShellRoot({
                   />
                 ))}
               </div>
-            </div>
+            </details>
           ))}
         </nav>
 
@@ -966,7 +864,7 @@ function ConnectyShellRoot({
           <div className="min-w-0 lg:hidden">
             <div className="truncate text-[13px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>{pageLabel}</div>
             <div className="truncate font-mono text-[11px] uppercase tracking-widest" style={{ color: "var(--ch-muted)" }}>
-              {mode === "admin" ? "Admin OS" : "Client OS"}
+              {mode === "admin" ? "Administração" : "Minha empresa"}
             </div>
           </div>
 
@@ -986,16 +884,7 @@ function ConnectyShellRoot({
             {/* Search */}
             <div className={cn("relative hidden", showAttendanceBillingHeader ? "2xl:block" : "lg:block")}>
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
-              <input
-                type="text"
-                placeholder="Pesquisar..."
-                className="h-9 w-[260px] rounded-lg pl-9 pr-3 text-[12px] outline-none"
-                style={{
-                  color:      "var(--ch-text)",
-                  background: "rgba(255,255,255,0.82)",
-                  border:     "1px solid var(--ch-border-strong)",
-                }}
-              />
+              <button type="button" onClick={() => setMobileMenuOpen(true)} className="h-9 w-[240px] rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-left text-xs text-slate-500">Buscar no menu…</button>
             </div>
 
             {/* Notifications */}
@@ -1127,7 +1016,7 @@ function ConnectyShellRoot({
                 color:      "var(--ch-accent)",
               }}
             >
-              {mode === "admin" ? "Admin OS" : "Client OS"}
+              {mode === "admin" ? "Administração" : "Minha empresa"}
             </span>
 
             {/* Avatar */}
@@ -1214,6 +1103,7 @@ function ConnectyShellRoot({
 
         {mobileMenuOpen ? (
           <MobileAppMenu
+            storageKey={`connectyhub.navigation.v1:${mode}:${userLabel ?? workspaceName ?? "local"}`}
             active={active}
             activeItem={activeItem}
             logoTone={logoTone}
@@ -1250,6 +1140,9 @@ function ConnectyShellRoot({
                 : "pt-4 sm:pt-5 lg:py-6",
             )}
           >
+            {contextLinks.length > 1 && <nav aria-label={contextNavigation?.label} data-panel-context-nav className="mb-3 flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1">
+              {contextLinks.map(item => <Link key={item.href} href={item.href} aria-current={active === item.href ? "page" : undefined} className={cn("flex min-h-11 shrink-0 items-center rounded-lg px-3 text-xs font-semibold", active === item.href ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50")}>{item.label}</Link>)}
+            </nav>}
             {children}
           </div>
         </main>
@@ -2522,6 +2415,7 @@ function SidebarLink({
   onComingSoonClick: (item: NavItem) => void;
 }) {
   const Icon = item.icon;
+  const area = panelAreas[panelAreaForHref(item.href)];
   const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
   const badge = comingSoon ? item.badge ?? "Em breve" : item.badge;
 
@@ -2559,8 +2453,8 @@ function SidebarLink({
       <span
         className="grid h-6 w-6 shrink-0 place-items-center rounded-md"
         style={{
-          background: active ? "rgba(var(--ch-accent-rgb),0.12)" : "rgba(15,23,42,0.045)",
-          color: active ? "var(--ch-accent)" : "var(--ch-muted)",
+          background: area.soft,
+          color: area.color,
         }}
       >
         <Icon className={cn("h-3.5 w-3.5", active ? "" : "opacity-80 group-hover:opacity-100")} />
@@ -2585,19 +2479,27 @@ function SidebarLink({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose }: {
+function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose, storageKey }: {
+  storageKey: string;
   active: string; activeItem?: NavItem; logoTone: "blue" | "white"; mode: "admin" | "client";
   name: string; pageLabel: string; role: string; sections: NavSection[];
   onComingSoonClick: (item: NavItem) => void; onClose: () => void;
 }) {
   const menuRef = useDialogFocus(onClose);
   const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try { const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]"); return Array.isArray(saved) ? saved.filter((item): item is string => typeof item === "string").slice(0,4) : []; } catch { return []; }
+  });
+  function toggleFavorite(href: string) {
+    const next = favorites.includes(href) ? favorites.filter(item => item !== href) : [...favorites.slice(-3), href];
+    setFavorites(next); try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Session-only if storage is unavailable. */ }
+  }
+  const favoriteItems = sections.flatMap(section => section.items).filter(item => favorites.includes(item.href));
   const filtered = sections.map(section => ({ ...section, items: section.items.filter(item =>
-    !normalizedQuery || `${section.label} ${item.label}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery)
+    matchesMenuSearch(section.label, item, query)
   ) })).filter(section => section.items.length);
   return <div ref={menuRef} id="connecty-mobile-menu" role="dialog" aria-modal="true" aria-label="Menu de navegação" tabIndex={-1}
-    data-connecty-mobile-menu="true" className="fixed inset-x-0 bottom-0 top-16 z-50 overflow-y-auto bg-slate-50 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden">
+    data-connecty-mobile-menu="true" className="ch-navigation-menu fixed inset-x-0 bottom-0 top-16 z-50 overflow-y-auto bg-slate-50 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
     <div className="mx-auto max-w-lg">
       <div className="sticky top-0 z-10 space-y-3 bg-slate-50 py-3">
         <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{mode === "admin" ? "Administração" : "Seu painel"}</h2>
@@ -2607,10 +2509,11 @@ function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose }: {
           <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar uma função…" className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3" />
         </label>
       </div>
+      {!query && favoriteItems.length > 0 && <nav aria-label="Favoritos" className="py-2"><p className="mb-2 text-xs font-semibold text-slate-500">Favoritos</p><div className="grid grid-cols-2 gap-2">{favoriteItems.map(item => <MobileMenuLink key={item.href} item={item} isActive={isActive(item.href, active)} onComingSoonClick={onComingSoonClick} onClick={onClose} />)}</div></nav>}
       <nav aria-label="Todas as funções" className="space-y-5 py-3">
-        {filtered.map(section => <section key={section.label}><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{section.label}</h3>
-          <div className="grid gap-2">{section.items.map(item => <MobileMenuLink key={item.href} item={item} isActive={isActive(item.href, active)} onComingSoonClick={onComingSoonClick} onClick={onClose} />)}</div>
-        </section>)}
+        {filtered.map(section => <details key={`${section.label}-${Boolean(query)}`} open={Boolean(query) || section.items.some(item => isActive(item.href, active))} className="ch-menu-group"><summary>{section.label}<span>{section.items.length}</span></summary>
+          <div className="grid gap-2">{section.items.map(item => <div key={item.href} className="flex min-w-0 items-center gap-1"><div className="min-w-0 flex-1"><MobileMenuLink item={item} isActive={isActive(item.href, active)} onComingSoonClick={onComingSoonClick} onClick={onClose} /></div><button type="button" onClick={() => toggleFavorite(item.href)} aria-label={`${favorites.includes(item.href) ? "Remover" : "Adicionar"} ${item.label} ${favorites.includes(item.href) ? "dos" : "aos"} favoritos`} aria-pressed={favorites.includes(item.href)} className="grid size-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-white"><Star className={cn("size-4", favorites.includes(item.href) && "fill-blue-600 text-blue-600")} /></button></div>)}</div>
+        </details>)}
         {!filtered.length && <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Nenhuma função encontrada. Tente outro termo.</p>}
       </nav>
     </div>
@@ -2629,6 +2532,7 @@ function MobileMenuLink({
   onClick: () => void;
 }) {
   const Icon = item.icon;
+  const area = panelAreas[panelAreaForHref(item.href)];
   const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
   const badge = comingSoon ? item.badge ?? "Em breve" : item.badge;
 
@@ -2647,10 +2551,10 @@ function MobileMenuLink({
       }}
       className="grid min-h-12 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
-        background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
+        background: "var(--ch-accent)",
         border:     "1px solid rgba(var(--ch-accent-rgb),0.62)",
         color:      "#ffffff",
-        boxShadow:  "0 12px 32px rgba(var(--ch-accent-rgb),0.20)",
+        boxShadow:  "none",
       } : {
         background: "linear-gradient(180deg, rgba(255,255,255,0.80), rgba(17,17,17,0.018)), var(--ch-surface-2)",
         border:     "1px solid var(--ch-border)",
@@ -2660,8 +2564,8 @@ function MobileMenuLink({
       <span
         className="flex h-6 w-6 items-center justify-center rounded-lg"
         style={{
-          background: active ? "rgba(255,255,255,0.16)" : "rgba(17,17,17,0.05)",
-          color: active ? "#ffffff" : "var(--ch-muted)",
+          background: active ? "rgba(255,255,255,0.16)" : area.soft,
+          color: active ? "#ffffff" : area.color,
         }}
       >
         <Icon className="h-3.5 w-3.5" />
@@ -2749,6 +2653,7 @@ function MobileDockLink({
   onComingSoonClick: (item: NavItem) => void;
 }) {
   const Icon = item.icon;
+  const area = panelAreas[panelAreaForHref(item.href)];
   const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
 
   return (
@@ -2775,16 +2680,14 @@ function MobileDockLink({
         color: "var(--ch-muted)",
       }}
     >
-      <Icon className="h-4 w-4" />
+      <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ background: active ? "rgba(255,255,255,.15)" : area.soft, color: active ? "#fff" : area.color }}><Icon className="h-4 w-4" /></span>
       <span className="max-w-full text-[11px] font-medium leading-tight">{comingSoon ? "Breve" : label}</span>
     </Link>
   );
 }
 
 function getMobileDockItems(sections: NavSection[], mode: "admin" | "client") {
-  const dockHrefs = mode === "admin"
-    ? ["/admin", "/admin/whatsapp/atendimento", "/admin/clientes", "/admin/leads"]
-    : ["/dashboard", "/dashboard/atendimento", "/dashboard/links", "/dashboard/minha-conta"];
+  const dockHrefs = panelDockHrefs(mode);
   const items = sections.flatMap((section) => section.items);
 
   const preferred = dockHrefs.map(href => items.find(item => item.href === href)).filter((item): item is NavItem => Boolean(item));
@@ -2800,6 +2703,7 @@ function dockLabel(item: NavItem, mode: "admin" | "client") {
     if (item.href === "/admin/whatsapp/atendimento") return "Atender";
     if (item.href === "/admin/clientes") return "Clientes";
     if (item.href === "/admin/leads") return "Leads";
+    if (item.href === "/admin/infrastructure") return "Sistema";
   }
 
   if (item.href === "/dashboard/atendimento") return "Atender";
