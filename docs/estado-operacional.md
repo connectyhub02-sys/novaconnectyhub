@@ -1,21 +1,23 @@
 # Estado operacional da ConnectyHub
 
-## Produção e edição de vídeos — publicação autorizada, 08/11/2026
+## Produção e edição de vídeos — publicada, 08/11/2026
 
-Nova página `/solucoes/producao-de-videos`, submenu Soluções e apresentação de
-desenvolvimento/vídeos preparados em worktree isolada da revisão publicada.
-VSL própria com versão móvel e referências externas incorporadas das fontes
-originais. Contato resolve o WhatsApp global indicado pelo titular, com mensagem
-específica; número confirmado em leitura e redirecionamento local, sem envio.
+Página https://www.connectyhub.com.br/solucoes/producao-de-videos publicada no
+release `ed21a005769691e9a511f173b2ebfb0c15048706`, slot a. Cabeçalho do site
+preservado, com submenu Soluções para desenvolvimento e produção/edição.
+Oferta aprovada: edição R$200 e avatar/IA a partir de R$600, até 90s de vídeo final;
+cenas de IA definidas na proposta. Especiais e recorrência sob orçamento.
 
-Publicação da versão revisada autorizada por Magno. VSL 1080p/720p e pôster
-no R2 com HTTP/Range/MIME/cache verificados; release em preparação, ainda sem
-ativação. Prévia em `http://127.0.0.1:8772/solucoes/producao-de-videos`.
-Build completo, TypeScript, lint dirigido e três testes de contato aprovados;
-menu, FAQ, vídeos e larguras 1440/390/320 px conferidos no navegador.
-Revisão visual/comercial aprovada. Ativação, smoke público e briefing da Eliane
-ainda pendentes; nenhum teste de resposta da agente foi realizado.
-Testes e limites em [registro da prévia](producao-videos-previa-2026-11-08.md).
+VSL própria 1080p/720p e pôster no R2; HTTP/Range/MIME/cache verificados.
+Build e smoke candidato/público aprovados: páginas, assets, proteção de painéis,
+GET assinado Inngest (59 funções) e WhatsApp global. Reprodução móvel e
+navegação pública conferidas. Não houve envio de mensagem ou pagamento.
+Slot b anterior `3fb7961c` preservado para retorno, sem rollback de banco.
+
+Código e evidências versionados na branch `codex/video-services-preview`, sobre
+a revisão que estava ativa; master remoto divergente preservado. Nenhuma
+migration ou treinamento de agente alterado. Resposta real da Eliane sobre
+o novo serviço ainda não homologada. [Relatório](producao-videos-previa-2026-11-08.md).
 
 ## Painéis: navegação, rascunhos, automações e cores — release preparada, 07/11/2026
 

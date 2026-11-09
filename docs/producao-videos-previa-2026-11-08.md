@@ -1,8 +1,8 @@
-# Produção e edição de vídeos — prévia local, 08/11/2026
+# Produção e edição de vídeos — publicação, 08/11/2026
 
-Status atual: publicação autorizada por Magno em 08/11/2026; release em preparação.
-Mídia própria enviada ao R2 e validada. Ativação e verificação pública ainda pendentes.
-Os registros abaixo preservam o histórico da prévia.
+Status atual: **PUBLICADA** em 08/11/2026 (horário de Brasília).
+Release `ed21a005769691e9a511f173b2ebfb0c15048706`, slot a, validado no domínio público.
+Os registros abaixo preservam o histórico da prévia e da preparação.
 
 ## Base e isolamento
 
@@ -227,3 +227,35 @@ candidato serão exigidos pelo fluxo deploy/README.md antes da ativação. Sem
 migrations, alteração de agentes, disparos, pagamentos ou mudanças de DNS.
 Briefing comercial e resposta efetiva da Eliane sobre esse serviço continuam
 não homologados; os links apenas encaminham ao atendimento global existente.
+
+
+## Resultado da publicação — 08/11/2026
+
+**PUBLICADA**: https://www.connectyhub.com.br/solucoes/producao-de-videos
+
+- Código: `ed21a005769691e9a511f173b2ebfb0c15048706`, branch remota
+  `codex/video-services-preview`. Sem merge/force-push no master divergente.
+- Build completo na VPS aprovado, incluindo TypeScript e 124 páginas geradas.
+- Candidato no slot a/3130 passou no smoke antes da ativação. Caddy ativado pelo
+  script de release; health público independente confirmou o SHA acima.
+- Smoke público aprovado: home, login, soluções, desenvolvimento, agente IA,
+  nova landing e sitemap; 19 assets de login e 22 da landing responderam 200.
+- Rotas admin/dashboard redirecionam visitante sem sessão (307); quatro APIs
+  de painel continuam exigindo autenticação (401). Não houve sessão autenticada
+  de painel neste teste; proteção de entrada não comprova todos os fluxos internos.
+- GET assinado de Inngest: autenticação válida, 59 funções expostas. Não foram
+  disparados jobs, mensagens, pagamentos ou novas inscrições.
+- Quatro variantes de contato (geral, IA, edição e especial) retornaram 302
+  sem cache para o WhatsApp global 554788556936, com mensagem contextual.
+- Navegador público: desktop1440/mobile390 sem overflow observado, pôsteres
+  carregados, seis prévias do hero reproduzindo. VSL pública 720p reproduziu
+  com readyState4, resolução1280x720 e tempo avançando; loops pausados durante
+  sua execução. Caminho Home → Soluções → Produção e edição conferido.
+- Capturas locais: `output/video-services/published-desktop.png` e
+  `output/video-services/published-mobile-vsl.png`.
+- Slot b preservado com `3fb7961c360c6213f62d52a62ef89814e152b468` para retorno.
+  Se necessário, validar saúde/versão e usar `release.sh activate b`, sem restaurar banco.
+
+Nenhuma migration, configuração de agente, DNS ou credencial foi alterada.
+Eliane continua com o atendimento global existente; seu conhecimento da oferta
+e uma resposta real ao lead não foram homologados nesta publicação.
