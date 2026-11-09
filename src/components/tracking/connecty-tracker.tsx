@@ -61,7 +61,7 @@ export function ConnectyTracker() {
     busy: null,
     message: null,
   });
-  const suppressPermissionPrompt = isCommercePublicPath(pathname);
+  const suppressPermissionPrompt = isCommercePublicPath(pathname) || pathname === "/solucoes/producao-de-videos";
 
   useEffect(() => {
     function syncPublicTrackingSignature() {

@@ -11,7 +11,6 @@ import {
   GraduationCap,
   Layers,
   Languages,
-  Menu,
   MessageCircle,
   MessageSquare,
   Mic,
@@ -26,7 +25,7 @@ import {
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { Spotlight } from "@/components/ui/spotlight";
-import { publicSiteNavItems } from "@/components/seo/public-site-nav";
+import { PublicSiteHeader } from "@/components/seo/public-site-header";
 
 const HERO_VIDEO_MP4 = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/avatar%20connectyhub.mp4";
 
@@ -879,81 +878,7 @@ export default function Home() {
 /* ── COMPONENTS ────────────────────────────────────── */
 
 function Header() {
-  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
-
-  return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/[0.05] bg-black/70 px-4 py-3 backdrop-blur-md md:px-12 lg:px-16">
-      <div className="mx-auto flex max-w-[1760px] items-center justify-between gap-3">
-        <a
-          className="inline-flex shrink-0 rounded-full border px-2.5 py-2 transition-colors sm:px-4"
-          style={{ borderColor: `${G}50` }}
-          href="#inicio"
-          onClick={() => setMobileNavOpen(false)}
-        >
-          <ConnectyLogo className="h-4 w-[104px] sm:w-[132px]" tone="white" type="full" />
-        </a>
-        <nav aria-label="Navegação principal" className="hidden min-w-0 items-center gap-2 font-mono text-[10px] text-zinc-300 min-[1440px]:flex 2xl:gap-3 2xl:text-[11px]">
-          {publicSiteNavItems.map((item) => (
-            <a key={item.href} href={item.href} className="whitespace-nowrap transition-colors hover:text-white">
-              [ {item.label} ]
-            </a>
-          ))}
-        </nav>
-        <div className="flex shrink-0 items-center gap-2">
-          <a
-            className="inline-flex rounded-full border border-white/15 px-2.5 py-2 text-[10px] font-bold text-white transition hover:border-white/35 sm:px-3 sm:text-[11px]"
-            href="/login"
-          >
-            Entrar
-          </a>
-          <a
-            className="inline-flex rounded-full px-2.5 py-2 text-[10px] font-bold text-black transition-all hover:opacity-90 sm:px-4 sm:text-[11px]"
-            style={{ background: G }}
-            href="/iniciar"
-          >
-            Teste grátis
-          </a>
-          <button
-            type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 text-zinc-200 transition hover:border-white/35 min-[1440px]:hidden"
-            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
-            aria-expanded={mobileNavOpen}
-            aria-controls="home-mobile-menu"
-            onClick={() => setMobileNavOpen((current) => !current)}
-          >
-            {mobileNavOpen ? <X size={15} /> : <Menu size={16} />}
-          </button>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {mobileNavOpen ? (
-          <motion.nav
-            id="home-mobile-menu"
-            aria-label="Navegação no celular"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
-            className="mx-auto mt-3 grid max-h-[calc(100dvh-100px)] max-w-[1760px] gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 min-[1440px]:hidden"
-          >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {publicSiteNavItems.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className="flex min-h-11 items-center justify-center rounded-xl border border-white/10 px-3 py-2 text-center transition hover:border-white/30 hover:text-white"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  {item.label}
-                </a>
-              ))}
-            </div>
-          </motion.nav>
-        ) : null}
-      </AnimatePresence>
-    </header>
-  );
+  return <PublicSiteHeader active="home" fixed />;
 }
 
 function PageSection({

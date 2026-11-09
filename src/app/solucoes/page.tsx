@@ -4,18 +4,18 @@ import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { PublicSiteHeader } from "@/components/seo/public-site-header";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildBreadcrumbList } from "@/lib/seo/structured-data";
-import { buildCanonicalUrl, connectyhubSiteDescription, getConnectyhubSiteUrl } from "@/lib/seo/site";
+import { buildCanonicalUrl, getConnectyhubSiteUrl } from "@/lib/seo/site";
 import { solutionPages } from "@/lib/seo/solution-pages";
 
 export const metadata: Metadata = {
-  title: "Solucoes de IA para WhatsApp | ConnectyHub",
+  title: "Soluções para seu negócio | ConnectyHub",
   description:
-    "Conheca solucoes da ConnectyHub para agentes de IA, automacao WhatsApp, catalogo, API, imobiliarias e e-commerce.",
+    "Atendimento com IA, desenvolvimento sob medida e produção de vídeos para conectar sua marca aos clientes.",
   alternates: { canonical: "/solucoes" },
   openGraph: {
-    title: "Solucoes de IA para WhatsApp | ConnectyHub",
+    title: "Soluções para seu negócio | ConnectyHub",
     description:
-      "Agentes de IA, automacao WhatsApp, catalogo, API, imobiliarias e e-commerce em uma plataforma brasileira.",
+      "Atendimento com IA, desenvolvimento sob medida e produção de vídeos para sua empresa.",
     url: "/solucoes",
     siteName: "ConnectyHub",
     locale: "pt_BR",
@@ -23,11 +23,16 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Solucoes de IA para WhatsApp | ConnectyHub",
+    title: "Soluções para seu negócio | ConnectyHub",
     description:
-      "Agentes de IA, automacao WhatsApp, catalogo, API, imobiliarias e e-commerce em uma plataforma brasileira.",
+      "Atendimento com IA, desenvolvimento sob medida e produção de vídeos para sua empresa.",
   },
 };
+
+const services = [
+  { href: "/solucoes-personalizadas", title: "Desenvolvimento sob medida", eyebrow: "Sua ideia, seu software", description: "Plataformas, aplicativos e integrações pensados para a operação da sua empresa." },
+  { href: "/solucoes/producao-de-videos", title: "Produção e edição de vídeos", eyebrow: "Criatividade em movimento", description: "Edição profissional e produção com IA para suas ideias virarem anúncios, Reels e apresentações." },
+];
 
 export default function SolutionsPage() {
   const siteUrl = getConnectyhubSiteUrl();
@@ -39,8 +44,8 @@ export default function SolutionsPage() {
         "@type": "CollectionPage",
         "@id": `${pageUrl}#webpage`,
         url: pageUrl,
-        name: "Solucoes de IA para WhatsApp",
-        description: connectyhubSiteDescription,
+        name: "Soluções para seu negócio",
+        description: "Atendimento com IA, desenvolvimento sob medida e produção de vídeos.",
         inLanguage: "pt-BR",
         isPartOf: { "@id": `${siteUrl}/#website` },
       },
@@ -48,11 +53,11 @@ export default function SolutionsPage() {
         "@type": "ItemList",
         "@id": `${pageUrl}#solutions`,
         name: "Solucoes ConnectyHub",
-        itemListElement: solutionPages.map((page, index) => ({
+        itemListElement: [...solutionPages.map(page => ({ ...page, href: `/solucoes/${page.slug}` })), ...services].map((page, index) => ({
           "@type": "ListItem",
           position: index + 1,
           name: page.title,
-          url: buildCanonicalUrl(`/solucoes/${page.slug}`),
+          url: buildCanonicalUrl(page.href),
         })),
       },
       buildBreadcrumbList([
@@ -71,14 +76,13 @@ export default function SolutionsPage() {
         <div>
           <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-emerald-300">Solucoes ConnectyHub</p>
           <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl">
-            IA, WhatsApp, catalogo e API prontos para busca e para venda.
+            Mais possibilidades para o seu negócio.
           </h1>
           <p className="mt-6 max-w-xl text-base leading-8 text-slate-300">
-            Estas paginas explicam como a ConnectyHub resolve buscas reais de clientes, parceiros e mecanismos de IA: atendimento,
-            automacao, venda conversacional, catalogo e integracao.
+            Conecte atendimento, tecnologia e conteúdo. Escolha a solução que faz sentido para o momento da sua empresa, de agentes no WhatsApp a software sob medida e produção de vídeos.
           </p>
           <div className="mt-8 grid gap-3 text-sm text-slate-200">
-            {["Conteudo publico e indexavel", "Schema estruturado por pagina", "Links internos para fortalecer descoberta"].map((item) => (
+            {["Atendimento e vendas com IA", "Desenvolvimento sob medida", "Produção e edição de vídeos"].map((item) => (
               <span className="flex items-center gap-2" key={item}>
                 <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                 {item}
@@ -88,11 +92,11 @@ export default function SolutionsPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {solutionPages.map((page) => (
+          {[...services, ...solutionPages.map(page => ({ ...page, href: `/solucoes/${page.slug}` }))].map((page) => (
             <Link
               className="group rounded-[8px] border border-white/10 bg-white/[0.04] p-5 transition hover:border-emerald-300/60 hover:bg-emerald-300/10"
-              href={`/solucoes/${page.slug}`}
-              key={page.slug}
+              href={page.href}
+              key={page.href}
             >
               <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-300">{page.eyebrow}</p>
               <h2 className="mt-3 text-lg font-bold">{page.title}</h2>

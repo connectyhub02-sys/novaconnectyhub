@@ -1,5 +1,22 @@
 # Estado operacional da ConnectyHub
 
+## Produção e edição de vídeos — publicação autorizada, 08/11/2026
+
+Nova página `/solucoes/producao-de-videos`, submenu Soluções e apresentação de
+desenvolvimento/vídeos preparados em worktree isolada da revisão publicada.
+VSL própria com versão móvel e referências externas incorporadas das fontes
+originais. Contato resolve o WhatsApp global indicado pelo titular, com mensagem
+específica; número confirmado em leitura e redirecionamento local, sem envio.
+
+Publicação da versão revisada autorizada por Magno. VSL 1080p/720p e pôster
+no R2 com HTTP/Range/MIME/cache verificados; release em preparação, ainda sem
+ativação. Prévia em `http://127.0.0.1:8772/solucoes/producao-de-videos`.
+Build completo, TypeScript, lint dirigido e três testes de contato aprovados;
+menu, FAQ, vídeos e larguras 1440/390/320 px conferidos no navegador.
+Revisão visual/comercial aprovada. Ativação, smoke público e briefing da Eliane
+ainda pendentes; nenhum teste de resposta da agente foi realizado.
+Testes e limites em [registro da prévia](producao-videos-previa-2026-11-08.md).
+
 ## Painéis: navegação, rascunhos, automações e cores — release preparada, 07/11/2026
 
 Titular aprovou a prévia e autorizou produção após refinamento das cores.
