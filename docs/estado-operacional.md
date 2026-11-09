@@ -1,10 +1,43 @@
 # Estado operacional da ConnectyHub
 
+## Google OAuth, perfil e contato — correções publicadas, 09/11/2026
+
+Release `fa4e3d9a6aea4c5e3168cdf17e7f468d997767e6`, **slot b**, ativada às
+17h58 BRT. Incorporou a base de coexistência `3e6e95df`; anterior `fd45da28`
+preservada no slot a. Build/TypeScript/lint e smoke candidato/público passaram:
+15 páginas com canônicas, 25 assets, painéis/APIs privados protegidos, política,
+redes sociais, Inngest autenticado com 61 funções e contatos com nono dígito.
+IndexNow aceitou novamente 15 URLs (HTTP 200). Nenhuma campanha paga ativada.
+
+Política de privacidade detalha as proteções efetivamente implementadas.
+Título/descrição da home, redes sociais oficiais no rodapé e Organization.sameAs
+atualizados. Telefone provisório confirmado: **(47) 98855-6936**; home e rotas de
+contato de vídeos/software apontam para `https://wa.me/5547988556936`.
+
+Perfil da Empresa: descrição e site salvos; Instagram, YouTube e TikTok oficiais
+conferidos. WhatsApp novo salvo sem pendência. **Telefone ainda em análise pelo
+Google, com prazo exibido de até sete dias.** Captura real do site adicionada:
+upload concluído; na última grade do painel não havia pendência visível, sem
+validação independente da exibição pública. Logo/capa existentes preservados.
+
+YouTube: publicação técnica privada real concluída na operação ConnectyHub
+Interno e confirmada no Studio; conexão temporária depois removida com confirmação
+de revogação. Nova demonstração em inglês, não listada:
+https://youtu.be/6OQgMwbvOOI . Link salvo no pedido de revisão Google.
+Com autorização explícita, email enviado às 17h54 de connectyhub01@gmail.com
+para api-oauth-support@google.com, informando política/vídeo e pedindo retomada.
+Gmail confirmou envio; não há confirmação de leitura, retomada ou aprovação.
+Google/YouTube, Meta e TikTok **continuam sem aprovação final comprovada**.
+
+Detalhes e evidências: [Google, perfil e revisão](google-review-e-perfil-2026-11-09.md).
+Os registros anteriores abaixo descrevem etapas anteriores; este é o último
+estado de publicação verificado nesta tarefa.
+
 
 ## Analytics e SEO — publicados e verificados, 09/11/2026
 
 GA4 `478860449` / `G-MN9Q0V72D7` recebe visitas públicas com consentimento.
-Release atual `951e351d9ac0d2d1c9bb64a471ca815412de39ff`, **slot a**, ativo em 09/11
+Release desta etapa `951e351d9ac0d2d1c9bb64a471ca815412de39ff`, **slot a**, ativo em 09/11
 às 17h08 aproximadamente; anterior `3b07775a` no slot b preservado para retorno.
 Tag e página `/admin/analytics` publicadas e validadas. Visita controlada
 gerou page_view HTTP 204, sem query, sem duplicação na navegação SPA; após recusa
