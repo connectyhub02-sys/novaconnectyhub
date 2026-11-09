@@ -1,11 +1,13 @@
 # Estado operacional da ConnectyHub
 
-## Coexistência gerenciada para Vision — preparação em 09/11/2026
+## Coexistência gerenciada para Vision — publicada em 09/11/2026
 
 Migration privada 0223 aplicada com ensaio de rollback e grants verificados.
 Webhook Meta e domínio SDK preparados; piloto restrito a uma instância da Vision.
-36 testes dirigidos passaram. Release em preparação, cadastro do número e teste
-real do Global pendentes. Nenhuma campanha enviada.
+Release `3e6e95df` ativa no slot b, sobre a revisão de analytics/SEO `951e351d`,
+preservada no slot a. Build e 43 testes dirigidos aprovados; smoke candidato e
+público confirmou API autenticada, webhook assinado e 61 funções Inngest.
+Cadastro do número e teste real do Global pendentes. Nenhuma campanha enviada.
 [Detalhes e limites](meta-coexistencia-api-2026-11-09.md).
 
 ## Produção e edição de vídeos — publicada, 08/11/2026

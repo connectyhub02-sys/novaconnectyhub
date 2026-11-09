@@ -48,7 +48,13 @@ recebe os cinco campos de coexistência, preservando outras assinaturas. Domíni
 canônico da Vision adicionado ao SDK do aplicativo provedor; HTTPS e modo estrito
 preservados. Isso não altera a submissão de revisão de outros produtos Meta.
 
-Release da aplicação ainda em preparação; atualizar abaixo após ativação.
+Release `3e6e95dfefd793a62dc59f68f5e8bcffbaa56599` publicada no slot b.
+Base da publicação paralela de analytics/SEO `951e351d` preservada, com rollback
+no slot a. Build completo aprovado; 43 testes dirigidos incluindo as regressões
+de analytics/SEO passaram. Smoke candidato e público confirmou 15 páginas,
+assets, proteção dos painéis, API autenticada de coexistência, ausência de
+credenciais na resposta e webhook assinado vazio. Inngest registrado e 61
+funções verificadas por GET assinado. Nenhum número cadastrado ou envio realizado.
 A Meta confirmou o aplicativo como Tech Provider no painel, mas a elegibilidade
 do número depende do cadastro real. O titular precisa concluir a autorização no
 Business e permitir o histórico. Pode ser necessário refazer o QR da ConnectyHub.
