@@ -76,6 +76,14 @@ type StoredCredentialMap = Map<string, MaintenanceStoredCredential>;
 
 export const maintenanceIntegrations: IntegrationDefinition[] = [
   {
+    id: "google-analytics", name: "Google Analytics · site ConnectyHub", sector: "Divulgação", owner: "Administrador da plataforma",
+    description: "Leitura dos relatórios GA4 do site público, independente de Google Ads e YouTube. O acesso real é validado no painel Analytics do site.",
+    tone: "cyan", modules: ["Analytics do site"], fields: [
+      { label: "Conta de serviço GA4 (JSON)", env: "GOOGLE_ANALYTICS_SERVICE_ACCOUNT_JSON", kind: "secret", requirement: "required", multiline: true,
+        help: "Conta de serviço com papel Leitor somente na propriedade GA4 da ConnectyHub. Analytics Data API habilitada; não conceder papéis de projeto no Cloud." },
+    ],
+  },
+  {
     id: "infrastructure",
     name: "Infraestrutura / Admin OS",
     sector: "Operação interna",

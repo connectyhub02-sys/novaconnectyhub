@@ -2,6 +2,7 @@ export type PanelMode = "admin" | "client";
 type NavigationDefinition = { group: string; label: string; aliases: string };
 /** Task ownership is explicit; providers and URL spelling do not decide the menu group. */
 export const panelNavigation: Record<string, NavigationDefinition> = {
+  "/admin/analytics": { group: "Divulgação", label: "Analytics do site", aliases: "Google Analytics GA4 visitas visitantes" },
   "/admin": {
     "group": "Início",
     "label": "Início",

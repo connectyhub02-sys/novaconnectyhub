@@ -5,6 +5,7 @@ import { MagicLinkFragmentRedirect } from "@/components/auth/magic-link-fragment
 import { CommerceAgentDock } from "@/components/commerce-agent/commerce-agent-dock";
 import { JsonLd } from "@/components/seo/json-ld";
 import { ConnectyTracker } from "@/components/tracking/connecty-tracker";
+import { GoogleAnalytics } from "@/components/tracking/google-analytics";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { buildConnectyhubRootStructuredData } from "@/lib/seo/structured-data";
 import {
@@ -140,6 +141,7 @@ export default function RootLayout({
           <MagicLinkFragmentRedirect />
           <Suspense fallback={null}>
             <ConnectyTracker />
+            <GoogleAnalytics measurementId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_MEASUREMENT_ID ?? ""} />
             <CommerceAgentDock />
           </Suspense>
           {children}

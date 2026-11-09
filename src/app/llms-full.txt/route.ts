@@ -19,6 +19,7 @@ export async function GET() {
     "",
     "## Canonical resources",
     `- Site: ${siteUrl}`,
+    `- Video production and editing: ${buildCanonicalUrl("/solucoes/producao-de-videos")} — Editing and AI avatar videos; custom and recurring projects by proposal.`,
     `- Sitemap: ${buildCanonicalUrl("/sitemap.xml")}`,
     `- Robots: ${buildCanonicalUrl("/robots.txt")}`,
     `- API docs: ${buildCanonicalUrl("/docs/api")}`,

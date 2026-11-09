@@ -56,6 +56,7 @@ export function buildConnectyhubRootStructuredData() {
         logo: buildCanonicalUrl("/brand/connectyhub-app-icon-512.png"),
         description: connectyhubSiteDescription,
         knowsAbout: connectyhubSeoKeywords,
+        sameAs: ["https://www.youtube.com/@connectyhub01", "https://www.instagram.com/connectyhub.ai", "https://www.tiktok.com/@connectyhub.ia"],
       },
       {
         "@type": "WebSite",

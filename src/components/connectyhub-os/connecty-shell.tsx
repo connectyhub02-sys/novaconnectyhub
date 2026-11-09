@@ -182,6 +182,7 @@ const adminSections: NavSection[] = [
       { label: "Meta Ads",    href: "/admin/trafego/meta-ads",   icon: Megaphone, tone: "fuchsia" },
       { label: "Meta e WhatsApp oficial", href: "/admin/meta", icon: MessageCircle, tone: "teal" },
       { label: "Google Ads",  href: "/admin/trafego/google-ads", icon: Search, tone: "blue" },
+      { label: "Analytics do site", href: "/admin/analytics", icon: BarChart3, tone: "blue" },
       { label: "Visao Geral", href: "/admin/trafego",            icon: BarChart3, tone: "sky" },
     ],
   },

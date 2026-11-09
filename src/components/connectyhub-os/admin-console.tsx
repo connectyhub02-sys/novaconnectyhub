@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { AnalyticsReport } from "@/lib/analytics/platform-analytics";
+import { PlatformAnalyticsPanel } from "./platform-analytics-panel";
 import { DashboardDetails } from "./dashboard-details";
 import { AdminHomeStart } from "./panel-home";
 import {
@@ -43,10 +45,12 @@ export function AdminConsole({
   userLabel = "CEO_HUMAN_ADM",
   overview,
   marketing,
+  analytics,
 }: {
   userLabel?: string;
   overview: AdminDashboardOverview;
   marketing?: AdminMarketingOverview;
+  analytics?: AnalyticsReport;
 }) {
   const ceoTone = overview.ceoInsight.kpis.some((kpi) => kpi.tone === "amber" || kpi.tone === "rose")
     ? "amber"
@@ -71,6 +75,7 @@ export function AdminConsole({
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel}>
       <AdminHomeStart overview={overview} />
+      {analytics && <div className="mb-4"><PlatformAnalyticsPanel report={analytics} compact /></div>}
       <p className="mb-3 text-xs text-slate-500">Atualizado em {formatShortDate(overview.generatedAt)}.{overview.warnings.length ? " Alguns indicadores não puderam ser atualizados. Consulte os avisos nos relatórios." : ""}</p>
       <DashboardDetails>
 

@@ -20,6 +20,7 @@ export async function GET() {
     "## Public pages",
     `- Home: ${siteUrl}`,
     `- Solutions hub: ${buildCanonicalUrl("/solucoes")}`,
+    `- Video production and editing: ${buildCanonicalUrl("/solucoes/producao-de-videos")} — Video editing, AI avatars and custom audiovisual projects.`,
     `- Custom software development, meeting scheduling: ${buildCanonicalUrl("/solucoes-personalizadas")}`,
     `- AI API and credit calculation: ${buildCanonicalUrl("/docs/api#ia")}`,
     `- API documentation and test console: ${buildCanonicalUrl("/docs/api")}`,

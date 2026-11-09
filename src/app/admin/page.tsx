@@ -4,6 +4,7 @@ import { AdminConsole } from "@/components/connectyhub-os/admin-console";
 import { getAdminDashboardOverview } from "@/lib/admin/dashboard-overview";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { getAdminMarketingOverview } from "@/lib/tracking/admin-marketing";
+import { getPlatformAnalytics } from "@/lib/analytics/platform-analytics";
 
 export const metadata: Metadata = {
   title: "Admin OS | ConnectyHub",
@@ -17,10 +18,11 @@ export default async function AdminPage() {
     return <AccessDenied />;
   }
 
-  const [overview, marketing] = await Promise.all([
+  const [overview, marketing, analytics] = await Promise.all([
     getAdminDashboardOverview(),
     getAdminMarketingOverview(),
+    getPlatformAnalytics(),
   ]);
 
-  return <AdminConsole userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} overview={overview} marketing={marketing} />;
+  return <AdminConsole userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} overview={overview} marketing={marketing} analytics={analytics} />;
 }

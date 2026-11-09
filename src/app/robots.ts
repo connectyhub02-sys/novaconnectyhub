@@ -12,15 +12,13 @@ const privatePaths = [
   "/checkout/",
   "/dashboard",
   "/dashboard/",
-  "/iniciar",
-  "/login",
-  "/login/",
   "/loja/*/carrinho",
   "/r/",
 ];
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
-  const ids=await publicCatalogSitemapIds();
+  // The public site's crawl policy must survive a catalog/database outage.
+  const ids=await publicCatalogSitemapIds().catch(() => [{ id: 0 }]);
   return {
     rules: [
       {

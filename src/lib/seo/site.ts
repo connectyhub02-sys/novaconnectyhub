@@ -1,4 +1,4 @@
-export const defaultConnectyhubSiteUrl = "https://connectyhub.com.br";
+export const defaultConnectyhubSiteUrl = "https://www.connectyhub.com.br";
 
 export const connectyhubSiteName = "ConnectyHub";
 

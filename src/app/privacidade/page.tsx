@@ -12,8 +12,16 @@ export default function PrivacyPage() {
     <LegalPage
       title="Politica de Privacidade"
       description="Esta politica explica como a ConnectyHub coleta, usa, protege e permite a exclusao de dados em seus paineis, automacoes, integracoes e agentes de atendimento."
-      updatedAt="3 de novembro de 2026"
+      updatedAt="9 de novembro de 2026"
       sections={[
+        {
+          title: "Estatísticas das páginas públicas",
+          paragraphs: [
+            "Com sua autorização no controle de Cookies, usamos Google Analytics 4 para medir visitas, sessões, páginas acessadas e origens do tráfego do site público da ConnectyHub. O Google recebe informações técnicas do navegador e da visita e utiliza cookies para distinguir visitas. Você pode recusar ou retirar sua autorização pelo botão Cookies no site.",
+            "Essa medição não inclui painéis internos nem lojas de empresas clientes. A tag não envia nomes, emails, telefones, conteúdo de formulários, parâmetros ou fragmentos da URL. Os recursos de personalização de anúncios e Google Signals permanecem desativados. Os relatórios agregados são acessíveis apenas aos administradores da ConnectyHub.",
+          ],
+          links: [{ label: "Como o Google usa informações de sites parceiros", href: "https://policies.google.com/technologies/partner-sites" }],
+        },
         {
           title: "1. Dados que coletamos",
           paragraphs: [
