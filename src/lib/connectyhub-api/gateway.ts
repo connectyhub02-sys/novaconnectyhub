@@ -3483,7 +3483,7 @@ function isIdempotencyStoreUnavailableError(error: unknown) {
   );
 }
 
-async function requireGatewayInstance(auth: GatewayAuthContext, publicInstanceId: string) {
+export async function requireGatewayInstance(auth: GatewayAuthContext, publicInstanceId: string) {
   const { data, error } = await auth.client
     .from("whatsapp_instances")
     .select(gatewayInstanceColumns)

@@ -220,3 +220,11 @@ Antes de escrever código Next.js, siga `AGENTS.md` e os guias da versão instal
 Crie migrations novas e confira histórico/permissões/RLS no destino quando necessário. Mudança no código não aplica SQL nem publica automaticamente um processo WebSocket. Revise `services/ai-relay/README.md` ao trabalhar com Live.
 
 Atualize o estado operacional após mudanças verificadas e mantenha links para relatórios datados. Uma conversa nova deve conseguir explicar o que funciona, onde roda e quais testes faltam, sem depender de ler transcrições anteriores.
+
+## Exceção autorizada: coexistência via API — 09/11/2026
+
+Magno escolheu o cadastro do mesmo número Business/Cloud para a Vision Comex,
+com credenciais gerenciadas pela ConnectyHub e eventos assinados para a Vision.
+Habilitação por cliente e instância; o fluxo tradicional mantém números separados.
+O Global segue como responsável pelas respostas e campanhas aguardam teste real.
+[Contrato e limites](meta-coexistencia-api-2026-11-09.md).
