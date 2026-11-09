@@ -32,9 +32,9 @@ const audiowide = Audiowide({
 });
 
 const siteUrl = getConnectyhubSiteUrl();
-const rootTitle = "ConnectyHub | Clone-se. Seu Gêmeo Digital no WhatsApp.";
+const rootTitle = "ConnectyHub | Agentes de IA, WhatsApp, CRM e automações";
 const rootDescription =
-  "Crie agentes de IA para WhatsApp com automacoes, CRM, catalogo de vendas, checkout, atendimento e API para integradores em uma plataforma brasileira.";
+  "Automatize atendimento e vendas com agentes de IA para WhatsApp, CRM, catálogo e APIs. Conheça também soluções de software e produção de vídeos da ConnectyHub.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

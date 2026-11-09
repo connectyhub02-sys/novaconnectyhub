@@ -26,6 +26,7 @@ import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { Spotlight } from "@/components/ui/spotlight";
 import { PublicSiteHeader } from "@/components/seo/public-site-header";
+import { connectyhubSocialProfiles } from "@/lib/seo/site";
 
 const HERO_VIDEO_MP4 = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/avatar%20connectyhub.mp4";
 
@@ -833,6 +834,9 @@ export default function Home() {
             &copy; {new Date().getFullYear()} ConnectyHub
           </p>
         </div>
+        <nav aria-label="Redes sociais oficiais" className="mx-auto mt-6 flex max-w-[1760px] flex-wrap justify-center gap-6 text-sm text-zinc-300">
+          {connectyhubSocialProfiles.map(profile => <a key={profile.name} href={profile.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-white">{profile.name}</a>)}
+        </nav>
       </footer>
 
       {/* ── WHATSAPP DOCK ─────────────────────────────── */}

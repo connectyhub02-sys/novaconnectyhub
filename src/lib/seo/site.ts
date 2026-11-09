@@ -2,8 +2,14 @@ export const defaultConnectyhubSiteUrl = "https://www.connectyhub.com.br";
 
 export const connectyhubSiteName = "ConnectyHub";
 
+export const connectyhubSocialProfiles = [
+  { name: "Instagram", url: "https://www.instagram.com/connectyhub.ai" },
+  { name: "YouTube", url: "https://www.youtube.com/@connectyhub01" },
+  { name: "TikTok", url: "https://www.tiktok.com/@connectyhub.ia" },
+];
+
 export const connectyhubSiteDescription =
-  "Plataforma brasileira para criar agentes de IA, automacoes, CRM, catalogo de vendas, checkout e atendimento conectado ao WhatsApp.";
+  "Plataforma brasileira de agentes de IA, atendimento no WhatsApp, CRM, automações, catálogo de vendas e APIs para empresas.";
 
 export const connectyhubSeoKeywords = [
   "ConnectyHub",

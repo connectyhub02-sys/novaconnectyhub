@@ -2,16 +2,16 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/legal-page";
 
 export const metadata: Metadata = {
-  title: "Politica de Privacidade | ConnectyHub",
-  description: "Politica de Privacidade da ConnectyHub.",
+  title: "Política de Privacidade | ConnectyHub",
+  description: "Como a ConnectyHub usa e protege dados pessoais, tokens e informações do Google/YouTube, com controles de acesso, revogação e exclusão.",
   alternates: { canonical: "/privacidade" },
 };
 
 export default function PrivacyPage() {
   return (
     <LegalPage
-      title="Politica de Privacidade"
-      description="Esta politica explica como a ConnectyHub coleta, usa, protege e permite a exclusao de dados em seus paineis, automacoes, integracoes e agentes de atendimento."
+      title="Política de Privacidade"
+      description="Esta política explica como a ConnectyHub coleta, usa, protege e permite a exclusão de dados em seus painéis, automações, integrações e agentes de atendimento."
       updatedAt="9 de novembro de 2026"
       sections={[
         {
@@ -50,10 +50,13 @@ export default function PrivacyPage() {
           ],
         },
         {
-          title: "4. Seguranca e armazenamento",
+          title: "4. Segurança e proteção de dados sensíveis",
           paragraphs: [
-            "Credenciais sensiveis sao armazenadas de forma protegida. Tokens e chaves de integracao sao usados no servidor para executar chamadas autorizadas e nao devem ser expostos a usuarios sem permissao.",
-            "Aplicamos controles de acesso por usuario, empresa, perfil administrativo e contexto operacional para reduzir acesso indevido.",
+            "Protegemos dados pessoais e informações recebidas das APIs do Google/YouTube com controles técnicos de transmissão, armazenamento e acesso. As páginas da plataforma e as comunicações com as APIs oficiais do Google usam HTTPS/TLS para proteger os dados em trânsito.",
+            "Os tokens de acesso e de renovação do Google/YouTube e do TikTok são criptografados antes de serem gravados no banco de dados, com AES-256-GCM. A chave de criptografia fica na configuração privada do servidor, separada dos registros criptografados. A aplicação usa esses tokens no servidor para as operações autorizadas; o painel não entrega os tokens ao navegador nem os mostra ao usuário.",
+            "No painel, o acesso às conexões, aos dados de canal, à gestão da biblioteca e às publicações exige uma sessão autenticada e a verificação das permissões na empresa correspondente. A conexão e a alteração de contas sociais ficam restritas aos gestores autorizados. Cada operação confere a empresa e o usuário responsável para impedir que uma empresa consulte ou altere os dados de outra. Os endereços de arquivos usados na transferência para as redes seguem o tratamento explicado na seção 7.",
+            "A autorização OAuth é vinculada ao usuário, à empresa e ao navegador por um estado temporário, de uso único, e por um cookie de segurança HttpOnly, Secure e SameSite. Validamos a origem das solicitações de alteração e aplicamos limites de requisições ao fluxo de conexão para reduzir tentativas de uso indevido. Não solicitamos nem armazenamos a senha da Conta do Google.",
+            "Os dados do Google/YouTube são usados para identificar o canal autorizado e executar as funcionalidades de publicação escolhidas pelo usuário. Tokens e credenciais não são enviados aos provedores de IA. O usuário pode interromper o acesso, revogar a autorização e solicitar a exclusão dos dados conforme a seção 7. Nenhuma medida elimina todos os riscos; suspeitas de acesso indevido podem ser comunicadas pelo contato desta política.",
           ],
         },
         {

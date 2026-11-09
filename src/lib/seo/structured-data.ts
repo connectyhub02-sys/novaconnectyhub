@@ -3,6 +3,7 @@ import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import {
   buildCanonicalUrl,
   connectyhubSeoKeywords,
+  connectyhubSocialProfiles,
   connectyhubSiteDescription,
   connectyhubSiteName,
   getConnectyhubSiteUrl,
@@ -56,7 +57,7 @@ export function buildConnectyhubRootStructuredData() {
         logo: buildCanonicalUrl("/brand/connectyhub-app-icon-512.png"),
         description: connectyhubSiteDescription,
         knowsAbout: connectyhubSeoKeywords,
-        sameAs: ["https://www.youtube.com/@connectyhub01", "https://www.instagram.com/connectyhub.ai", "https://www.tiktok.com/@connectyhub.ia"],
+        sameAs: connectyhubSocialProfiles.map(profile => profile.url),
       },
       {
         "@type": "WebSite",
