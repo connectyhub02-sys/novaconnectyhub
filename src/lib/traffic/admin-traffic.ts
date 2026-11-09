@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { platformGoogleReaderAccount, platformGoogleReadToken } from "@/lib/analytics/platform-analytics";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -973,6 +974,16 @@ async function fetchGoogleOrganicTraffic(
   const emptyGoogleOrganic = buildEmptyGoogleOrganicProvider(credentialScope);
   const siteUrl = getCredential(credentials, ["GOOGLE_SEARCH_CONSOLE_SITE_URL"]);
 
+  // Never share the platform reader with organization reports.
+  if (credentialScope.scope === "platform") {
+    try {
+      const reader = await platformGoogleReaderAccount();
+      if (reader) accessToken = await platformGoogleReadToken(reader, "webmasters.readonly");
+    } catch {
+      return { provider: { ...emptyGoogleOrganic, status: "offline", detail: "Não foi possível autenticar a leitura do Search Console da plataforma." } };
+    }
+  }
+
   if (!siteUrl || !accessToken) {
     return {
       provider: {
@@ -1066,7 +1077,7 @@ async function exchangeGoogleRefreshToken(
   if (!clientId || !clientSecret || !refreshToken) {
     warnings.push(credentialScope.scope === "organization"
       ? "Google Ads ainda nao esta conectado em Integracoes para esta empresa."
-      : "Google OAuth ainda nao tem Client ID, Client secret e Refresh token completos na Sala de Manutencao.");
+      : "Google Ads ainda não está conectado. Analytics e busca orgânica usam uma conexão de leitura independente.");
     return null;
   }
 
