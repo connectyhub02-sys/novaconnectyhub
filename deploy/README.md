@@ -25,3 +25,9 @@ Uma nova preparação reutiliza o slot inativo, portanto encerra a possibilidade
 Alterações de ambiente público exigem novo build. Preservar as chaves existentes de criptografia, assinatura e integração e a chave estável de Server Actions. Segredos não são argumentos do build. Logs: `docker compose -f /opt/connectyhub/app/compose.yaml --env-file /opt/connectyhub/app/slot-a.env -p connectyhub-app-a logs --tail 100`.
 
 O fluxo é manual e versionado; um push no GitHub, sozinho, não executa este script. Integração contínua automática não foi configurada nesta migração.
+
+Quando a release inclui `scripts/submit-platform-indexnow.mjs`, a ativação saudável
+notifica IndexNow com as URLs do sitemap da plataforma e registra `indexnow.log`
+na pasta da revisão. Exige `INDEXNOW_KEY` no runtime e chave pública correspondente.
+Falha externa é registrada como pendência e não desfaz uma aplicação saudável.
+O envio não inclui sitemaps de catálogos de clientes e não garante indexação.

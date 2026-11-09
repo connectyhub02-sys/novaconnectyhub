@@ -70,6 +70,17 @@ PY
   fi
   printf '%s\n' "$SLOT" >active-slot
   echo "Slot $SLOT active. Previous container retained for rollback and in-flight work."
+  # Only notify search engines after the release is healthy on the canonical domain.
+  # A provider outage must not roll back an otherwise healthy application.
+  INDEXNOW_SCRIPT="$ROOT/releases/$APP_SHA/scripts/submit-platform-indexnow.mjs"
+  if [[ -f "$INDEXNOW_SCRIPT" ]]; then
+    if docker compose -f compose.yaml --env-file "slot-$SLOT.env" -p "connectyhub-app-$SLOT" \
+      exec -T app node --input-type=module <"$INDEXNOW_SCRIPT" >"$ROOT/releases/$APP_SHA/indexnow.log" 2>&1; then
+      echo "IndexNow notification accepted; see release indexnow.log."
+    else
+      echo "IndexNow notification pending; see release indexnow.log. Application remains active."
+    fi
+  fi
   ;;
 *) echo 'Usage: release.sh prepare COMMIT ARCHIVE | activate a_OR_b'; exit 2;;
 esac
