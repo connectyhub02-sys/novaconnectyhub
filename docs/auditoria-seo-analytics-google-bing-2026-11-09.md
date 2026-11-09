@@ -5,6 +5,18 @@ Escopo: a própria plataforma ConnectyHub e seu site público. Não inclui campa
 catálogos ou métricas de empresas clientes. Auditoria de leitura: nenhuma campanha,
 permissão, propriedade, configuração de produção ou orçamento foi alterado.
 
+## Atualização após execução autorizada
+
+As constatações abaixo descrevem o diagnóstico anterior às mudanças. A execução,
+os resultados reais e as pendências estão em
+[Analytics e SEO publicados](analytics-seo-publicacao-2026-11-09.md).
+
+Correção da observação inicial do Bing: ao carregar a tabela completa, apareceram
+dois sitemaps anteriores, e não zero. O sitemap principal com www havia sido
+descoberto em 14/10/2026 e lido em 03/11, com 14 URLs; o índice WordPress legado
+tinha quatro URLs, última leitura em maio/2025. O principal foi explicitamente
+reenviado em 09/11. A indicação inicial de zero não comprovava ausência de cadastro.
+
 ## Conclusão
 
 A ConnectyHub já aparece no Google e tem cadastro no Bing e Perfil da Empresa
@@ -102,7 +114,8 @@ A propriedade `https://connectyhub.com.br/` existe no Bing Webmaster Tools.
   7 avisos e 0 erros**; 1 clique, 10 impressões e 3 backlinks. As categorias do
   gráfico não devem ser somadas como grupos exclusivos.
 - Há login/iniciar nos exemplos; `/iniciar` aparece explicitamente como indexada.
-- Sitemaps: **0 registros**.
+- Sitemaps: a observação inicial de **0 registros** foi corrigida após o
+  carregamento da tabela completa; ver a atualização acima.
 - AI Performance: **0 citações e 0 páginas citadas** no intervalo 08/08–07/11.
   Isso cobre o relatório Microsoft exibido, não toda menção possível em ChatGPT,
   Gemini ou qualquer outro produto.

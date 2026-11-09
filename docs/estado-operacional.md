@@ -1,5 +1,32 @@
 # Estado operacional da ConnectyHub
 
+## Analytics e SEO — publicados e verificados, 09/11/2026
+
+GA4 `478860449` / `G-MN9Q0V72D7` recebe visitas públicas com consentimento.
+Release atual `951e351d9ac0d2d1c9bb64a471ca815412de39ff`, **slot a**, ativo em 09/11
+às 17h08 aproximadamente; anterior `3b07775a` no slot b preservado para retorno.
+Tag e página `/admin/analytics` publicadas e validadas. Visita controlada
+gerou page_view HTTP 204, sem query, sem duplicação na navegação SPA; após recusa
+não houve nova coleta. Admin autenticado mostrou 1 ativo na Data API real.
+
+Identidade dedicada de leitura, chave no cofre criptografado, sem papel IAM Cloud
+ou acesso Ads; Analytics Data API e Search Console API ativadas com autorização.
+Acesso GA4 Leitor e Search Console Restrito somente à propriedade com www.
+Search Console API real respondeu 0 cliques/3 impressões; tela `/admin/seo`
+confirmada em produção com os mesmos totais. `/admin/trafego` exibiu fonte online,
+11 dias carregados e 3 impressões. Nenhuma campanha paga ativada.
+
+15 páginas públicas com HTTP 200 e canônicas verificadas; áreas privadas protegidas.
+Google e Bing processaram o sitemap em 09/11: 15 URLs em cada. Home e página de
+vídeos tiveram indexação solicitada; a correção de canônica da home ainda depende
+de novo processamento do Google. IndexNow aceitou 15 URLs (200), com notificação
+automática após deploy saudável. GET Inngest assinado preservou 59 funções.
+
+Relatórios consolidados GA4 podem levar 24–48h; submissões não comprovam posição
+ou citações em IA. Conversões além de page_view, URLs legadas e integração Ads
+seguem pendentes. Detalhes e evidências em
+[publicação Analytics/SEO](analytics-seo-publicacao-2026-11-09.md).
+
 ## Produção e edição de vídeos — publicada, 08/11/2026
 
 Página https://www.connectyhub.com.br/solucoes/producao-de-videos publicada no
