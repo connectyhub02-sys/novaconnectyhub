@@ -849,7 +849,7 @@ export default function Home() {
         </div>
         <a
           className="dock-cta"
-          href="https://wa.me/554788556936?text=Olá%20ConnectyHub"
+          href="https://wa.me/5547988556936?text=Olá%20ConnectyHub"
           target="_blank"
           rel="noopener noreferrer"
         >

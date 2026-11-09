@@ -7,7 +7,8 @@ export async function GET(request:Request){
   const settings=await client.from("platform_billing_settings").select("billing_whatsapp_agent_id,metadata").eq("setting_key","default").maybeSingle();
   const agent=settings.data?.metadata?.custom_software_agent_id??settings.data?.billing_whatsapp_agent_id;
   const instance=agent?await client.from("whatsapp_instances").select("phone_number").contains("metadata",{agent_id:agent,admin_whatsapp:true,platform_whatsapp:true}).order("updated_at",{ascending:false}).limit(1).maybeSingle():null;
-  const phone=String(instance?.data?.phone_number??process.env.CONNECTYHUB_COMMERCIAL_WHATSAPP??"554788556936").replace(/\D/g,"");
+  const digits=String(instance?.data?.phone_number??process.env.CONNECTYHUB_COMMERCIAL_WHATSAPP??"5547988556936").replace(/\D/g,"");
+  const phone=digits==="554788556936"?"5547988556936":digits;
   if(!/^[1-9][0-9]{9,14}$/.test(phone))return NextResponse.redirect(new URL("/solucoes-personalizadas#perguntas",url));
   const id=randomUUID();const campaign:Record<string,string>={source_page:"/solucoes-personalizadas"};
   for(const key of ["utm_source","utm_medium","utm_campaign","utm_content"]) {const value=url.searchParams.get(key);if(value)campaign[key]=value.slice(0,150);}
