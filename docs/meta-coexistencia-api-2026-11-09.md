@@ -40,7 +40,7 @@ mensagens enviadas pelo aplicativo não são entrada de IA na Vision.
 
 ## Evidência e limites
 
-33 testes dirigidos de coexistência, persistência e WhatsApp oficial passaram;
+36 testes dirigidos de coexistência, persistência e WhatsApp oficial passaram;
 TypeScript e lint dirigidos passaram. Migration ensaiada com rollback e aplicada
 na VPS, com backup do schema e confirmação de grants privados. Habilitação
 restrita ao piloto e preservação dos demais metadados verificadas. Webhook Meta

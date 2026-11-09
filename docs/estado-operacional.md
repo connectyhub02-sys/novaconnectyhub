@@ -4,7 +4,7 @@
 
 Migration privada 0223 aplicada com ensaio de rollback e grants verificados.
 Webhook Meta e domínio SDK preparados; piloto restrito a uma instância da Vision.
-33 testes dirigidos passaram. Release em preparação, cadastro do número e teste
+36 testes dirigidos passaram. Release em preparação, cadastro do número e teste
 real do Global pendentes. Nenhuma campanha enviada.
 [Detalhes e limites](meta-coexistencia-api-2026-11-09.md).
 
@@ -1245,7 +1245,7 @@ Sem alteração de código ou deploy nesta reconexão.
 fallback a em `304c52df`, sem migration, builder parado. Webhooks agora só
 roteiam por ativos explicitamente selecionados em conexão `connected` e recusam
 associação ambígua. Inventários de descoberta não autorizam recebimento.
-33 testes dirigidos, TypeScript, ESLint, build e smoke candidata/domínio passaram.
+36 testes dirigidos, TypeScript, ESLint, build e smoke candidata/domínio passaram.
 
 Conta exclusiva dos avaliadores conectada por OAuth de Carla Silva à Página
 de teste `522348677619837`, no portfólio `423637757459767`; 13 escopos retornados.
@@ -3410,7 +3410,7 @@ O runtime deriva a atividade do agente, preserva profissão versus empresa e usa
 
 A consulta administrativa de leitura confirmou um controlador interno anterior à Renata com persona Rafael Nunes; o fallback antigo pelo primeiro registro explicava a identidade pública incorreta. No navegador de auditoria, o dock apareceu após carregamento na loja e no imóvel. A ausência no navegador do usuário ainda não teve uma causa específica comprovada; foi adicionada repetição limitada para falhas transitórias de rede/servidor, preservando a opção de privacidade de rastreamento.
 
-Validação pré-envio: 233 testes em oito arquivos, TypeScript e ESLint aprovados. Prévia isolada com o componente real validou layout em 1440 e 390 pixels, alternância da ativação/modo e recuperação do dock após HTTP 503 tanto na loja quanto no produto. Sem mensagens, cobranças ou agendamentos reais. Envio ao GitHub autorizado pelo usuário após os testes; implantação e reteste de identidade pública ainda pendentes neste registro.
+Validação pré-envio: 236 testes em oito arquivos, TypeScript e ESLint aprovados. Prévia isolada com o componente real validou layout em 1440 e 390 pixels, alternância da ativação/modo e recuperação do dock após HTTP 503 tanto na loja quanto no produto. Sem mensagens, cobranças ou agendamentos reais. Envio ao GitHub autorizado pelo usuário após os testes; implantação e reteste de identidade pública ainda pendentes neste registro.
 
 Publicação concluída em 11/09 às 22:25 BRT: commit `2abf355`, implantação Vercel `dpl_8wTSfABdQTPbkuQuBnhW1QqT6U37` Ready, vinculada ao domínio principal e ao alias sem www. A loja pública passou a exibir Renata Macedo. Na página do imóvel, a verificação posterior encontrou cancelamentos repetidos da consulta de sessão: o rótulo de rastreamento alternava entre plataforma e organização, sem mudança do agente, lead ou produto. Uma resposta efetivamente concluída trouxe a Renata habilitada, mas as reinicializações impediam a presença estável na página.
 
