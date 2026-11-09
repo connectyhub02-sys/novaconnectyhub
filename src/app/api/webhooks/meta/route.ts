@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { loadMetaWebhookRuntimeConfig } from "@/lib/meta/runtime-config";
 import { ingestMetaWebhook, verifyMetaWebhookSignature } from "@/lib/meta/webhook";
 import { ingestOfficialWhatsApp } from "@/lib/meta/whatsapp-webhook";
+import {routeCoexistenceEvents} from '@/lib/connectyhub-api/coexistence-events';
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload && typeof payload === "object" && "object" in payload && payload.object === "whatsapp_business_account") {
-    const result = await ingestOfficialWhatsApp(payload);
+    const result = await ingestOfficialWhatsApp(await routeCoexistenceEvents(payload));
     return NextResponse.json({ ok: true, ...result });
   }
 

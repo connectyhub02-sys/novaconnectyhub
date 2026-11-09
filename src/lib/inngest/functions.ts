@@ -1,3 +1,4 @@
+import {coexistenceFunctions} from './coexistence';
 import { loadBillingReliability, billingReliabilityIssues } from "@/lib/billing/reliability";
 import { queueDueSocialFollowUps } from "@/lib/meta/social-follow-up";
 import { pauseSuspendedWhatsappCampaigns } from "@/lib/whatsapp/contract-campaign-guard";
@@ -830,6 +831,7 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  ...coexistenceFunctions,
   inngest.createFunction({id:"connectyhub-meta-conversions",name:"Pixel e API de Conversões",retries:2,concurrency:{limit:1},triggers:[{cron:"* * * * *"}]},async({step})=>step.run("deliver-consented-conversions",async()=>{const {collectPaidConversions,processConversions}=await import("@/lib/meta/pixel-conversions");const client=createServiceClient();await collectPaidConversions(client);return processConversions(client);})),
   inngest.createFunction({id:"connectyhub-meta-lead-ads",name:"Meta Lead Ads: importar no CRM",retries:0,concurrency:{limit:1},triggers:[{cron:"* * * * *"}]},
     async({step})=>step.run("import-lead-ads",async()=>{const {processLeadAdsBatch}=await import("@/lib/meta/lead-ads");return processLeadAdsBatch(createServiceClient());})),
