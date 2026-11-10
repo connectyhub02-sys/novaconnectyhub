@@ -25,6 +25,11 @@ continuam independentes da liberação de envio manual.
 
 ## Limites
 
+Após a publicação da Vision, a habilitação explícita concluiu e o smoke público
+confirmou `campaignsEnabled=true` com payload inválido ainda rejeitado. Vision
+confirmou 11 modelos sincronizados, agenda disponível, Global conectado e IA
+pausada. Isso habilita a infraestrutura; não inicia uma campanha.
+
 Testes de envio foram simulados. Leitura real da Meta confirmou vínculo e telefone,
 mas não comprova entrega de mensagem. A conta nova não tinha forma de pagamento
 na verificação visual; o titular adiou seu cadastro para amanhã. O novo modelo
