@@ -1,5 +1,16 @@
 # Estado operacional da ConnectyHub
 
+## Coexistência: envio oficial preparado — 09/11/2026
+
+Release `a9eb4bf6ce7a517f9959d50397c8b441ca2d869a`, slot a, publicada sobre a
+base Google/SEO `fa4e3d9a`, preservada no slot b para retorno. Build/TypeScript,
+dez testes dirigidos, smoke candidato e público e registro Inngest passaram.
+Inclui habilitação explícita do vínculo e proxy de envio limitado ao telefone
+autorizado, com escopo `messages:send`, validação de identidade e credencial.
+Não houve envio real nesta validação. Pagamento e texto/modelo da campanha
+ficaram para depois por decisão do titular; Global conectado e IA pausada foram
+confirmados na Vision. [Evidências e limites](meta-coexistencia-envio-2026-11-09.md).
+
 ## Google OAuth, perfil e contato — correções publicadas, 09/11/2026
 
 Release `fa4e3d9a6aea4c5e3168cdf17e7f468d997767e6`, **slot b**, ativada às
