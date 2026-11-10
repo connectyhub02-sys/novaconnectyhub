@@ -29,6 +29,7 @@ function fixture(){
   if(path.endsWith('/phone_numbers'))return {data:[{id:'123456',display_phone_number:different?'551188888888':phone,is_on_biz_app:true,platform_type:'CLOUD_API'}]};
   if(path.endsWith('/subscribed_apps'))return {success:true};
   if(path.endsWith('/smb_app_data'))throw Error('uncertain');
+  if(path.endsWith('/messages'))return {messages:[{id:'wamid.test-only'}]};
   throw Error('Unexpected external operation');
  });
  class GatewayHttpError extends Error{constructor(public status:number,public code:string,message:string){super(message)}}
@@ -74,5 +75,17 @@ describe('managed coexistence boundary',()=>{
   const result=partitionCoexistenceEvents(root,[{id:'binding',waba_id:'777777',phone_number_id:'123456'}]);
   expect(result.relays).toHaveLength(2);expect(JSON.stringify(result.relays)).not.toContain('888888');expect(JSON.stringify(result.ordinary)).not.toContain('777777');
   expect(partitionCoexistenceEvents({entry:[{id:'partner',changes:[{field:'account_update',value:{event:'PARTNER_REMOVED',waba_info:{waba_id:'777777'}}}]}]},[{id:'binding',waba_id:'777777',phone_number_id:'123456'}]).relays).toHaveLength(1);
+ });
+ it('only explicitly released owned senders can send; expiry and foreign phone stay blocked',async()=>{
+  const f=fixture(),start=await f.api.startCoexistence(f.auth,id,{callbackUrl:callback,callbackSecret:'a'.repeat(64)});
+  await f.api.finishCoexistence(f.auth,id,{nonce:start.nonce,wabaId:'777777',code:'code'});
+  const message={method:'POST',path:'123456/messages',body:{messaging_product:'whatsapp',type:'text',to:'5547999999999',text:{body:'Test only'}}};
+  await expect(f.api.proxyCoexistenceGraph(f.auth,id,message)).rejects.toThrow(/liberação/);
+  await f.api.enableCoexistenceSending(f.auth,id);
+  expect(f.connection.campaigns_enabled).toBe(true);
+  expect(await f.api.proxyCoexistenceGraph(f.auth,id,message)).toEqual({messages:[{id:'wamid.test-only'}]});
+  await expect(f.api.proxyCoexistenceGraph(f.auth,id,{...message,path:'999999/messages'})).rejects.toThrow(/fora/);
+  f.connection.token_expires_at='2020-01-01';await expect(f.api.proxyCoexistenceGraph(f.auth,id,message)).rejects.toThrow(/expirada/);
+  expect(f.graph.mock.calls.filter(c=>c[2].endsWith('/messages'))).toHaveLength(1);
  });
 });

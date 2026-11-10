@@ -1,6 +1,6 @@
 import {NextResponse,type NextRequest} from 'next/server';
 import {authenticateGatewayRequest,formatGatewayError} from '@/lib/connectyhub-api/gateway';
-import {getCoexistenceStatus,startCoexistence,finishCoexistence,resumeCoexistence,proxyCoexistenceGraph} from '@/lib/connectyhub-api/coexistence';
+import {getCoexistenceStatus,startCoexistence,finishCoexistence,resumeCoexistence,proxyCoexistenceGraph,enableCoexistenceSending} from '@/lib/connectyhub-api/coexistence';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 type Context={params:Promise<{instanceId:string}>};
@@ -11,7 +11,9 @@ export async function POST(request:NextRequest,ctx:Context){
   const auth=await authenticateGatewayRequest(request,['instances:read','instances:write']);
   const raw=await request.text();if(raw.length>100000)return json({ok:false,error:'Solicitação excede o limite.'},413);
   const body=JSON.parse(raw) as Record<string,unknown>,id=(await ctx.params).instanceId;
+  if(body.action==='enable_sending'||(body.action==='graph'&&String(body.path||'').endsWith('/messages')))await authenticateGatewayRequest(request,['messages:send']);
   switch(body.action){
+   case 'enable_sending':return json({ok:true,...await enableCoexistenceSending(auth,id)});
    case 'start':return json({ok:true,...await startCoexistence(auth,id,body)});
    case 'finish':return json({ok:true,...await finishCoexistence(auth,id,body)});
    case 'resume':return json({ok:true,...await resumeCoexistence(auth,id)});

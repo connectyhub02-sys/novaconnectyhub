@@ -101,6 +101,16 @@ export async function resumeCoexistence(auth:GatewayAuthContext,instanceId:strin
  if(saved.error)throw Error('Não foi possível registrar a assinatura.');
  return getCoexistenceStatus(auth,instanceId);
 }
+export async function enableCoexistenceSending(auth:GatewayAuthContext,instanceId:string){
+ const {connection}=await context(auth,instanceId);
+ if(connection?.state!=='linked'||!connection.webhook_subscribed)throw Error('Conclua o vínculo oficial e o recebimento antes de liberar envios.');
+ const status=await getCoexistenceStatus(auth,instanceId,true);
+ const live=await refreshGatewayInstanceStatus(auth,instanceId);
+ if(!status.phoneVerified||!status.webhookReady||live.status!=='connected'||ownBusinessPhone(live.phoneNumber)!==ownBusinessPhone(connection.owner_phone))throw Error('Confirme o mesmo número conectado nos dois caminhos antes de liberar.');
+ const saved=await auth.client.from(coexistenceTable).update({campaigns_enabled:true,updated_at:new Date().toISOString()}).eq('id',connection.id).eq('client_id',auth.apiClient.id).eq('state','linked').eq('phone_number_id',connection.phone_number_id).select('id').maybeSingle();
+ if(saved.error||!saved.data)throw Error('Não foi possível registrar a liberação deste número.');
+ return getCoexistenceStatus(auth,instanceId);
+}
 export async function proxyCoexistenceGraph(auth:GatewayAuthContext,instanceId:string,body:Record<string,unknown>){
  const {connection}=await context(auth,instanceId),settings=await config(auth);
  if(connection?.state!=='linked'||!connection.token_encrypted||!connection.phone_number_id||!connection.waba_id)throw Error('Coexistência ainda não vinculada.');
@@ -108,7 +118,17 @@ export async function proxyCoexistenceGraph(auth:GatewayAuthContext,instanceId:s
  const payload=body.body&&typeof body.body==='object'&&!Array.isArray(body.body)?body.body as Record<string,unknown>:{};
  const params=body.params&&typeof body.params==='object'&&!Array.isArray(body.params)?body.params as Record<string,string>:{};
  if(Object.keys(params).some(key=>!['fields','limit','after','before'].includes(key))||Object.values(params).some(v=>typeof v!=='string'||v.length>2000)||/[{}]/.test(params.fields||'')||'access_token' in payload||'appsecret_proof' in payload)throw Error('Parâmetros Meta inválidos.');
- if(path.endsWith('/messages'))throw Error('Campanhas deste número aguardam o teste real de coexistência e liberação específica.');
+ if(path.endsWith('/messages')){
+  if(!connection.campaigns_enabled||!connection.webhook_subscribed)throw Error('Campanhas deste número aguardam o teste real de coexistência e liberação específica.');
+  if(connection.token_expires_at&&!(Date.parse(connection.token_expires_at)>Date.now()))throw Error('Autorização Meta expirada. Reconecte antes de enviar.');
+  if(payload.messaging_product!=='whatsapp')throw Error('Produto de mensagem inválido.');
+  if(payload.status==='read'){
+   if(typeof payload.message_id!=='string'||!payload.message_id)throw Error('Mensagem de leitura inválida.');
+  }else{
+   if(!/^[1-9]\d{9,14}$/.test(String(payload.to||''))||!['text','template','audio'].includes(String(payload.type)))throw Error('Destinatário ou tipo de mensagem inválido.');
+   if(payload.recipient_type&&payload.recipient_type!=='individual')throw Error('Somente destinatários individuais.');
+  }
+ }
  if(path.endsWith('/smb_app_data')){
   if(method!=='POST'||!['history','smb_app_state_sync'].includes(String(payload.sync_type))||payload.messaging_product!=='whatsapp'||!(Date.parse(connection.linked_at||'')>Date.now()-24*3600000))throw Error('Sincronização inicial fora da janela autorizada.');
   const field=payload.sync_type==='history'?'history_sync_state':'contacts_sync_state';
