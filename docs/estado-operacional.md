@@ -1,5 +1,24 @@
 # Estado operacional da ConnectyHub
 
+## Consulta de métricas WhatsApp — 12/11/2026
+
+Release `53c6b361303f367a41f358fdc2d734448a2bcd1e` publicada no slot b,
+partindo da versão produtiva `a9eb4bf6ce7a517f9959d50397c8b441ca2d869a`.
+O slot a anterior foi preservado. Consulta `GET /<WABA>/template_analytics`
+liberada no relay de coexistência apenas para a WABA vinculada ao cliente/instância,
+com validação de período, modelos, métricas e paginação. Nenhum envio/credencial
+foi alterado. Onze testes, build/TypeScript, health público e leitura autenticada
+dos modelos passaram; chamada anônima continua 401.
+
+Limitação externa comprovada na conta do André: a Meta retorna código 1,
+subcódigo 4182004, pois Template Insights não está habilitado. Após autorização
+específica do titular, a tentativa de habilitar somente essa WABA retornou
+`(#10) This operation can not be performed on SMB business type`.
+Leitura posterior confirmou `is_enabled_for_insights=false`. Não houve alteração
+nas outras contas nem remoção da coexistência. Relay funcional não comprova
+disponibilidade de métricas de cliques nessa conta. Histórico de visitas individuais,
+IP/localização e atribuição de seguidores não são fornecidos por esse endpoint.
+
 ## Google OAuth, perfil e contato — correções publicadas, 09/11/2026
 
 Release `fa4e3d9a6aea4c5e3168cdf17e7f468d997767e6`, **slot b**, ativada às
