@@ -3,7 +3,7 @@ import {createHash,randomBytes} from 'node:crypto';
 import {type GatewayAuthContext,GatewayHttpError,requireGatewayInstance,refreshGatewayInstanceStatus} from './gateway';
 import {officialSettings,cloudRequest} from '@/lib/meta/whatsapp-cloud';
 import {encryptCredentialValue,decryptCredentialValue} from '@/lib/security/credentials-crypto';
-import {coexistenceCallback,coexistenceFields,coexistenceGraphPath,ownBusinessPhone,verifiedBusinessPhone} from './coexistence-policy';
+import {coexistenceCallback,coexistenceFields,coexistenceGraphPath,coexistenceAnalyticsParams,ownBusinessPhone,verifiedBusinessPhone} from './coexistence-policy';
 
 export const coexistenceTable='connectyhub_meta_coexistence';
 export type CoexistenceConnection={id:string;client_id:string;organization_id:string;instance_id:string;public_instance_id:string;owner_phone:string;state:string;callback_url:string;callback_secret_encrypted:string;nonce_hash:string|null;nonce_key_id:string|null;nonce_expires_at:string|null;nonce_consumed_at:string|null;app_id:string;config_id:string;waba_id:string|null;phone_number_id:string|null;token_encrypted:string|null;token_expires_at:string|null;linked_at:string|null;webhook_subscribed:boolean;campaigns_enabled:boolean;history_sync_state:string|null;contacts_sync_state:string|null};
@@ -117,7 +117,10 @@ export async function proxyCoexistenceGraph(auth:GatewayAuthContext,instanceId:s
  const method=String(body.method||'GET'),path=coexistenceGraphPath(body.path,connection.waba_id,connection.phone_number_id,method);
  const payload=body.body&&typeof body.body==='object'&&!Array.isArray(body.body)?body.body as Record<string,unknown>:{};
  const params=body.params&&typeof body.params==='object'&&!Array.isArray(body.params)?body.params as Record<string,string>:{};
- if(Object.keys(params).some(key=>!['fields','limit','after','before'].includes(key))||Object.values(params).some(v=>typeof v!=='string'||v.length>2000)||/[{}]/.test(params.fields||'')||'access_token' in payload||'appsecret_proof' in payload)throw Error('Parâmetros Meta inválidos.');
+ if(path.endsWith('/template_analytics')) {
+  coexistenceAnalyticsParams(params);
+  if(Object.keys(payload).length)throw Error('Consulta de estatísticas não aceita corpo.');
+ } else if(Object.keys(params).some(key=>!['fields','limit','after','before'].includes(key))||Object.values(params).some(v=>typeof v!=='string'||v.length>2000)||/[{}]/.test(params.fields||'')||'access_token' in payload||'appsecret_proof' in payload)throw Error('Parâmetros Meta inválidos.');
  if(path.endsWith('/messages')){
   if(!connection.campaigns_enabled||!connection.webhook_subscribed)throw Error('Campanhas deste número aguardam o teste real de coexistência e liberação específica.');
   if(connection.token_expires_at&&!(Date.parse(connection.token_expires_at)>Date.now()))throw Error('Autorização Meta expirada. Reconecte antes de enviar.');
