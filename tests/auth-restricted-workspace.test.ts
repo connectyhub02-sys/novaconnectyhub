@@ -35,6 +35,7 @@ function fixture({ allowed = false, admin = false, authenticated = true } = {}) 
   };
   const proxy = serverModuleHarness<{ updateSession: (r: NextRequest) => Promise<NextResponse> }>("src/lib/supabase/proxy.ts", {
     ...imports, "@supabase/ssr": { createServerClient: () => supabase },
+    "@/lib/auth/meta-review-access": { readMetaReviewAccess: () => null },
     "@/lib/billing/recovery-paths": recovery,
     "./env": { getSupabasePublicEnv: () => ({ configured: true, url: "https://auth.example.test", publishableKey: "test" }) },
   });
@@ -53,9 +54,9 @@ describe("authentication for overdue customers", () => {
   it("completes admin access and sends the customer to payment recovery without an HTTP 500", async () => {
     const f = fixture();
     const entry = await f.continuation.GET(new NextRequest(`${origin}/auth/continue`));
-    expect(entry.status).toBe(307);
-    expect(entry.headers.get("location")).toBe(`${origin}/dashboard`);
-    const dashboard = await f.proxy.updateSession(new NextRequest(entry.headers.get("location")!));
+    expect(entry.status).toBe(303);
+    expect(entry.headers.get("location")).toBe("/dashboard");
+    const dashboard = await f.proxy.updateSession(new NextRequest(new URL(entry.headers.get("location")!, origin)));
     expect(dashboard.status).toBe(307);
     expect(dashboard.headers.get("location")).toBe(`${origin}/dashboard/planos?regularizar=1`);
     const payment = await f.proxy.updateSession(new NextRequest(dashboard.headers.get("location")!));
@@ -67,8 +68,8 @@ describe("authentication for overdue customers", () => {
     const f = fixture();
     const response = await f.callback.GET(new NextRequest(`${origin}/auth/callback?code=test-code&next=/dashboard/meus-produtos`));
     expect(f.exchangeCodeForSession).toHaveBeenCalledWith("test-code");
-    expect(response.headers.get("location")).toBe(`${origin}/dashboard/meus-produtos`);
-    expect((await f.proxy.updateSession(new NextRequest(response.headers.get("location")!))).status).toBe(200);
+    expect(response.headers.get("location")).toBe("/dashboard/meus-produtos");
+    expect((await f.proxy.updateSession(new NextRequest(new URL(response.headers.get("location")!, origin)))).status).toBe(200);
   });
 
   it.each([
@@ -100,15 +101,15 @@ describe("authentication for overdue customers", () => {
   it("retains normal dashboard access after payment and the admin's own destination", async () => {
     const active = fixture({ allowed: true });
     const entry = await active.continuation.GET(new NextRequest(`${origin}/auth/continue`));
-    expect((await active.proxy.updateSession(new NextRequest(entry.headers.get("location")!))).status).toBe(200);
+    expect((await active.proxy.updateSession(new NextRequest(new URL(entry.headers.get("location")!, origin)))).status).toBe(200);
     const admin = fixture({ admin: true });
-    expect((await admin.continuation.GET(new NextRequest(`${origin}/auth/continue`))).headers.get("location")).toBe(`${origin}/admin`);
+    expect((await admin.continuation.GET(new NextRequest(`${origin}/auth/continue`))).headers.get("location")).toBe("/admin");
   });
 
   it("still sends an unauthenticated visitor to login", async () => {
     const f = fixture({ authenticated: false });
     const entry = await f.continuation.GET(new NextRequest(`${origin}/auth/continue`));
-    const dashboard = await f.proxy.updateSession(new NextRequest(entry.headers.get("location")!));
+    const dashboard = await f.proxy.updateSession(new NextRequest(new URL(entry.headers.get("location")!, origin)));
     expect(dashboard.headers.get("location")).toBe(`${origin}/login?next=%2Fdashboard`);
   });
 });

@@ -44,7 +44,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
   }
 
-  const redirectTo = new URL("/auth/callback", request.url);
+  // Auth links leave the app, so use its configured public URL rather than the
+  // internal container origin or caller-controlled forwarding headers.
+  const redirectTo = new URL("/auth/callback", process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://www.connectyhub.com.br");
   redirectTo.searchParams.set("next", "/dashboard");
 
   const { data, error } = await service.auth.admin.generateLink({
