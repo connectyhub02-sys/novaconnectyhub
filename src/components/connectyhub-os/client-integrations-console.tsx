@@ -1548,7 +1548,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. Asaas usa API Key da propria conta; Google usa autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
+          A Central organiza as conexões por empresa. Asaas usa a API Key da própria conta; Google e Meta usam autorização oficial. Conexões, relatórios Meta Ads e Lead Ads já estão disponíveis conforme as permissões concedidas. Publicações e comentários dependem também da aprovação específica do aplicativo. Conectar uma conta não ativa campanhas nem envia mensagens.
         </div>
       </div>
 
@@ -1577,7 +1577,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
           <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-slate-900">
             <h3 className="font-semibold">WhatsApp oficial · Chat Meta</h3>
-            <p className="mt-2 text-sm">Conecte um número oficial separado, crie modelos e acompanhe mensagens. Recursos sujeitos às permissões da sua conexão Meta.</p>
+            <p className="mt-2 text-sm">Conecte seu número pela API oficial, prepare modelos e acompanhe mensagens. A coexistência com o aplicativo WhatsApp Business depende da elegibilidade do número e do fluxo de conexão. Campanhas e envios exigem configuração e aprovação próprias.</p>
             <a className="mt-3 inline-block text-sm font-semibold text-blue-700 underline" href="/dashboard/chat-meta">Abrir conexão e chat oficial</a>
           </div>
           {metaFeatureLaunchPaused ? (
