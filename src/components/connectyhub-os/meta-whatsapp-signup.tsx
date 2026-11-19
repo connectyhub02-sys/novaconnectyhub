@@ -223,6 +223,27 @@ export function OfficialSignup({
           ))}
         </fieldset>
       )}
+      {!signup && mode === "coexistence" && (
+        <ul className="max-w-md list-disc space-y-1 rounded-xl bg-amber-50 p-3 pl-7 text-left text-xs text-amber-900">
+          <li>Atualize o app WhatsApp Business para a versão 2.24.17 ou mais recente.</li>
+          <li>
+            Ao concluir, a Meta desconecta todos os aparelhos vinculados: reconecte
+            o WhatsApp Web e o atendimento por QR da ConnectyHub. Depois são
+            permitidos até 4 aparelhos, exceto WhatsApp para Windows e WearOS.
+          </li>
+          <li>
+            Permita compartilhar o histórico no celular: contatos e conversas
+            individuais dos últimos 6 meses são sincronizados uma única vez, nas
+            primeiras 24 horas. Grupos não são sincronizados.
+          </li>
+          <li>
+            Pela API oficial não passam grupos, listas de transmissão, mensagens
+            temporárias, visualização única nem chamadas. Envio limitado a 20
+            mensagens por segundo.
+          </li>
+          <li>Abra o app no celular com frequência: após cerca de 14 dias sem uso, a Meta pode desconectar.</li>
+        </ul>
+      )}
       {signup?.mode === "coexistence" && (
         <p className="max-w-md text-xs text-slate-500">
           Na janela da Meta, escolha conectar o WhatsApp Business existente.

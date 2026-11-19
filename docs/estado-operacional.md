@@ -23,10 +23,17 @@
   antigo de `tests/api-meta-analytics.test.ts`. Suíte completa: 4.618 aprovados e 23 falhas.
   12 arquivos falham igual na base `9f82d38e`; os outros 5 passam isolados (instabilidade
   por carga).
+- Lido no portal Meta (somente leitura, pela sessão “Trocar número da ConnectyHub no Google e
+  Meta”): app 1002348522666389 como **Tech Provider, 2/2 etapas**, negócio verificado, App Review
+  do WhatsApp aprovado. `whatsapp_business_management`/`messaging` aparecem como Ready to publish.
+  Os 5 pedidos em revisão são de Facebook/Instagram, e a documentação não exige outra liberação
+  para coexistência. Painel ganhou orientações ao escolher coexistência: app 2.24.17+,
+  desconexão dos aparelhos (até 4 depois; sem Windows/WearOS), histórico de 6 meses uma vez
+  em 24 h e sem grupos, recursos fora da API, 20 msg/s, inatividade de ~14 dias.
 - **Ainda não comprovado:** campos do webhook do app (`smb_message_echoes`, `history`,
-  `smb_app_state_sync`, `account_update`, registrados como assinados em 09/11) e status de Tech
-  Provider não foram relidos ao vivo. A leitura por credenciais de produção foi bloqueada pela
-  política de permissões, e o navegador embutido não tem sessão Meta. Falta o titular fazer o
+  `smb_app_state_sync`, `account_update`) foram registrados como assinados em 09/11, mas não
+  relidos ao vivo nesta entrega. A leitura com credenciais de produção foi bloqueada pela política
+  de permissões. Falta o titular fazer o
   cadastro de +55 11 91018-8233 pela opção nova (QR e códigos no celular dele) e confirmar
   `is_on_biz_app=true`/`CLOUD_API`. Depois disso, reconectar o QR da Eliane/UAZAPI e o WhatsApp
   Web, porque a Meta desvincula os aparelhos conectados. Forma de pagamento do WhatsApp Manager
