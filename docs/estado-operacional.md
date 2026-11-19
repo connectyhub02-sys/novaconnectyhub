@@ -2,6 +2,19 @@
 
 ## Coexistência pelo painel — publicada, cadastro real pendente, 19/11/2026
 
+- **Atual:** release `3f4edc61377ad502694952d535eb128308e96aaf` (orientações de coexistência no
+  painel) ativa no **slot a**; retorno `e46f4ecd` no slot b. Mesmo smoke no candidato e por HTTPS
+  aprovado; builder parado.
+- **Tentativa real do titular (19/11, ~17h BRT) bloqueada pela Meta:** o fluxo chegou ao passo
+  “Confirmar conta do WhatsApp Business” da conta “Eliane Dias - ConnectyHub” e falhou com
+  “está no portfólio de negócios da app à qual estás a associar, pelo que não pode ser associada
+  aqui” (#3441128, session 01a1f56c-9e8a-723a-a16e-77b6385be8c9). A conta está no mesmo
+  portfólio dono do app; o Embedded Signup só associa portfólios de clientes. Parou antes do QR:
+  número inalterado no celular/UAZAPI, janela de 24 h não iniciada, nenhuma conexão gravada
+  (só a tentativa não consumida). A documentação oficial não descreve o caso do próprio
+  portfólio. Próximo passo: ver no Gestor do WhatsApp se há conexão direta à API ou abrir chamado
+  Meta com erro/app/session. Mover o número para outro portfólio não é recomendado.
+
 - `Conectar WhatsApp` em `/admin/meta` e `/dashboard/chat-meta` oferece número novo ou
   número que já está no app WhatsApp Business (Embedded Signup v4,
   `whatsapp_business_app_onboarding`). Coexistência exige `is_on_biz_app=true` + `CLOUD_API`
