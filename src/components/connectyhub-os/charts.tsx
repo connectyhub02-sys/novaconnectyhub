@@ -43,29 +43,14 @@ export function AreaChartPanel({
   const gradId = `grad-${useId().replace(/:/g, "")}`;
 
   return (
-    <div
-      className="rounded-2xl"
-      style={{
-        background: "var(--ch-panel)",
-        border: "1px solid var(--ch-border-strong)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
-      }}
-    >
+    <div className="ch-report-card">
       <div
-        className={cn(
-          "flex flex-wrap items-center justify-between",
-          compact ? "gap-2 px-3 py-2.5" : "gap-3 px-5 py-4",
-        )}
-        style={{
-          background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
-          borderBottom: "1px solid var(--ch-border-strong)",
-        }}
+        className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+        style={{ borderBottom: "1px solid var(--ch-border-soft)" }}
       >
         <div>
-          {eyebrow && (
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
-          )}
-          <p className={cn("font-semibold", compact ? "text-[13px]" : "text-[14px]")} style={{ color: "var(--ch-text)" }}>{title}</p>
+          <p className="text-[14.5px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+          {eyebrow && <p className="ch-meta">{eyebrow}</p>}
         </div>
         <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-3")}>
           {trend && (
@@ -98,8 +83,8 @@ export function AreaChartPanel({
           )}
         </div>
       </div>
-      <div className={compact ? "px-3 pb-0 pt-2" : "px-5 pb-1 pt-4"}>
-        <p className={cn("font-mono font-bold", compact ? "text-[20px]" : "text-[26px]")} style={{ color }}>{value}</p>
+      <div className={compact ? "px-4 pb-0 pt-3" : "px-5 pb-1 pt-4"}>
+        <p className={cn("font-semibold tabular-nums tracking-[-0.015em]", compact ? "text-[20px]" : "text-[24px]")} style={{ color: "var(--ch-text)" }}>{value}</p>
       </div>
       <div className={cn("px-2", compact ? "h-[116px] pb-2" : "h-[180px] pb-3")}>
         <ResponsiveContainer width="100%" height="100%">

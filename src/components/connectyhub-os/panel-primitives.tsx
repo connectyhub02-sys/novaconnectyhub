@@ -35,6 +35,14 @@ const statusMap: Record<StatusTone, { label: string; tone: Tone; icon: LucideIco
 
 export function toneClass(tone: Tone) { return toneMap[tone]; }
 
+/** Eyebrows written as technical trails ("workspace / automacoes", "bearer token") are hidden; plain labels stay. */
+export function readableEyebrow(eyebrow?: string) {
+  if (!eyebrow) return null;
+  const text = eyebrow.trim();
+  if (!text || text.includes("/") || !/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9]/.test(text)) return null;
+  return text;
+}
+
 // ─── PageHeader ───────────────────────────────────────────────────────────────
 
 export function PageHeader({
@@ -42,19 +50,16 @@ export function PageHeader({
 }: {
   eyebrow?: string; title: string; description?: string; actions?: ReactNode;
 }) {
+  const label = readableEyebrow(eyebrow);
   return (
-    <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+    <div className="ch-page-header mb-5 flex flex-col gap-3 sm:mb-7 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">{eyebrow}</p>
-        )}
-        <h1 className="text-[19px] font-bold leading-tight sm:text-[22px]" style={{ color: "var(--ch-text)" }}>{title}</h1>
-        {description && (
-          <p className="mt-1 text-[12px] leading-5 text-slate-500 sm:text-[13px]">{description}</p>
-        )}
+        {label && <p className="ch-eyebrow mb-1">{label}</p>}
+        <h1 className="ch-page-title">{title}</h1>
+        {description && <p className="ch-page-description">{description}</p>}
       </div>
       {actions && (
-        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 pb-1 sm:w-auto sm:justify-end sm:overflow-visible sm:pb-0">
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {actions}
         </div>
       )}
@@ -90,29 +95,22 @@ export function Panel({
   collapsible?: boolean;
   defaultOpen?: boolean;
 }) {
-  const toneStyle = { fill: "var(--ch-border-strong)", rgb: "203,212,225" };
+  const label = readableEyebrow(eyebrow);
   const chromeStyle = {
     background: "var(--ch-surface, #ffffff)",
     border: "1px solid var(--ch-border, #e2e8f0)",
-    boxShadow: "0 2px 8px rgba(15,23,42,0.035)",
   };
   const headerStyle = {
     background: "var(--ch-surface, #ffffff)",
-    borderBottom: "1px solid var(--ch-border-strong)",
+    borderBottom: "1px solid var(--ch-border-soft, #edf0f4)",
   };
   const headerContent = (
     <>
-      <div
-        className="pointer-events-none absolute left-0 top-0 h-full w-1"
-        style={{ background: "transparent" }}
-      />
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
-        )}
-        <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+        {label && <p className="ch-eyebrow">{label}</p>}
+        <p className="ch-panel-title truncate">{title}</p>
       </div>
-      {action && <div className="min-w-0 w-full shrink-0 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">{action}</div>}
+      {action && <div className="min-w-0 w-full shrink-0 overflow-x-auto sm:w-auto sm:overflow-visible">{action}</div>}
     </>
   );
 
@@ -120,47 +118,44 @@ export function Panel({
     return (
       <details
         id={id}
-        className={cn("ch-panel group overflow-hidden rounded-2xl", className)}
+        className={cn("ch-panel group overflow-hidden rounded-xl", className)}
         style={chromeStyle}
         {...(defaultOpen ? { open: true } : {})}
       >
         <summary
-          className="relative flex cursor-pointer list-none flex-col items-start justify-between gap-3 px-3 py-3 transition hover:bg-slate-900/[0.025] marker:hidden sm:flex-row sm:items-center sm:px-4 sm:py-3 [&::-webkit-details-marker]:hidden"
+          className="relative flex cursor-pointer list-none flex-col items-start justify-between gap-3 px-4 py-3.5 transition hover:bg-[var(--ch-hover)] marker:hidden sm:flex-row sm:items-center sm:px-5 [&::-webkit-details-marker]:hidden"
           style={headerStyle}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: "var(--ch-border)" }} />
             <div className="min-w-0">
-              {eyebrow && (
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
-              )}
-              <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+              {label && <p className="ch-eyebrow">{label}</p>}
+              <p className="ch-panel-title truncate">{title}</p>
             </div>
           </div>
           <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto">
             {action ? <div className="min-w-0 flex-1 sm:flex-none">{action}</div> : null}
             <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition group-open:rotate-180"
-              style={{ borderColor: `rgba(${toneStyle.rgb},0.32)`, background: `rgba(${toneStyle.rgb},0.10)`, color: toneStyle.fill }}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg transition group-open:rotate-180"
+              style={{ color: "var(--ch-muted)" }}
             >
               <ChevronDown className="h-4 w-4" />
             </span>
           </div>
         </summary>
-        <div className={compact ? "p-3" : "p-3 sm:p-4"}>{children}</div>
+        <div className={compact ? "p-3" : "p-4 sm:p-5"}>{children}</div>
       </details>
     );
   }
 
   return (
-    <div id={id} className={cn("ch-panel overflow-hidden rounded-2xl", className)} style={chromeStyle}>
+    <div id={id} className={cn("ch-panel overflow-hidden rounded-xl", className)} style={chromeStyle}>
       <div
-        className="relative flex flex-col items-start justify-between gap-3 px-3 py-3 sm:flex-row sm:items-center sm:px-4 sm:py-3"
+        className="relative flex flex-col items-start justify-between gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5"
         style={headerStyle}
       >
         {headerContent}
       </div>
-      <div className={compact ? "p-3" : "p-3 sm:p-4"}>{children}</div>
+      <div className={compact ? "p-3" : "p-4 sm:p-5"}>{children}</div>
     </div>
   );
 }
@@ -179,25 +174,19 @@ export function MetricCard({
 
   return (
     <div
-      className="min-w-0 rounded-xl p-3 sm:rounded-2xl sm:p-5"
-      style={{
-        background: "var(--ch-surface)",
-        border: "1px solid var(--ch-border)",
-        boxShadow: "0 2px 8px rgba(31,41,55,0.03)",
-      }}
+      className="min-w-0 rounded-xl p-4 sm:p-5"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
-        <div className={cn("hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl sm:flex", t.bg)}>
-          <Icon className={cn("h-4 w-4", t.text)} />
-        </div>
+        <p className="ch-metric-label min-w-0 truncate">{label}</p>
+        <Icon className={cn("hidden h-4 w-4 shrink-0 sm:block", t.text)} />
       </div>
-      <p className={cn("mt-1 truncate font-mono text-[22px] font-bold leading-none sm:mt-3 sm:text-[28px]", t.text)}>{value}</p>
+      <p className="ch-metric-value mt-2 truncate">{value}</p>
       <MiniSparkline className="mt-4 hidden sm:block" color={t.fill} data={series} />
       <div className="mt-1 flex items-center justify-between gap-1 sm:mt-3">
-        <span className="hidden truncate text-[11px] text-slate-500 sm:block">{detail}</span>
+        <span className="ch-meta hidden truncate sm:block">{detail}</span>
         <span className={cn(
-          "flex min-w-0 items-center gap-1 truncate rounded-md px-1 py-0.5 font-mono text-[11px] sm:px-2 sm:text-[11px]",
+          "ch-meta flex min-w-0 items-center gap-1 truncate rounded-md px-1.5 py-0.5 font-medium",
           isUp ? "bg-emerald-500/10 text-emerald-600" : isDn ? "bg-rose-500/10 text-rose-500" : "text-slate-500",
         )}>
           {isUp && <TrendingUp className="h-2.5 w-2.5" />}
@@ -225,33 +214,28 @@ export function HeroMetricCard({
     <div
       className="relative overflow-hidden rounded-xl p-3 sm:rounded-2xl sm:p-5"
       style={{
-        background: `linear-gradient(135deg, ${colorB} 0%, rgba(255,255,255,0.92) 100%)`,
-        border:     `1px solid rgba(${accent === "cyan" ? "24,119,242" : "18,140,126"},0.3)`,
-        boxShadow: "0 18px 50px rgba(15,23,42,0.06)",
+        background: "var(--ch-surface)",
+        border: "1px solid var(--ch-border)",
+        boxShadow: `inset 0 3px 0 ${colorB}`,
       }}
     >
-      {/* bg glow */}
-      <div
-        className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-20"
-        style={{ background: color, filter: "blur(32px)" }}
-      />
       <div className="relative">
         <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
-          <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
+          <p className="ch-metric-label min-w-0 truncate">{label}</p>
           <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/70 sm:flex">
             <Icon className="h-4 w-4" style={{ color }} />
           </div>
         </div>
-        <p className="mt-2 truncate font-mono text-[22px] font-bold leading-none sm:mt-3 sm:text-[32px]" style={{ color }}>{value}</p>
+        <p className="ch-metric-value mt-2 truncate" style={{ color }}>{value}</p>
         <MiniSparkline className="mt-4 hidden sm:block" color={color} data={series} opacity={0.55} />
         <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:flex sm:gap-4">
           <div>
-            <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500 sm:text-[11px]">{sub1Label}</p>
-            <p className="truncate font-mono text-[12px] font-semibold sm:text-[14px]" style={{ color: "var(--ch-text)" }}>{sub1Value}</p>
+            <p className="ch-meta truncate">{sub1Label}</p>
+            <p className="truncate text-[14px] font-semibold tabular-nums" style={{ color: "var(--ch-text)" }}>{sub1Value}</p>
           </div>
           <div>
-            <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500 sm:text-[11px]">{sub2Label}</p>
-            <p className="truncate font-mono text-[12px] font-semibold sm:text-[14px]" style={{ color: "var(--ch-text)" }}>{sub2Value}</p>
+            <p className="ch-meta truncate">{sub2Label}</p>
+            <p className="truncate text-[14px] font-semibold tabular-nums" style={{ color: "var(--ch-text)" }}>{sub2Value}</p>
           </div>
         </div>
       </div>
@@ -303,8 +287,8 @@ export function StatusBadge({ status, label }: { status: StatusTone; label?: str
   const t = toneMap[s.tone];
   const Icon = s.icon;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-mono text-[11px] uppercase tracking-wide", t.border, t.bg, t.text)}>
-      <Icon className="h-2.5 w-2.5" />
+    <span className={cn("ch-badge", t.bg, t.text)}>
+      <Icon className="h-3 w-3" />
       {label ?? s.label}
     </span>
   );
@@ -315,7 +299,7 @@ export function StatusBadge({ status, label }: { status: StatusTone; label?: str
 export function NeonBadge({ children, tone = "green" }: { children: ReactNode; tone?: Tone }) {
   const t = toneMap[tone];
   return (
-    <span className={cn("inline-flex items-center rounded-lg px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide border", t.border, t.bg, t.text)}>
+    <span className={cn("ch-badge", t.bg, t.text)}>
       {children}
     </span>
   );
@@ -343,7 +327,7 @@ export function CommandButton({ children, tone = "cyan", onClick }: { children: 
     <button
       type="button"
       onClick={onClick}
-      className={cn("inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 font-mono text-[11px] uppercase tracking-wide transition hover:opacity-80", t.border, t.bg, t.text)}
+      className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold transition hover:opacity-80", t.bg, t.text)}
     >
       {children}
       <ArrowUpRight className="h-3 w-3" />
@@ -356,7 +340,7 @@ export function CommandButton({ children, tone = "cyan", onClick }: { children: 
 export function StatusBar({ items }: { items: { label: string; status: StatusTone }[] }) {
   return (
     <div
-      className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl px-3 py-3 sm:gap-4 sm:px-5"
+      className="mb-5 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 sm:gap-5 sm:px-5"
       style={{
         background: "var(--ch-panel)",
         border: "1px solid var(--ch-border-strong)",
@@ -368,8 +352,8 @@ export function StatusBar({ items }: { items: { label: string; status: StatusTon
         return (
           <div key={item.label} className="flex items-center gap-2">
             <div className={cn("h-2 w-2 rounded-full", t.dot)}  />
-            <span className="text-[12px] text-slate-400">{item.label}</span>
-            <span className={cn("font-mono text-[11px]", t.text)}>{s.label}</span>
+            <span className="text-[13px] text-slate-500">{item.label}</span>
+            <span className={cn("text-[13px] font-medium", t.text)}>{s.label}</span>
           </div>
         );
       })}
@@ -386,7 +370,7 @@ export function TelemetryFeed({ items }: { items: { time: string; actor: string;
         const t = toneMap[item.tone];
         return (
           <div key={`${item.time}-${item.action}`} className="grid grid-cols-[52px_10px_1fr] items-start gap-x-3 py-3 first:pt-0 last:pb-0">
-            <span className="pt-0.5 font-mono text-[11px] text-slate-600">{item.time}</span>
+            <span className="ch-meta pt-0.5 tabular-nums">{item.time}</span>
             <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", t.dot)}  />
             <div>
               <span className="text-[12px] font-medium" style={{ color: "var(--ch-text)" }}>{item.actor}</span>
@@ -415,19 +399,19 @@ export function AgentCard({ name, role, status, accuracy, current, accent = "gre
         <div className="min-w-0 flex-1">
           <StatusBadge status={status} />
           <div className="mt-2 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{name}</div>
-          <div className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{role}</div>
+          <div className="ch-meta">{role}</div>
         </div>
         {avatarUrl !== undefined ? <AgentPhoto src={avatarUrl} name={name} size="md" /> : (
           <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", t.bg)}>
-            <span className={cn("font-mono text-[11px] font-bold", t.text)}>AI</span>
+            <span className={cn("text-[12px] font-bold", t.text)}>IA</span>
           </div>
         )}
       </div>
-      <p className="mt-3 text-[11px] leading-4 text-slate-500">{current}</p>
+      <p className="ch-meta mt-3">{current}</p>
       <div className="mt-3">
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="font-mono text-[11px] text-slate-600">acurácia</span>
-          <span className={cn("font-mono text-[11px] font-medium", t.text)}>{accuracy}%</span>
+          <span className="ch-meta">Acurácia</span>
+          <span className={cn("ch-meta font-medium tabular-nums", t.text)}>{accuracy}%</span>
         </div>
         <ProgressBar value={accuracy} tone={status === "warning" ? "amber" : accent} />
       </div>
@@ -441,11 +425,11 @@ export function KpiStat({ label, value, tone = "zinc" }: { label: string; value:
   const t = toneMap[tone];
   return (
     <div
-      className="min-w-0 rounded-xl px-2 py-2 sm:px-3 sm:py-2.5"
-      style={{ background: `linear-gradient(90deg, ${t.fill}14, rgba(255,255,255,0.72)), var(--ch-panel-2)`, border: `1px solid ${t.fill}44` }}
+      className="min-w-0 rounded-lg px-3 py-2.5"
+      style={{ background: "var(--ch-surface-3)", border: "1px solid var(--ch-border-soft)" }}
     >
-      <div className="truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-600 sm:text-[11px] sm:tracking-widest">{label}</div>
-      <div className={cn("mt-1 truncate font-mono text-[15px] font-bold leading-none sm:text-[16px]", t.text)}>{value}</div>
+      <div className="ch-metric-label truncate">{label}</div>
+      <div className={cn("mt-1 truncate text-[17px] font-semibold leading-tight tabular-nums", tone === "zinc" ? "" : t.text)} style={tone === "zinc" ? { color: "var(--ch-text)" } : undefined}>{value}</div>
     </div>
   );
 }
@@ -460,20 +444,19 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
           <div
             key={rowIndex}
             data-mobile-data-card
-            className="grid gap-2 rounded-2xl p-3"
-            style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
+            className="grid gap-1 rounded-xl px-4 py-3"
+            style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
           >
             {row.map((cell, cellIndex) => (
               <div
                 key={`${rowIndex}-${columns[cellIndex] ?? cellIndex}`}
                 data-mobile-data-cell
-                className="grid min-w-0 gap-1 rounded-xl px-2 py-2"
-                style={{ background: "rgba(15,23,42,0.035)" }}
+                className="grid min-w-0 grid-cols-[minmax(96px,40%)_minmax(0,1fr)] items-baseline gap-3 py-1"
               >
-                <div className="font-mono text-[11px] uppercase tracking-widest text-slate-600">
+                <div className="ch-meta">
                   {columns[cellIndex] ?? `Campo ${cellIndex + 1}`}
                 </div>
-                <div className="min-w-0 text-[12px] leading-5 text-slate-700">{cell}</div>
+                <div className="min-w-0 text-[14px] leading-5" style={{ color: "var(--ch-text)" }}>{cell}</div>
               </div>
             ))}
           </div>
@@ -485,7 +468,7 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
           <thead>
             <tr style={{ borderBottom: "1px solid var(--ch-border)" }}>
               {columns.map((col) => (
-                <th key={col} className="pb-3 pr-5 font-mono text-[11px] uppercase tracking-widest text-slate-600 last:pr-0">
+                <th key={col} className="ch-meta pb-2.5 pr-5 font-medium last:pr-0">
                   {col}
                 </th>
               ))}
@@ -493,9 +476,9 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="group border-b transition" style={{ borderColor: "var(--ch-border)" }}>
+              <tr key={i} className="group border-b transition hover:bg-[var(--ch-hover)] last:border-b-0" style={{ borderColor: "var(--ch-border-soft)" }}>
                 {row.map((cell, j) => (
-                  <td key={j} className="py-3 pr-5 text-[12px] last:pr-0">{cell}</td>
+                  <td key={j} className="py-3 pr-5 text-[14px] tabular-nums last:pr-0">{cell}</td>
                 ))}
               </tr>
             ))}
@@ -510,7 +493,7 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
 
 export function LoadingLine({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-slate-600">
+    <span className="ch-meta inline-flex items-center gap-2">
       <InfinityMark size="sm" className="text-blue-600" />
       {label}
     </span>
@@ -522,7 +505,7 @@ export function LoadingLine({ label }: { label: string }) {
 export function Divider({ label }: { label?: string }) {
   return (
     <div className="my-5 flex items-center gap-3">
-      {label && <span className="font-mono text-[11px] uppercase tracking-widest text-slate-700">{label}</span>}
+      {label && <span className="ch-eyebrow">{label}</span>}
       <div className="flex-1 border-t" style={{ borderColor: "var(--ch-border)" }} />
     </div>
   );

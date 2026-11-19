@@ -53,3 +53,6 @@ scripts/seed/**/.photos/
 # Local video-service preview media. Publish approved files to R2 before deployment.
 /public/media/video-services/*.mp4
 /output/video-services/
+
+/output/preview-paineis/
+/output/redesign/

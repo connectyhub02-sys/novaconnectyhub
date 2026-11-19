@@ -1769,8 +1769,8 @@ function AttendanceCenterView({
           setHandoffNotice(null); router.refresh();
         }} />}
       <div
-        className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
-        style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
+        className="ch-attendance-frame overflow-hidden rounded-xl border"
+        style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface)" }}
       >
         <div ref={paneRef} className="ch-attendance-grid grid" data-bag-open={mobileBagOpen}>
           <aside
@@ -1804,7 +1804,7 @@ function AttendanceCenterView({
                     key={thread.key}
                     aria-current={selected ? "true" : undefined}
                     className={cn(
-                      "ch-thread-row grid w-full grid-cols-[40px_minmax(0,1fr)] gap-3 border-b px-3 py-2 text-left transition",
+                      "ch-thread-row grid w-full grid-cols-[40px_minmax(0,1fr)] gap-3 border-b px-4 py-3 text-left transition",
                       selected ? "bg-blue-50" : "bg-white hover:bg-slate-50",
                     )}
                     onClick={() => {
@@ -1817,9 +1817,9 @@ function AttendanceCenterView({
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className="truncate text-[14px] font-semibold text-slate-950">{lead.name}</p>
-                        <span className="shrink-0 text-[11px] text-slate-500">{formatTime(thread.lastMessageAt ?? lead.updatedAt)}</span>
+                        <span className="ch-meta shrink-0 tabular-nums">{formatTime(thread.lastMessageAt ?? lead.updatedAt)}</span>
                       </div>
-                      <p className="mt-1 truncate text-[12px] text-slate-600">
+                      <p className="mt-0.5 truncate text-[13.5px] text-slate-600">
                         {latestMessage ? formatThreadMessagePreview(latestMessage) : thread.conversation?.preview ?? lead.conversation.preview ?? lead.summary}
                       </p>
                       <div className="ch-thread-meta"><span>{queueLabel}</span><span>{humanIntervention.active ? "IA pausada" : statusOptions.find(item => item.value === lead.status)?.label}</span>{hasUnreadThreadSignal(thread) && <b aria-label="Não lida">●</b>}</div>
@@ -1836,36 +1836,33 @@ function AttendanceCenterView({
             </div>
           </aside>
 
-          <main className={cn("min-h-0 min-w-0 bg-[#efeae2]", (conversationPane === "inbox" || mobileBagOpen) && "hidden xl:block")}>
+          <main className={cn("ch-chat-main min-h-0 min-w-0", (conversationPane === "inbox" || mobileBagOpen) && "hidden xl:block")}>
             {activeLead ? (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="ch-chat-header flex flex-col border-b" style={{ borderColor: "#d1d7db" }}>
+                <div className="ch-chat-header flex flex-col border-b" style={{ borderColor: "var(--ch-border)" }}>
                   <div className="flex min-w-0 items-center gap-3">
                     <button
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full border text-slate-700 xl:hidden"
+                      className="ch-icon-button -ml-2 shrink-0 xl:hidden"
                       onClick={returnToInbox}
                       aria-label="Voltar às conversas"
-                      style={{ borderColor: "var(--ch-border)" }}
                       type="button"
                     >
-                      <ChevronDown className="h-4 w-4 rotate-90" />
+                      <ChevronDown className="h-5 w-5 rotate-90" />
                     </button>
                     <LeadAvatar lead={activeLead} />
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-semibold text-slate-950">{activeLead.name}</p>
-                      <p className="truncate text-[12px] text-slate-500">
-                        {[activeLead.phone, activeAgentIdentity.name].filter(Boolean).join(" / ") || activeLead.companyName}
+                      <p className="ch-meta truncate">
+                        {[activeLead.phone, activeAgentIdentity.name ? `Agente ${activeAgentIdentity.name}` : null].filter(Boolean).join(" · ") || activeLead.companyName}
                       </p>
                     </div>
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                  <div className="ch-chat-actions flex min-w-0 items-center gap-2 lg:justify-end">
 
                     <button
                       className={cn(
-                        "inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-70",
-                        activeHumanIntervention.active
-                          ? "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
-                          : "bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)] hover:bg-blue-700",
+                        "ch-btn !min-h-9 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-70",
+                        activeHumanIntervention.active ? "ch-btn-secondary" : "ch-btn-primary",
                       )}
                       disabled={handoffBusy || replyBusy || chatLockedByPush}
                       onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
@@ -1875,7 +1872,7 @@ function AttendanceCenterView({
                       {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
                     </button>
                     <button
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#25D366]/45 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-[#25D366] hover:bg-[#effff4] hover:text-[#075E54]"
+                      className="ch-btn ch-btn-secondary !min-h-9 !px-3 !text-[13px]"
                       onClick={() => setDetailsLeadId(activeLead.id)}
                       type="button"
                     >
@@ -1883,11 +1880,12 @@ function AttendanceCenterView({
                       Detalhes
                     </button>
                     {canResetLead && <button type="button" onClick={() => setResetTarget({ id: activeLead.id, name: activeLead.name })}
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50">
+                      className="ch-btn ch-btn-secondary !min-h-9 !px-3 !text-[13px] !text-red-700">
                       <RotateCcw className="h-4 w-4" /> Resetar lead
                     </button>}
-                    <button type="button" className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700" onClick={() => setMobileBagOpen(true)}>
-                      {commerceEnabled ? "Sacola" : "Conta"}
+                    <button type="button" className="ch-btn ch-btn-secondary !min-h-9 !px-3 !text-[13px]" onClick={() => setMobileBagOpen(true)}>
+                      <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+                      {commerceEnabled ? "Pedido" : "Conta"}
                     </button>
                   </div>
                 </div>
@@ -1895,14 +1893,7 @@ function AttendanceCenterView({
                 {(handoffNotice || activeHumanIntervention.active) && <div className="ch-chat-feedback" role="status"><AttendanceHeaderNotices countdown={handoffCountdown} handoffNotice={handoffNotice} humanIntervention={activeHumanIntervention}/></div>}
                 <div
                   className="ch-chat-history relative min-h-0 flex-1 overflow-hidden"
-                  style={{
-                    backgroundColor: "#efeae2",
-                    backgroundImage:
-                      `linear-gradient(rgba(239,234,226,0.28), rgba(239,234,226,0.28)), url("${whatsappConversationBackgroundUrl}")`,
-                    backgroundPosition: "center",
-                    backgroundRepeat: "repeat",
-                    backgroundSize: "420px auto",
-                  }}
+                  data-wallpaper={whatsappConversationBackgroundUrl ? "neutral" : undefined}
                 >
                   <div className={cn("h-full overflow-y-auto px-3 py-4 sm:px-6", chatLockedByPush && "pointer-events-none opacity-35 blur-[1px]")}>
                     <ChatMessages key={`${activeConversationId}:${conversationPane}`} leadId={activeLead?.id} conversationId={activeConversationId} leadName={activeLead?.name} messages={activeMessages} />
@@ -1916,7 +1907,7 @@ function AttendanceCenterView({
                   ) : null}
                 </div>
 
-                <div className="border-t bg-[#f0f2f5] px-3 py-2" style={{ borderColor: "#d1d7db" }}>
+                <div className="ch-composer border-t px-3 py-2.5" style={{ borderColor: "var(--ch-border)" }}>
                   {pushPrompt.visible && !chatLockedByPush ? (
                     <AttendancePushPermissionPrompt
                       busy={pushPrompt.busy}
@@ -1926,18 +1917,18 @@ function AttendanceCenterView({
                       permission={pushPrompt.permission}
                     />
                   ) : null}
-                  <p className="ch-reply-recipient">Responder para <strong>{activeLead.name}</strong></p>
+                  <p className="ch-reply-recipient sr-only">Responder para <strong>{activeLead.name}</strong></p>
                   <form className="ch-reply-form flex items-end gap-2" onSubmit={handleManualReplySubmit}>
                     <label className="relative block min-w-0 flex-1">
                       <textarea
                         ref={manualReplyTextareaRef}
                         rows={1}
                         aria-label={`Resposta para ${activeLead.name}`}
-                        className="max-h-[220px] min-h-10 w-full resize-none overflow-hidden rounded-2xl border border-transparent bg-white px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55"
+                        className="max-h-[220px] min-h-11 w-full resize-none overflow-hidden rounded-[22px] border border-[var(--ch-border-strong)] bg-white px-4 py-2.5 text-[14px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-[var(--ch-accent)]"
                         disabled={replyBusy || chatLockedByPush}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
-                        placeholder="Sua mensagem…"
+                        placeholder={`Mensagem para ${activeLead.name.split(" ")[0]}`}
                         value={manualReply}
                       />
                     </label>
@@ -4640,27 +4631,28 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
         const bubbleStyle = isSystem
           ? { backgroundColor: "#fff7d6", borderColor: "#f6dc8c", color: "#3b3320" }
           : isOutbound
-            ? { backgroundColor: "var(--ch-info-soft, #EDF2FF)", borderColor: "var(--ch-border, #DEE4ED)", color: "var(--ch-text, #1F2937)" }
+            ? { backgroundColor: isAi ? "#F1ECFB" : "#E6EDFF", borderColor: "transparent", color: "var(--ch-text, #1F2937)" }
             : { backgroundColor: "var(--ch-surface, #FFFFFF)", borderColor: "var(--ch-border, #DEE4ED)", color: "var(--ch-text, #1F2937)" };
 
         return (
           <div key={message.id} className={cn("flex", isSystem ? "justify-center" : isOutbound ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "min-w-0 max-w-[88%] rounded-2xl border px-3 py-2.5 text-[13px] leading-5 shadow-sm [overflow-wrap:anywhere] sm:max-w-[72%] sm:px-3.5",
+                "ch-bubble min-w-0 max-w-[86%] rounded-[16px] border px-3.5 py-2 text-[14px] leading-[1.45] [overflow-wrap:anywhere] sm:max-w-[68%]",
+                isOutbound ? "rounded-br-[6px]" : !isSystem && "rounded-bl-[6px]",
                 isSystem && "max-w-[82%] text-center",
               )}
               style={isSticker ? { ...bubbleStyle, backgroundColor: "transparent", borderColor: "transparent", boxShadow: "none" } : bubbleStyle}
             >
-              <div className="mb-1 flex items-center justify-between gap-3">
+              <div className={cn("mb-0.5 flex items-center justify-between gap-3", isLead && !originLabel && "sr-only")}>
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate font-mono text-[11px] uppercase tracking-wide opacity-60">
-                    {label}
+                  <span className={cn("truncate text-[12px] font-semibold", isAi ? "text-[#6A42B0]" : isOutbound ? "text-[#2F4FBF]" : "opacity-70")}>
+                    {isAi ? `${label} · IA` : label}
                   </span>
                   {originLabel ? (
                     <span
                       className={cn(
-                        "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wide",
+                        "shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] font-semibold",
                         getMessageOriginBadgeClass(message),
                       )}
                       title={formatMessageOriginTitle(message)}
@@ -4669,22 +4661,18 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
                     </span>
                   ) : null}
                 </span>
-                <span className="font-mono text-[11px] opacity-55">
-                  {message.edited ? "editada · " : null}
-                  {formatTime(message.occurredAt)}
-                </span>
               </div>
               {message.quotedMessage ? (
                 <div
                   className={cn(
                     "mb-2 overflow-hidden rounded-lg border-l-2 px-2.5 py-2 text-left",
                     isOutbound
-                      ? "border-[#25D366] bg-white/45"
-                      : "border-[#25D366] bg-[#f0fdf4]",
+                      ? "border-[#3156D3] bg-white/55"
+                      : "border-[#3156D3] bg-[#F3F6FD]",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[11px] font-bold uppercase tracking-wide text-[#128C7E]">
+                    <span className="truncate text-[12px] font-semibold text-[#2F4FBF]">
                       {quotedLabel}
                     </span>
                     {message.quotedMessage.type && message.quotedMessage.type !== "text" ? (
@@ -4705,6 +4693,10 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
               ) : (
                 <ChatMessageBody message={message} isSticker={isSticker} emojiOnly={emojiOnly} />
               )}
+              <span className="ch-bubble-time">
+                {message.edited ? "editada · " : null}
+                {formatTime(message.occurredAt)}
+              </span>
               {messageReactions.length ? (
                 <div className={cn("mt-1.5 flex", isOutbound ? "justify-end" : "justify-start")}>
                   <span
