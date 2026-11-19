@@ -23,7 +23,7 @@ it("uses the global agent even when development has a different agent", async ()
   expect(contains).toHaveBeenCalledWith("metadata", { agent_id: "global", admin_whatsapp: true, platform_whatsapp: true });
   const location = new URL(response.headers.get("location")!);
   expect(location.hostname).toBe("wa.me");
-  expect(location.pathname).toBe("/554788556936");
+  expect(location.pathname).toBe("/5547988556936");
   expect(location.searchParams.get("text")).toContain("produção de vídeos com IA");
   expect(response.status).toBe(302);
   expect(response.headers.get("cache-control")).toBe("no-store");
@@ -32,12 +32,12 @@ it("uses the global agent even when development has a different agent", async ()
 it("keeps contact available when there are no database credentials", async () => {
   service.create.mockImplementation(() => { throw new Error("not configured"); });
   const response = await GET(new Request("https://www.connectyhub.com.br/solucoes/producao-de-videos/conversar"));
-  expect(response.headers.get("location")).toContain("https://wa.me/554788556936?");
+  expect(response.headers.get("location")).toContain("https://wa.me/5511910188233?");
 });
 
 it("never uses arbitrary style text or invalid phone values in a redirect", () => {
   const link = new URL(videoWhatsappUrl("https://evil.example", "https://evil.example"));
-  expect(link.pathname).toBe("/554788556936");
+  expect(link.pathname).toBe("/5511910188233");
   expect(link.searchParams.get("text")).not.toContain("evil.example");
   expect(link.searchParams.get("text")).toContain("Olá, Eliane!");
 });

@@ -1,5 +1,37 @@
 # Estado operacional da ConnectyHub
 
+## Número público único +55 11 91018-8233 — 19/11/2026
+
+Decisão do titular registrada em [contexto-projeto.md](contexto-projeto.md). Verificado nesta data:
+
+| Local | Antes | Depois | Verificado |
+|---|---|---|---|
+| Admin, agente interno Eliane/Atendimento (UAZAPI) | — | 5511910188233 conectado (pelo titular) | sim, leitura do painel |
+| Google Perfil da Empresa 15654835879579276835, telefone | (47) 98855-6936, não aprovado com erro de publicação | (11) 91018-8233 | sim, releitura sem pendência |
+| Google Perfil, chat WhatsApp principal | wa.me/5547988556936 | wa.me/5511910188233 | sim, releitura sem pendência |
+| Site, botão WhatsApp da home | wa.me/5547988556936 fixo no código | `/contato/whatsapp`, que segue a instância conectada no admin | sim, produção e navegador |
+| Site, rotas de contato de vídeos/software | já seguiam a instância do admin | idem, normalizador comum com nono dígito | sim, 302 para 5511910188233 |
+
+Release `5d83d650b3f7e34e240073b25b32abb918564f7e` (branch `codex/home-whatsapp-instancia`,
+base produção `9f82d38e` do redesign) ativada no **slot a**; `9f82d38e` preservada no slot b.
+6 testes dirigidos passaram; lint dos arquivos alterados limpo; `tsc` só acusa erro
+preexistente em `tests/api-meta-analytics.test.ts`. Smoke candidato: 10 páginas 200,
+painéis 307, API privada 401, Inngest autenticado com 61 funções. IndexNow aceito.
+A home agora acompanha o número do agente de plataforma (`billing_whatsapp_agent_id`) com
+`admin_whatsapp` + `platform_whatsapp`; trocar o número no admin muda os links sem deploy.
+Fallback em queda do banco: 5511910188233. Uma visita de teste foi registrada em
+`custom_software_visits` por um GET de verificação na rota de software sob medida.
+
+Não alterado por decisão do titular: telefone do portfólio Meta (+55 47 98811-8255,
+negócio verificado). Não alterados: Página do Facebook (telefone (47) 98855-6936 e botão
+WhatsApp +55 47 8855-6936), Instagram (contato só editável no app), contas WhatsApp antigas
+offline "Eliane - ConnectyHub" (47 8855-6936) e "Magno" (47 8857-7996), e o remetente de
+teste da revisão Meta 1092207727013801 (+1 555-649-4174, WABA 1077354978498958).
+Na Meta, o número novo está na conta App WhatsApp Business 2133522687196167 (renomeada
+pelo titular), **ainda não na Cloud API**: o "Conectar número" do painel usa o cadastro
+comum e a Meta recusou o número do app Business. Coexistência no painel admin e cliente
+em desenvolvimento em sessão própria. WhatsApp Manager sem forma de pagamento.
+
 ## Google OAuth, perfil e contato — correções publicadas, 09/11/2026
 
 Release `fa4e3d9a6aea4c5e3168cdf17e7f468d997767e6`, **slot b**, ativada às
