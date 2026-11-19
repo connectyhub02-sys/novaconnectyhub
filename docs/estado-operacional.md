@@ -12,8 +12,13 @@
   portfólio dono do app; o Embedded Signup só associa portfólios de clientes. Parou antes do QR:
   número inalterado no celular/UAZAPI, janela de 24 h não iniciada, nenhuma conexão gravada
   (só a tentativa não consumida). A documentação oficial não descreve o caso do próprio
-  portfólio. Próximo passo: ver no Gestor do WhatsApp se há conexão direta à API ou abrir chamado
-  Meta com erro/app/session. Mover o número para outro portfólio não é recomendado.
+  portfólio. Gestor do WhatsApp conferido em seguida, só leitura (Chrome do titular): conta
+  2133522687196167 “Propriedade de ConnectyHub”, número ID 1256673514200983 “Ligado”, com apenas
+  a aba Perfil (sem configurações de API). “Associa a tua conta do WhatsApp” está desativado
+  (“uma conta de mensagens só pode ser associada a uma conta do WhatsApp”); Soluções de parceiros
+  vazio. Não há opção direta para colocar o número na API. Restam: chamado no suporte Meta
+  (erro #3441128, app 1002348522666389, session acima) ou portfólio separado para o número
+  (não recomendado). Aviso “método de pagamento em falta” continua.
 
 - `Conectar WhatsApp` em `/admin/meta` e `/dashboard/chat-meta` oferece número novo ou
   número que já está no app WhatsApp Business (Embedded Signup v4,
