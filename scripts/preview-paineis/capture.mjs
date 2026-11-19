@@ -18,6 +18,7 @@ const shots = [
   { name: "cliente-menu-celular", path: "/dashboard", mobileOnly: true, click: { role: "button", name: /^(Menu|Mais)$/ } },
   { name: "cliente-automacoes", path: "/dashboard/automacoes" },
   { name: "admin-inicio", path: "/admin" },
+  { name: "admin-relatorios", path: "/admin", click: { text: "Indicadores e relatórios completos" }, fullPage: true },
   { name: "admin-atendimento", path: "/admin/whatsapp/atendimento" },
 ];
 

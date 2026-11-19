@@ -151,9 +151,14 @@ export function AdminHomeStart({ overview }: { overview: AdminDashboardOverview 
     tasks={tasks}
     rowsTitle="Clientes"
     rowsHref="/admin/clientes"
-    rows={overview.clients.slice(0, 4).map(item => ({ id: item.id, name: item.company, detail: `${item.plan} · ${item.owner}`, meta: item.status, href: "/admin/clientes" }))}
+    rows={overview.clients.slice(0, 4).map(item => ({ id: item.id, name: item.company, detail: `${item.plan} · ${item.owner}`, meta: clientStatusLabel(item.status), href: "/admin/clientes" }))}
     emptyRows="Os clientes aparecem aqui assim que se cadastrarem."
   />;
+}
+
+function clientStatusLabel(status: string) {
+  const labels: Record<string, string> = { online: "Ativo", warning: "Atenção", critical: "Crítico", idle: "Em espera" };
+  return labels[status] ?? status;
 }
 
 function integer(value: number) {

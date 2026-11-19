@@ -5023,3 +5023,40 @@ html {
 [data-connecty-mode] .ch-home-heading { background: transparent !important; }
 @media (max-width: 767px) { .ch-home-kpi-label svg { display: none; } .ch-home-kpi-label { font-size: 13px; } }
 .ch-sheet .ch-sidebar-heading { color: var(--ch-muted); }
+
+/* ---------- Relatórios: grades e linhas comuns aos dois painéis ---------- */
+.ch-report-row > *, .ch-stat-groups > * { min-width: 0; }
+.ch-report-row--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ch-report-row--even > :only-child, .ch-report-row--three > :only-child { grid-column: 1 / -1; }
+.ch-report-row { align-items: stretch; }
+.ch-report-card { display: flex; flex-direction: column; }
+.ch-report-card > header { flex-shrink: 0; }
+.ch-report-card > header .ch-meta { margin-top: 1px; }
+.ch-stat-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ch-stat-grid--3 > div:nth-child(n) { border-top: 0; border-left: 1px solid var(--ch-border-soft); }
+.ch-stat-grid--3 > div:first-child { border-left: 0; }
+.ch-stat-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ch-stat-grid--4 > div:nth-child(n) { border-top: 0; border-left: 1px solid var(--ch-border-soft); }
+.ch-stat-grid--4 > div:first-child { border-left: 0; }
+.ch-stat-grid > div { padding: 14px 16px; }
+.ch-stat-detail { margin: 2px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ch-muted); }
+.ch-stat-trend { border-radius: 999px; padding: 0 7px; font-size: 12px; font-weight: 600; background: var(--ch-success-soft); color: var(--ch-success); }
+.ch-warning-list { margin: 0 0 14px; padding: 10px 14px 10px 30px; border-radius: 10px; background: var(--ch-warning-soft); color: var(--ch-warning); font-size: 13.5px; line-height: 1.5; }
+.ch-health { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 18px; align-items: center; padding: 16px; flex: 1; }
+.ch-health-dial { display: grid; place-items: center; width: 112px; height: 112px; border-radius: 999px; }
+.ch-health-dial > div { display: grid; place-items: center; align-content: center; width: 86px; height: 86px; border-radius: 999px; background: var(--ch-surface); text-align: center; }
+.ch-health-dial strong { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: var(--ch-text); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.ch-health-dial span { font-size: 12px; color: var(--ch-muted); }
+.ch-health-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ch-health-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13.5px; color: var(--ch-text); }
+@media (max-width: 1023px) {
+  .ch-report-row--three { grid-template-columns: minmax(0, 1fr); }
+  .ch-stat-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ch-stat-grid--4 > div:nth-child(odd) { border-left: 0; }
+  .ch-stat-grid--4 > div:nth-child(n+3) { border-top: 1px solid var(--ch-border-soft); }
+}
+@media (max-width: 479px) {
+  .ch-stat-grid--3 > div { padding: 12px 10px; }
+  .ch-health { grid-template-columns: 1fr; justify-items: center; }
+  .ch-health-list { width: 100%; }
+}

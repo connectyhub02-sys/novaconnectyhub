@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
 
 const chartAxisTick = {
   fill: "var(--ch-chart-axis)",
-  fontSize: 10,
-  fontFamily: "monospace",
+  fontSize: 12,
+  fontFamily: "inherit",
 };
 
 const chartTooltipStyle = {
@@ -121,29 +121,14 @@ export function BarChartPanel({
   color?: string; filters?: string[]; action?: ReactNode; compact?: boolean;
 }) {
   return (
-    <div
-      className="rounded-2xl"
-      style={{
-        background: "var(--ch-panel)",
-        border: "1px solid var(--ch-border-strong)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
-      }}
-    >
+    <div className="ch-report-card">
       <div
-        className={cn(
-          "flex flex-wrap items-center justify-between",
-          compact ? "gap-2 px-3 py-2.5" : "gap-3 px-5 py-4",
-        )}
-        style={{
-          background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
-          borderBottom: "1px solid var(--ch-border-strong)",
-        }}
+        className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+        style={{ borderBottom: "1px solid var(--ch-border-soft)" }}
       >
         <div>
-          {eyebrow && (
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
-          )}
-          <p className={cn("font-semibold", compact ? "text-[13px]" : "text-[14px]")} style={{ color: "var(--ch-text)" }}>{title}</p>
+          <p className="text-[14.5px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+          {eyebrow && <p className="ch-meta">{eyebrow}</p>}
         </div>
         <div className="flex items-center gap-2">
           {filters && (
@@ -167,7 +152,7 @@ export function BarChartPanel({
           {action}
         </div>
       </div>
-      <div className={cn("px-2", compact ? "h-[112px] py-2" : "h-[160px] py-4")}>
+      <div className={cn("px-2", compact ? "h-[150px] py-3" : "h-[180px] py-4")}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={compact ? 13 : 18}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--ch-chart-grid)" strokeOpacity={0.9} vertical={false} />
