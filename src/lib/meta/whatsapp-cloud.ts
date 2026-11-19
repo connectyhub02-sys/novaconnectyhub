@@ -7,8 +7,9 @@ import { decryptCredentialValue, encryptCredentialValue } from "@/lib/security/c
 import { officialAssetId, officialPhone, serviceWindowOpen, templateInput } from "./whatsapp-policy";
 import { collectOutboundLinks } from "@/lib/whatsapp/outbound-links";
 import { recipientAliases, recipientIdentity, recordRecipientIdentity } from "./whatsapp-recipient";
+import { coexistenceInstanceConflict, officialSignupMode, selectOfficialSignupPhone, type SignupPhone } from "./whatsapp-signup-mode";
 
-export type OfficialConnection = { organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
+export type OfficialConnection = { coexistence?: boolean; organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
 export type MetaTemplate = OfficialTemplate;
 export class MetaCloudError extends Error {
   constructor(public code: string, public uncertain = false) { super(`Meta recusou a operação (${code}). Confira a conexão, as permissões e o status do número.`); }
@@ -57,25 +58,57 @@ export async function officialConnection(client: SupabaseClient, organizationId:
   return result.data;
 }
 
-export async function connectOfficial(client: SupabaseClient, organizationId: string, actorId: string, token: string, wabaValue: unknown, phoneValue: unknown) {
-  const wabaId = officialAssetId(wabaValue), phoneId = officialAssetId(phoneValue);
+export async function connectOfficial(client: SupabaseClient, organizationId: string, actorId: string, token: string, wabaValue: unknown, phoneValue: unknown, modeValue: unknown = "cloud") {
+  const wabaId = officialAssetId(wabaValue), mode = officialSignupMode(modeValue);
+  const phoneId = phoneValue === undefined || phoneValue === null || phoneValue === "" ? undefined : officialAssetId(phoneValue);
   const config = await officialSettings(client);
   const debug = await cloudRequest<{data:{app_id:string;is_valid:boolean;scopes:string[]}}>(config,`${config.appId}|${config.appSecret}`,"debug_token",undefined,{input_token:token});
   if (!debug.data?.is_valid || debug.data.app_id !== config.appId || !["whatsapp_business_messaging","whatsapp_business_management"].every(p=>debug.data.scopes?.includes(p))) throw new Error("Token não pertence ao app ou falta autorização de mensagens/gerenciamento WhatsApp.");
-  const phones = await cloudList<{id:string;display_phone_number:string;verified_name:string}>(config,token,`${wabaId}/phone_numbers`,{fields:"id,display_phone_number,verified_name"});
-  const phone = phones.find(p=>p.id===phoneId);
-  if (!phone) throw new Error("Número não pertence à conta WhatsApp autorizada.");
-  const separate = await client.rpc("meta_whatsapp_number_separate",{p_phone:officialPhone(phone.display_phone_number)});
-  if (separate.error || separate.data !== true) throw new Error("Use um número separado do atendimento UAZAPI. Coexistência ainda não homologada.");
-  const saved = await client.rpc("connect_meta_whatsapp_sender",{p_org:organizationId,p_sender:phoneId,p_waba:wabaId,p_phone:phone.display_phone_number,p_name:phone.verified_name,p_token:encryptCredentialValue(token),p_permissions:debug.data.scopes,p_actor:actorId});
+  const phones = await cloudList<SignupPhone>(config,token,`${wabaId}/phone_numbers`,{fields:"id,display_phone_number,verified_name,is_on_biz_app,platform_type"});
+  const {phone,coexistence} = selectOfficialSignupPhone(phones,phoneId,mode);
+  const digits = officialPhone(phone.display_phone_number);
+  if (coexistence) {
+    // This company's own QR attendance on the same number is the purpose of coexistence;
+    // another company's active QR instance or the API pilot binding is not.
+    const instances = await client.from("whatsapp_instances").select("organization_id,phone_number,status").like("phone_number",`%${digits.slice(-4)}`);
+    if (instances.error) throw new Error("Não foi possível conferir o atendimento por QR deste número.");
+    if (coexistenceInstanceConflict(instances.data ?? [],organizationId,digits)) throw new Error("Este número está conectado por QR em outra empresa. Revise antes de continuar.");
+    const api = await client.from("connectyhub_meta_coexistence").select("id").or(`waba_id.eq.${wabaId},phone_number_id.eq.${phone.id}`).limit(1);
+    if (api.error || api.data?.length) throw new Error("Número já vinculado a uma integração por API. Revise o vínculo antes de continuar.");
+  } else {
+    const separate = await client.rpc("meta_whatsapp_number_separate",{p_phone:digits});
+    if (separate.error || separate.data !== true) throw new Error("Use um número separado do atendimento UAZAPI ou escolha a opção de número que já usa no app WhatsApp Business.");
+  }
+  const saved = await client.rpc("connect_meta_whatsapp_sender",{p_org:organizationId,p_sender:phone.id,p_waba:wabaId,p_phone:phone.display_phone_number,p_name:phone.verified_name,p_token:encryptCredentialValue(token),p_permissions:debug.data.scopes,p_actor:actorId});
   if (saved.error) throw new Error("Número já pertence a outra empresa ou não foi possível salvar a conexão.");
-  // WABA subscription is an explicit part of connecting the account.
+  const flagged = await client.from("meta_whatsapp_connections").update(coexistence ? {coexistence:true,coexistence_linked_at:new Date().toISOString(),history_sync_state:null,contacts_sync_state:null} : {coexistence:false}).eq("organization_id",organizationId).eq("phone_number_id",phone.id);
+  if (flagged.error) throw new Error("Conexão salva, mas o tipo de número não foi registrado. Reconecte para concluir.");
+  // WABA subscription is an explicit part of connecting the account. Coexistence never calls /register.
   const subscription = await cloudRequest<{success:boolean}>(config,token,`${wabaId}/subscribed_apps`,{});
   if (!subscription.success) throw new Error("Conexão salva, mas a Meta não confirmou a assinatura do webhook. Reconecte para tentar novamente.");
-  const activated = await client.from("meta_whatsapp_connections").update({webhook_subscribed:true}).eq("organization_id",organizationId).eq("phone_number_id",phoneId);
+  const activated = await client.from("meta_whatsapp_connections").update({webhook_subscribed:true}).eq("organization_id",organizationId).eq("phone_number_id",phone.id);
   if (activated.error) throw new Error("Assinatura confirmada; reconecte para concluir o registro local.");
-  await client.from("maintenance_audit_logs").insert({actor_id:actorId,event_type:"meta.whatsapp.connected",target_table:"meta_whatsapp_connections",target_id:organizationId,metadata:{waba_id:wabaId,phone_number_id:phoneId}});
-  return { displayPhone:phone.display_phone_number, verifiedName:phone.verified_name };
+  await client.from("maintenance_audit_logs").insert({actor_id:actorId,event_type:"meta.whatsapp.connected",target_table:"meta_whatsapp_connections",target_id:organizationId,metadata:{waba_id:wabaId,phone_number_id:phone.id,coexistence}});
+  if (!coexistence) return { displayPhone:phone.display_phone_number, verifiedName:phone.verified_name, coexistence };
+  // Webhooks are subscribed first so the shared contacts/history reach us.
+  const sync = { contacts: await requestCoexistenceSync(client,config,token,phone.id,"smb_app_state_sync"), history: await requestCoexistenceSync(client,config,token,phone.id,"history") };
+  return { displayPhone:phone.display_phone_number, verifiedName:phone.verified_name, coexistence, sync };
+}
+
+// Meta accepts each sync once, within 24h of onboarding. Claimed before the call and
+// never retried automatically when the outcome is unknown.
+async function requestCoexistenceSync(client: SupabaseClient, config: {graphVersion:string;appSecret:string}, token: string, phoneId: string, type: "smb_app_state_sync"|"history") {
+  const field = type === "history" ? "history_sync_state" : "contacts_sync_state";
+  const claimed = await client.from("meta_whatsapp_connections").update({[field]:"requesting"}).eq("phone_number_id",phoneId).eq("coexistence",true).is(field,null).gt("coexistence_linked_at",new Date(Date.now()-24*3600000).toISOString()).select("phone_number_id").maybeSingle();
+  if (claimed.error || !claimed.data) return "skipped";
+  try {
+    await cloudRequest<{request_id?:string}>(config,token,`${phoneId}/smb_app_data`,{messaging_product:"whatsapp",sync_type:type});
+    await client.from("meta_whatsapp_connections").update({[field]:"requested"}).eq("phone_number_id",phoneId).eq(field,"requesting");
+    return "requested";
+  } catch {
+    await client.from("meta_whatsapp_connections").update({[field]:"uncertain"}).eq("phone_number_id",phoneId).eq(field,"requesting");
+    return "uncertain";
+  }
 }
 
 export async function listOfficialTemplates(client: SupabaseClient, connection: OfficialConnection) {
@@ -87,6 +120,7 @@ export async function createOfficialTemplate(client: SupabaseClient, connection:
 }
 
 export async function registerOfficialNumber(client: SupabaseClient, connection: OfficialConnection, pin: unknown) {
+  if (connection.coexistence) throw new Error("Este número usa o app WhatsApp Business em coexistência e já está ativo. Não registre de novo: isso desconectaria o app do celular.");
   if (typeof pin !== "string" || !/^\d{6}$/.test(pin)) throw new Error("Informe o PIN de seis dígitos da verificação em duas etapas. Ele não será armazenado.");
   const result = await cloudRequest<{success:boolean}>(await officialSettings(client),decryptCredentialValue(connection.encrypted_token),`${connection.phone_number_id}/register`,{messaging_product:"whatsapp",pin});
   if (!result.success) throw new Error("Meta não confirmou o registro do número.");

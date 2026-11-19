@@ -7,6 +7,9 @@ export type Sender = {
   status: string;
   webhook_subscribed: boolean;
   webhook_at: string | null;
+  coexistence?: boolean;
+  history_sync_state?: string | null;
+  contacts_sync_state?: string | null;
 };
 export type Thread = {
   avatar_url?: string | null;

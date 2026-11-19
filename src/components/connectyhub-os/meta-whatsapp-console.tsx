@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { officialTemplatePresets } from "@/lib/meta/whatsapp-workspace-policy";
 import { serviceWindowOpen } from "@/lib/meta/whatsapp-policy";
-import { OfficialSignup } from "./meta-whatsapp-signup";
+import { OfficialSignup, type OfficialSignupResult } from "./meta-whatsapp-signup";
 import {
   OfficialModels,
   OfficialTemplatePreview,
@@ -212,10 +212,17 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
     },
     [endpoint, selectedSender, loadCampaigns],
   );
-  const onConnected = useCallback(async () => {
-    await load();
-    setNotice("Número conectado. Se necessário, finalize a ativação abaixo.");
-  }, [load]);
+  const onConnected = useCallback(
+    async (result: OfficialSignupResult) => {
+      await load();
+      setNotice(
+        result.coexistence
+          ? "Número conectado em coexistência: o app no celular continua ativo. Reconecte agora o WhatsApp Web e o atendimento por QR deste número."
+          : "Número conectado. Se necessário, finalize a ativação abaixo.",
+      );
+    },
+    [load],
+  );
   const changeSender = (value: string) => {
     setSender(value);
     setPhone("");
@@ -501,9 +508,11 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
             />
           </div>
           <p className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">
-            Use números separados do atendimento conectado por QR. Cada conversa
-            e campanha mantém o seu remetente. A conexão de empresas externas
-            depende das permissões aprovadas pela Meta.
+            Escolha “número novo” para um número só da API oficial, ou o número
+            que você já usa no app WhatsApp Business para mantê-lo no celular
+            (coexistência). Respostas automáticas continuam só pelo atendimento
+            por QR; o canal oficial registra conversas e envia campanhas. Cada
+            conversa e campanha mantém o seu remetente.
           </p>
           {data?.connections.map((c) => (
             <button
@@ -566,6 +575,14 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
                   ? new Date(connection.webhook_at).toLocaleString("pt-BR")
                   : "nenhum"}
               </p>
+              {connection.coexistence ? (
+                <p className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
+                  Coexistência com o app WhatsApp Business: não precisa de PIN
+                  nem registro. Contatos:{" "}
+                  {syncLabel(connection.contacts_sync_state)} · Histórico:{" "}
+                  {syncLabel(connection.history_sync_state)}
+                </p>
+              ) : (
               <details className="rounded-xl border p-3">
                 <summary className="cursor-pointer text-sm font-medium">
                   Finalizar ativação de um número novo
@@ -596,6 +613,7 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
                   Registrar número na Cloud API
                 </button>
               </details>
+              )}
               {!disconnect ? (
                 <button
                   className="text-xs text-red-600 underline"
@@ -1349,6 +1367,17 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
   );
 }
 
+function syncLabel(state?: string | null) {
+  return state === "completed" || state === "received"
+    ? "recebido"
+    : state === "declined"
+      ? "não compartilhado no celular"
+      : state === "requested" || state === "requesting"
+        ? "solicitado"
+        : state === "uncertain"
+          ? "sem confirmação da Meta"
+          : "não solicitado";
+}
 function OfficialLeadAvatar({ name, url }: { name: string; url?: string | null }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   return <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-semibold text-slate-600">

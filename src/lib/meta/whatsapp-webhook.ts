@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { officialOptOut, officialPhone } from "./whatsapp-policy";
 import { recordRecipientIdentity } from "./whatsapp-recipient";
 import { officialInboundProfileName } from "./whatsapp-contact-profile";
+import { coexistenceEchoes, coexistenceOffboarded, historySyncOutcome } from "./whatsapp-signup-mode";
 
 type RecordValue = Record<string,unknown>;
 const record = (value:unknown):RecordValue => value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
@@ -15,11 +16,18 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
     for (const change of array(entry.changes)) {
       const value = record(record(change).value);
       const phoneId = String(record(value.metadata).phone_number_id ?? "");
+      if (String(record(change).field) === "account_update" && coexistenceOffboarded(value)) {
+        await offboardCoexistence(client, String(record(value.waba_info).waba_id ?? entry.id ?? ""));
+        continue;
+      }
       if (!phoneId) continue;
-      const result = await client.from("meta_whatsapp_connections").select("organization_id,waba_id").eq("phone_number_id",phoneId).eq("status","connected").maybeSingle();
+      const result = await client.from("meta_whatsapp_connections").select("organization_id,waba_id,coexistence").eq("phone_number_id",phoneId).eq("status","connected").maybeSingle();
       if (result.error) throw new Error("Falha ao localizar conexão WhatsApp.");
       if (!result.data || result.data.waba_id !== String(entry.id)) { unmapped++; continue; }
       const org = result.data.organization_id;
+      if (result.data.coexistence === true) stored += await ingestCoexistenceRecords(client, org, phoneId, value);
+      // Inbound messages are stored for the official inbox only. This pipeline never
+      // starts an AI reply; for a coexistence number the QR attendance answers once.
       for (const messageValue of array(value.messages)) {
         const message = record(messageValue);
         if (typeof message.id !== "string" || typeof message.from !== "string") continue;
@@ -74,4 +82,41 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
     }
   }
   return {stored,unmapped};
+}
+
+// Echoes are messages already sent from the WhatsApp Business app or a companion
+// (including the QR attendance session). They are kept for the official inbox, without
+// CRM archive (the QR channel already records them), opt-out parsing or AI.
+async function ingestCoexistenceRecords(client: SupabaseClient, org: string, phoneId: string, value: RecordValue) {
+  let stored = 0;
+  for (const echo of coexistenceEchoes(value)) {
+    if (echo.timestamp > Date.now()+60000) continue;
+    let phone: string;
+    try { phone = officialPhone(echo.to); } catch { continue; }
+    const saved = await client.from("meta_whatsapp_messages").upsert({organization_id:org,phone_number_id:phoneId,phone,direction:"outbound",message_type:echo.type,text_content:echo.text,content:{source:"business_app_echo"},provider_message_id:echo.id,status:"sent",occurred_at:new Date(echo.timestamp).toISOString()},{onConflict:"phone_number_id,provider_message_id",ignoreDuplicates:true});
+    if (saved.error) throw new Error("Falha ao registrar mensagem enviada pelo app WhatsApp Business.");
+    stored++;
+  }
+  const history = historySyncOutcome(value);
+  if (history) {
+    const saved = await client.from("meta_whatsapp_connections").update({history_sync_state:history}).eq("phone_number_id",phoneId).eq("coexistence",true);
+    if (saved.error) throw new Error("Falha ao registrar sincronização do histórico.");
+  }
+  if (array(value.state_sync).length) {
+    const saved = await client.from("meta_whatsapp_connections").update({contacts_sync_state:"received"}).eq("phone_number_id",phoneId).eq("coexistence",true);
+    if (saved.error) throw new Error("Falha ao registrar sincronização de contatos.");
+  }
+  return stored;
+}
+
+// The business removed the partner or left coexistence in the app: stop campaigns and
+// show the number as disconnected. History is preserved.
+async function offboardCoexistence(client: SupabaseClient, wabaId: string) {
+  if (!/^\d{5,30}$/.test(wabaId)) return;
+  const changed = await client.from("meta_whatsapp_connections").update({status:"disconnected",webhook_subscribed:false}).eq("waba_id",wabaId).eq("coexistence",true).eq("status","connected").select("organization_id,phone_number_id");
+  if (changed.error) throw new Error("Falha ao registrar desconexão da coexistência.");
+  for (const row of changed.data ?? []) {
+    const paused = await client.from("meta_whatsapp_campaigns").update({status:"paused",updated_at:new Date().toISOString()}).eq("organization_id",row.organization_id).eq("phone_number_id",row.phone_number_id).eq("status","running");
+    if (paused.error) throw new Error("Falha ao pausar campanhas do número desconectado.");
+  }
 }

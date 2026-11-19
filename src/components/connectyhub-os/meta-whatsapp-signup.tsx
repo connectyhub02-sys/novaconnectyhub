@@ -1,11 +1,21 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { officialPrimary } from "./meta-whatsapp-types";
+import {
+  officialSignupExtras,
+  officialSignupFinish,
+  type OfficialSignupMode,
+} from "@/lib/meta/whatsapp-signup-mode";
 type Signup = {
   state: string;
+  mode: OfficialSignupMode;
   appId: string;
   configId: string;
   version: string;
+};
+export type OfficialSignupResult = {
+  coexistence?: boolean;
+  sync?: { contacts?: string; history?: string };
 };
 type FacebookSdk = {
   init: (options: Record<string, unknown>) => void;
@@ -34,6 +44,19 @@ async function sdk() {
   if (!window.FB) throw new Error("Conexão Meta indisponível.");
   return window.FB;
 }
+const modes: Array<{ value: OfficialSignupMode; title: string; hint: string }> =
+  [
+    {
+      value: "cloud",
+      title: "Número novo",
+      hint: "Sem WhatsApp no celular. Fica só na API oficial.",
+    },
+    {
+      value: "coexistence",
+      title: "Número que já uso no app WhatsApp Business",
+      hint: "Continua funcionando no celular. A Meta pede para escanear um QR no app.",
+    },
+  ];
 export function OfficialSignup({
   admin,
   ready,
@@ -42,15 +65,17 @@ export function OfficialSignup({
 }: {
   admin: boolean;
   ready: boolean;
-  onConnected: () => Promise<void>;
+  onConnected: (result: OfficialSignupResult) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [signup, setSignup] = useState<Signup | null>(null),
+    [mode, setMode] = useState<OfficialSignupMode>("cloud"),
     [busy, setBusy] = useState(false);
   const pending = useRef<{
     code?: string;
     wabaId?: string;
     phoneNumberId?: string;
+    coexistence?: boolean;
     finishing?: boolean;
   }>({});
   const endpoint = `/api/dashboard/integrations/meta/whatsapp/signup${admin ? "?admin=1" : ""}`;
@@ -69,19 +94,23 @@ export function OfficialSignup({
   );
   const finish = useCallback(async () => {
     const p = pending.current;
-    if (!signup || !p.code || !p.wabaId || !p.phoneNumberId || p.finishing)
-      return;
+    // Coexistence onboarding may return only the WABA; the server finds the
+    // number that Meta marks as being on the WhatsApp Business app.
+    const phoneReady =
+      Boolean(p.phoneNumberId) ||
+      (signup?.mode === "coexistence" && p.coexistence === true);
+    if (!signup || !p.code || !p.wabaId || !phoneReady || p.finishing) return;
     p.finishing = true;
     setBusy(true);
     try {
-      await post({
+      const result = await post({
         action: "finish",
         state: signup.state,
         code: p.code,
         wabaId: p.wabaId,
-        phoneNumberId: p.phoneNumberId,
+        ...(p.phoneNumberId ? { phoneNumberId: p.phoneNumberId } : {}),
       });
-      await onConnected();
+      await onConnected(result);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Não foi possível conectar.");
     } finally {
@@ -107,13 +136,16 @@ export function OfficialSignup({
         return;
       }
       if (v?.type !== "WA_EMBEDDED_SIGNUP") return;
-      if (v.event === "FINISH") {
+      const done = officialSignupFinish(v);
+      if (done) {
         pending.current = {
           ...pending.current,
-          wabaId: v.data?.waba_id,
-          phoneNumberId: v.data?.phone_number_id,
+          wabaId: done.wabaId,
+          phoneNumberId: done.phoneNumberId,
+          coexistence: done.coexistence,
         };
         void finish();
+        return;
       }
       if (["CANCEL", "ERROR"].includes(v.event)) {
         setBusy(false);
@@ -127,7 +159,7 @@ export function OfficialSignup({
   async function start() {
     setBusy(true);
     try {
-      const config = await post({ action: "start" });
+      const config = await post({ action: "start", mode });
       const fb = await sdk();
       fb.init({
         appId: config.appId,
@@ -135,7 +167,7 @@ export function OfficialSignup({
         cookie: false,
         xfbml: false,
       });
-      setSignup(config);
+      setSignup({ ...config, mode: config.mode === "coexistence" ? "coexistence" : "cloud" });
     } catch (e) {
       onError(e instanceof Error ? e.message : "Falha na conexão.");
     } finally {
@@ -159,26 +191,57 @@ export function OfficialSignup({
         config_id: signup.configId,
         response_type: "code",
         override_default_response_type: true,
-        extras: {
-          setup: {},
-          featureType: "",
-          sessionInfoVersion: "3",
-          version: "v4",
-        },
+        extras: officialSignupExtras(signup.mode),
       },
     );
   }
   return (
-    <button
-      className={officialPrimary}
-      disabled={!ready || busy}
-      onClick={() => (signup ? authorize() : void start())}
-    >
-      {busy
-        ? "Preparando…"
-        : signup
-          ? "Autorizar na Meta"
-          : "+ Conectar WhatsApp"}
-    </button>
+    <div className="flex flex-col items-stretch gap-2 sm:items-end">
+      {!signup && (
+        <fieldset
+          className="grid gap-2 sm:max-w-md"
+          disabled={!ready || busy}
+          aria-label="Tipo de número"
+        >
+          {modes.map((m) => (
+            <label
+              key={m.value}
+              className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-left text-sm ${mode === m.value ? "border-blue-400 bg-blue-50/50" : "border-slate-200"}`}
+            >
+              <input
+                type="radio"
+                name="official-signup-mode"
+                className="mt-1"
+                checked={mode === m.value}
+                onChange={() => setMode(m.value)}
+              />
+              <span>
+                <strong className="block">{m.title}</strong>
+                <span className="text-xs text-slate-500">{m.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {signup?.mode === "coexistence" && (
+        <p className="max-w-md text-xs text-slate-500">
+          Na janela da Meta, escolha conectar o WhatsApp Business existente.
+          Escaneie o QR e confirme no celular; os códigos aparecem só no seu
+          aparelho. Depois, os aparelhos conectados (WhatsApp Web e o
+          atendimento por QR) precisam ser conectados de novo.
+        </p>
+      )}
+      <button
+        className={officialPrimary}
+        disabled={!ready || busy}
+        onClick={() => (signup ? authorize() : void start())}
+      >
+        {busy
+          ? "Preparando…"
+          : signup
+            ? "Autorizar na Meta"
+            : "+ Conectar WhatsApp"}
+      </button>
+    </div>
   );
 }

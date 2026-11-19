@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     const connections = await auth.client
       .from("meta_whatsapp_connections")
       .select(
-        "phone_number_id,display_phone,verified_name,label,status,webhook_subscribed,webhook_at",
+        "phone_number_id,display_phone,verified_name,label,status,webhook_subscribed,webhook_at,coexistence,history_sync_state,contacts_sync_state",
       )
       .eq("organization_id", auth.organizationId)
       .order("connected_at");
