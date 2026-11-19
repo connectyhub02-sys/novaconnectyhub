@@ -1,5 +1,38 @@
 # Estado operacional da ConnectyHub
 
+## Coexistência pelo painel — publicada, cadastro real pendente, 19/11/2026
+
+- `Conectar WhatsApp` em `/admin/meta` e `/dashboard/chat-meta` oferece número novo ou
+  número que já está no app WhatsApp Business (Embedded Signup v4,
+  `whatsapp_business_app_onboarding`). Coexistência exige `is_on_biz_app=true` + `CLOUD_API`
+  segundo a Meta, nunca chama `/register`, aceita a instância QR da própria empresa e pede
+  uma vez a sincronização de contatos e histórico em até 24 h. Ecos do celular viram só
+  registro na caixa oficial, sem CRM, opt-out ou IA. O canal oficial não responde
+  automaticamente; a Eliane/UAZAPI continua sendo a única resposta de IA.
+- Migration **0224** aplicada e registrada às ~16h30 BRT, com backup do schema
+  (`/opt/connectyhub/backups/migrations/pre-0224-20261119-coex-schema.sql`), ensaio com
+  rollback e grants conferidos (anon/authenticated sem acesso). Conexão do remetente de
+  teste preservada (`coexistence=false`). Antes disso, a 0223 já existia no banco sem registro
+  em `schema_migrations`; não foi alterada.
+- Release **`e46f4ecd46908b770aa0d3938967ffb4fed06423`** (coexistência `36cd0b70` + merge de
+  `codex/home-whatsapp-instancia`) ativa no **slot b**; retorno: `5d83d650` no slot a. Smoke no
+  candidato e por HTTPS: health/SHA, 20 assets, painéis 307, APIs/cadastro 401, webhook sem
+  assinatura 401, `/contato/whatsapp` → `wa.me/5511910188233`, Inngest autenticado/61
+  funções, bundle com a nova opção. Builder parado.
+- Testes: 12 novos + 64 Meta/home dirigidos passaram; lint limpo; `tsc` só com o erro
+  antigo de `tests/api-meta-analytics.test.ts`. Suíte completa: 4.618 aprovados e 23 falhas.
+  12 arquivos falham igual na base `9f82d38e`; os outros 5 passam isolados (instabilidade
+  por carga).
+- **Ainda não comprovado:** campos do webhook do app (`smb_message_echoes`, `history`,
+  `smb_app_state_sync`, `account_update`, registrados como assinados em 09/11) e status de Tech
+  Provider não foram relidos ao vivo. A leitura por credenciais de produção foi bloqueada pela
+  política de permissões, e o navegador embutido não tem sessão Meta. Falta o titular fazer o
+  cadastro de +55 11 91018-8233 pela opção nova (QR e códigos no celular dele) e confirmar
+  `is_on_biz_app=true`/`CLOUD_API`. Depois disso, reconectar o QR da Eliane/UAZAPI e o WhatsApp
+  Web, porque a Meta desvincula os aparelhos conectados. Forma de pagamento do WhatsApp Manager
+  ainda pendente; nenhuma campanha enviada.
+- [Implementação, requisitos Meta e limites](meta-coexistencia-painel-2026-11-19.md).
+
 ## Número público único +55 11 91018-8233 — 19/11/2026
 
 Decisão do titular registrada em [contexto-projeto.md](contexto-projeto.md). Verificado nesta data:
