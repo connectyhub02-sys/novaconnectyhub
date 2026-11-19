@@ -103,6 +103,15 @@ Preservar dois números se a combinação comprometer estabilidade ou experiênc
 Testar conexões/reconexões, recebimento nos dois canais, deduplicação, ausência
 de respostas em duplicidade/loops, histórico e recibos antes de ofertar a opção.
 
+**Decisão do titular em 19/11/2026 (substitui, para a própria ConnectyHub, os dois
+números acima):** um único número, +55 11 91018-8233, para atendimento no Global
+(UAZAPI), Google, Facebook, Instagram, app WhatsApp Business e disparos pela Cloud API
+em coexistência. Ciente de que a combinação UAZAPI + coexistência no mesmo número não
+estava homologada; validar deduplicação, ecos e ausência de respostas duplicadas antes
+de liberar campanhas. O link público de WhatsApp do site segue a instância de
+atendimento conectada no admin. Clientes devem poder conectar em coexistência pelo
+próprio painel. Estado verificado no documento operacional.
+
 O titular confirmou que hoje a ConnectyHub usa somente o próprio portfólio Meta
 e ainda vai começar a gerenciar clientes. Autorizou o aceite como Tech Provider
 independente após ciência da restrição de revenda nos termos atuais. O desejo de
