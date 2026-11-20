@@ -2,8 +2,10 @@
 
 ## Coexistência pelo painel — publicada, cadastro real pendente, 19/11/2026
 
-- **Atual:** release `b0bbedcf5d16a3e4a50e7113a67e82bca824f6c9` ativa no **slot b** desde 19/11 ~23h20 BRT;
-  retorno `3f4edc61` (orientações de coexistência) no slot a. Menu lateral do cliente e do admin com uma
+- **Atual:** release `d6405a61fd532ed5d945d419616fa0dd118c291c` ativa no **slot a** desde 19/11 ~23h40 BRT;
+  retorno `b0bbedcf` no slot b. Na página de agentes (cliente e admin) saíram a barra de resumo de 11 campos
+  e o card de três passos depois de configurado; “Salvar tudo” fica fixo na linha Prompt/Qualificação/
+  Comportamento, com aviso curto só quando há pendências. Mesmo smoke aprovado. Release anterior `b0bbedcf`: Menu lateral do cliente e do admin com uma
   única entrada **Atendimento**: WhatsApp oficial e Direct e Messenger ficam só como abas dentro dela, com
   ícones das redes, e continuam na busca do menu. Smoke no candidato (health/SHA, 20 assets, 307/401,
   Inngest assinado 61 funções, opção de coexistência) e HTTPS aprovados. Conferência visual logada pendente:
