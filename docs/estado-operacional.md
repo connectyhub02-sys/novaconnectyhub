@@ -1,5 +1,18 @@
 # Estado operacional da ConnectyHub
 
+## Admin: menu enxuto, Conexões dos clientes corrigida, setores no cadastro de agente — 20/11/2026
+
+- **Atual:** release `d4968cd4b3b76974cfebca1504f8782355d2c238` ativa no **slot a**; retorno `540c3f59` no slot b. Smoke aprovado.
+- **Conexões dos clientes:** “fetch failed” em todas as tabelas era a URL do PostgREST com 528 ids em um `.in()`;
+  agora em lotes de 80 (`inOrganizationBatches`). Conferido logado: 2 conexões ativas, 1 pendência, 3 alertas.
+- **Menu admin:** saem Resumo executivo, Pendências e aprovações e Setores (páginas seguem acessíveis por busca/links).
+  Cadastro de agente interno sugere setores existentes e reaproveita setor ativo com o mesmo nome.
+- **Observação:** 583 organizações no banco, 528 com slug `empresa-cliente-%`, para 26 usuários com vínculo —
+  provavelmente sobras de testes de cadastro. Nada apagado.
+- **Agentes internos:** todos pausados/needs_review. Avaliados OpenBot (licença não comercial, sem API) e OpenClaw (MIT,
+  self-hosted, cron/webhooks/MCP); proposta de piloto OpenClaw isolado aguardando decisão do titular. Memória e eventos:
+  1.200 itens; proposta de lista compacta paginada com filtros, ainda não feita.
+
 ## Google: conexão do admin, conta Ads da ConnectyHub e verificação enviada — 20/11/2026
 
 - **Atual:** release `540c3f59717482a566a38cbdaba383f63d3aed43` ativa no **slot b**; retorno `c0e9f9d7` no slot a (texto de
