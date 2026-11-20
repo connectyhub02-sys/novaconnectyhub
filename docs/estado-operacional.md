@@ -1,5 +1,33 @@
 # Estado operacional da ConnectyHub
 
+## Conexões unificadas, Google Ads/Analytics e tag Google nas lojas — 20/11/2026
+
+- **Atual:** release `4e3b7a9377833c7754f63e5c0f41c31d1b10cb45` ativa no **slot b** (~04h20 BRT); retorno `4fd0de00` no slot a.
+  Smoke candidato/HTTPS aprovado (health/SHA, 20 assets, 307/401, Inngest 61 funções, coexistência). Migration
+  **0225** `google_store_tags` aplicada e registrada; backup de schema
+  `/opt/connectyhub/backups/migrations/pre-0225-20261120T040626Z-google-store-tags.sql`; anon sem acesso.
+- **Menu do cliente:** Conta = Empresa, Conexões, Minhas compras. Dados e cobrança, Créditos e recargas e Planos são abas
+  de Minha conta (menu do e-mail/avatar; selo de créditos abre Créditos e recargas). `/dashboard/meta` e
+  `/dashboard/redes-sociais/contas` redirecionam para Conexões (mantêm `?connection=` do OAuth social). Admin:
+  “Conexões sociais” virou “Conexões”. Conexões tem quadros por serviço; diagnósticos Meta só para admin da plataforma.
+- **Meta (lido no App Review em 20/11):** aprovados `ads_management`, `ads_read`, `ads_mcp_management`,
+  `business_management`, `pages_manage_ads`, `leads_retrieval`, `instagram_basic`, `instagram_manage_messages`,
+  `pages_messaging`, WhatsApp. Em revisão (orgânico/comentários): `instagram_content_publish`, `pages_manage_posts`,
+  `instagram_manage_comments`, `pages_manage_engagement`, `pages_read_user_content`. Marketing API Access Tier: acesso
+  limitado (Standard ainda não solicitado). Criação de campanha Meta existe (`campaign-execution.ts`); Google não.
+- **Google (projeto gen-lang-client-0089240657, em produção, marca verificada):** ativadas Google Ads API e Analytics
+  Admin API (Data e Search Console já ativas); URI `/api/dashboard/integrations/google/callback` adicionada ao cliente
+  OAuth “ConnectyHub YouTube”, reaproveitado pelo código quando não há GOOGLE_ADS_CLIENT_ID; escopos `adwords` e
+  `analytics.readonly` (sensíveis, **aprovação pendente**) e `webmasters.readonly` (não sensível) salvos com justificativa,
+  **sem envio para verificação** (falta vídeo de demonstração). Até aprovar: tela “app não verificado” e limite de 100
+  usuários. Developer token aposentado pelo Google em 09/09/2026; código não exige mais. **Nível de acesso Google Ads API:
+  Teste** — pedido de Explorer não enviado (clique bloqueado para o agente; titular precisa clicar em
+  Google Ads API → Níveis de acesso → Inscrever-se). Billing do projeto não conferido. Console mostra aviso de possível
+  violação de política em vários projetos da conta (Protasio Motos e HoraSpace suspensos) — não investigado.
+- **Tag Google nas lojas:** cliente informa G-/AW-/rótulo em Conexões; loja carrega gtag só após consentimento, sem
+  caminhos de checkout; eventos page_view, view_item, add_to_cart, begin_checkout e conversão escolhida. Compra via
+  servidor (como CAPI da Meta) ainda não existe para Google. Não testado com loja real.
+
 ## Coexistência pelo painel — publicada, cadastro real pendente, 19/11/2026
 
 - **Atual:** release `372821670f36e830d083d53edb9ec1b45b3594e7` ativa no **slot b** desde 20/11 ~00h BRT; retorno
