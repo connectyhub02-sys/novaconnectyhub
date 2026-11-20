@@ -298,7 +298,15 @@ export async function createPlatformWhatsappConsoleSectorAgent(input: {
   const client = input.client ?? createServiceClient();
   // Validate before creating a sector so an invalid contact cannot leave an orphan.
   internalAgentResponsiblePatch(input.responsibleHumans, defaultWhatsappBehaviorConfig);
-  const sector = await createPlatformWhatsappSector({
+  // Sectors are created from the agent form: reuse an active sector with the same name.
+  const typedName = input.sectorName.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+  const sectors = typedName
+    ? await client.from("platform_whatsapp_sectors").select("id,name").eq("status", "active")
+    : { data: [], error: null };
+  if (sectors.error) throw new Error("Nao foi possivel consultar os setores.");
+  const existing = ((sectors.data ?? []) as Array<{ id: string; name: string }>)
+    .find((row) => row.name.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR") === typedName);
+  const sector = existing ?? await createPlatformWhatsappSector({
     name: input.sectorName,
     description: input.description,
     userId: input.userId,

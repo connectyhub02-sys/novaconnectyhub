@@ -365,10 +365,13 @@ export const clientAccountTabs: PanelContextLink[] = [
   { href: "/dashboard/creditos", label: "Créditos e recargas" },
   { href: "/dashboard/planos", label: "Planos" },
 ];
+/** Admin pages kept reachable (search, Início cards, direct links) but out of the sidebar. */
+export const adminSidebarHidden = ["/admin/ceo", "/admin/aprovacoes", "/admin/setores"];
 /** Sidebar shows one Atendimento entry; other channels stay reachable by its tabs and by search. */
 export function sidebarNavigation<T extends { href: string }>(sections: { label: string; items: T[] }[], mode: PanelMode) {
   const [primary, ...secondary] = attendanceChannels(mode).map(c => c.href);
-  const hidden = new Set<string>(mode === "client" ? clientAccountTabs.map(t => t.href) : []);
+  // Admin: Início already summarizes executive view and approvals; sectors are created with internal agents.
+  const hidden = new Set<string>(mode === "client" ? clientAccountTabs.map(t => t.href) : adminSidebarHidden);
   if (sections.some(s => s.items.some(i => i.href === primary))) secondary.forEach(h => hidden.add(h));
   return sections.map(s => ({ ...s, items: s.items.filter(i => !hidden.has(i.href)) })).filter(s => s.items.length);
 }

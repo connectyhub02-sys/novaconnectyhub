@@ -210,7 +210,7 @@ type IntegrationActionLogRow = {
   created_at: string | null;
 };
 
-type QueryResult<T> = {
+export type QueryResult<T> = {
   ready: boolean;
   rows: T[];
   error: string | null;
@@ -287,11 +287,15 @@ export async function getAdminClientIntegrationsOverview(
   const organizationIds = organizations.rows.map((company) => company.id);
   const [integrations, credentials, webhooks, payments, actionLogs] = organizationIds.length > 0
     ? await Promise.all([
-      loadOrganizationIntegrations(client, organizationIds),
-      loadIntegrationCredentials(client, organizationIds),
-      loadWebhookEndpoints(client, organizationIds),
-      loadPaymentIntegrations(client, organizationIds),
-      loadIntegrationActionLogs(client, organizationIds),
+      // Hundreds of client ids in one ".in()" overflow the gateway URL ("fetch failed"): query in batches.
+      inOrganizationBatches(organizationIds, (ids) => loadOrganizationIntegrations(client, ids)),
+      inOrganizationBatches(organizationIds, (ids) => loadIntegrationCredentials(client, ids)),
+      inOrganizationBatches(organizationIds, (ids) => loadWebhookEndpoints(client, ids)),
+      inOrganizationBatches(organizationIds, (ids) => loadPaymentIntegrations(client, ids)),
+      inOrganizationBatches(organizationIds, (ids) => loadIntegrationActionLogs(client, ids)).then((result) => ({
+        ...result,
+        rows: [...result.rows].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 160),
+      })),
     ])
     : [
       readyResult<OrganizationIntegrationRow>(),
@@ -436,6 +440,23 @@ function buildEmptyOverview(
     recentEvents: [],
     alerts: [],
   };
+}
+
+export const organizationBatchSize = 80;
+
+/** Runs a per-company query in batches small enough for the PostgREST URL, merging the rows. */
+export async function inOrganizationBatches<T>(
+  organizationIds: string[],
+  run: (ids: string[]) => Promise<QueryResult<T>>,
+): Promise<QueryResult<T>> {
+  const batches: string[][] = [];
+  for (let index = 0; index < organizationIds.length; index += organizationBatchSize) {
+    batches.push(organizationIds.slice(index, index + organizationBatchSize));
+  }
+  const results = await Promise.all(batches.map(run));
+  const failed = results.find((result) => !result.ready);
+  if (failed) return failed;
+  return { ready: true, rows: results.flatMap((result) => result.rows), error: null };
 }
 
 function readyResult<T>(): QueryResult<T> {

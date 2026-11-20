@@ -22,7 +22,9 @@ describe("panel navigation", () => {
     const client=[{label:"Atendimento",items:[{href:"/dashboard/whatsapp",label:"Agentes"},{href:"/dashboard/atendimento",label:"Atendimento"},{href:"/dashboard/chat-meta",label:"WhatsApp oficial"},{href:"/dashboard/meta/atendimento",label:"Direct"}]}];
     expect(sidebarNavigation(client,"client").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/dashboard/whatsapp","/dashboard/atendimento"]);
     const admin=[{label:"Operação",items:[{href:"/admin/whatsapp/atendimento",label:"Atendimento"},{href:"/admin/meta",label:"WhatsApp oficial"},{href:"/admin/meta/atendimento",label:"Direct"},{href:"/admin/setores",label:"Setores"}]}];
-    expect(sidebarNavigation(admin,"admin").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/admin/whatsapp/atendimento","/admin/setores"]);
+    // Setores is created from the internal agent form, so it leaves the admin sidebar too.
+    expect(sidebarNavigation(admin,"admin").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/admin/whatsapp/atendimento"]);
+    expect(sidebarNavigation([{label:"Início",items:["/admin","/admin/ceo","/admin/aprovacoes"].map(href=>({href,label:href}))}],"admin")[0].items.map(i=>i.href)).toEqual(["/admin"]);
     // Without the main entry, the other channels stay visible instead of disappearing.
     expect(sidebarNavigation([{label:"Atendimento",items:[{href:"/dashboard/chat-meta",label:"WhatsApp oficial"}]}],"client")[0].items).toHaveLength(1);
     expect(sidebarActiveHref("/dashboard/chat-meta","client")).toBe("/dashboard/atendimento");

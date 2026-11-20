@@ -2859,10 +2859,15 @@ function ClientAgentsManager({
               <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                placeholder="Ex: Vendas, Suporte, Financeiro"
+                placeholder="Escolha um setor ou digite um novo"
+                list="internal-agent-sectors"
                 value={sectorName}
                 onChange={(event) => onSectorNameChange(event.target.value)}
               />
+              {/* Existing sectors are suggested; a new name creates the sector with the agent. */}
+              <datalist id="internal-agent-sectors">
+                {companies.map((sector) => <option key={sector.id} value={sector.name} />)}
+              </datalist>
             </label>
           </div>
           <label className="block">
