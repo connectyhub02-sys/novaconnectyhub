@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess } from "@/lib/billing/trial";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+// Platform admins act on ConnectyHub's internal company, exactly like the Meta connection.
+import { getMetaWorkspace as getCurrentWorkspace, requireMetaCompanyAccess as requireClientCompanyAccess } from "@/lib/meta/company-access";
 import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope";
 import {
   buildGoogleAuthorizationUrl,
@@ -10,7 +11,6 @@ import {
   readOAuthReturnReason,
   upsertGuidedOAuthConnection,
 } from "@/lib/client-os/guided-oauth";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";

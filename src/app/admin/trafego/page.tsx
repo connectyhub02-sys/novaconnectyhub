@@ -4,6 +4,7 @@ import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { AdminTrafficConsole } from "@/components/connectyhub-os/admin-traffic-console";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { getAdminTrafficOverview } from "@/lib/traffic/admin-traffic";
+import { getMetaWorkspace } from "@/lib/meta/company-access";
 
 export const metadata: Metadata = {
   title: "Trafego | Admin OS",
@@ -18,7 +19,7 @@ export default async function AdminTrafficPage() {
     return <AccessDenied />;
   }
 
-  const overview = await getAdminTrafficOverview(workspace.organization?.id ?? null);
+  const overview = await getAdminTrafficOverview(await getMetaWorkspace().then(w => w?.organization?.id ?? null, () => null));
 
   return <AdminTrafficConsole overview={overview} userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} />;
 }

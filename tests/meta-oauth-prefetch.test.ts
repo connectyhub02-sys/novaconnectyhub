@@ -31,10 +31,9 @@ describe("Meta OAuth navigation", () => {
       "src/app/api/dashboard/integrations/google/connect/route.ts", {
         "next/server": { NextResponse },
         "@/lib/billing/trial": {},
-        "@/lib/client-os/companies": {},
+        "@/lib/meta/company-access": { getMetaWorkspace: workspace },
         "@/lib/client-os/dashboard-route-scope": {},
         "@/lib/client-os/guided-oauth": {},
-        "@/lib/supabase/profile": { getCurrentWorkspace: workspace },
         "@/lib/supabase/service": {},
       });
     const response = await route.GET(new NextRequest("https://example.test/api/dashboard/integrations/google/connect", { headers: { "next-router-prefetch": "1" } }));
