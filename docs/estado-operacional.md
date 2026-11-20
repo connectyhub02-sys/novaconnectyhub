@@ -14,8 +14,9 @@
   `Caddyfile.before-betel-removal-20261120`, validado e recarregado); 6 arquivos em `/opt/connectyhub-managed-portal/` apagados;
   menções no código removidas. **Empresa Betel Leiloes (66cb4c5a…) apagada** com todos os dados (conversas, leads,
   faturas, pagamentos, créditos etc.), após backup de 50 tabelas em
-  `/opt/connectyhub/backups/betel-leiloes-20261120.tar.gz` (chmod 600). Conta de login do membro (d***@gmail.com) mantida,
-  sem empresa; arquivos em storage/R2 da Betel não verificados.
+  `/opt/connectyhub/backups/betel-leiloes-20261120.tar.gz` (chmod 600). Conta de login do dono (d***@gmail.com,
+  c3deb3ba…) também apagada a pedido do titular, com perfil, sessões e identidade (perfil em
+  `betel-leiloes-20261120-profile.csv`). Arquivos em storage/R2 da Betel não verificados.
 - **Empresas repetidas:** 528 `empresa-cliente-%` = 5 usuários Gmail com 103 empresas cada, todas criadas em 29/06/2026
   e inativas — provável erro em lote. Nada apagado; investigar a origem.
 
