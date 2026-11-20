@@ -21,8 +21,12 @@
   `analytics.readonly` (sensíveis, **aprovação pendente**) e `webmasters.readonly` (não sensível) salvos com justificativa,
   **sem envio para verificação** (falta vídeo de demonstração). Até aprovar: tela “app não verificado” e limite de 100
   usuários. Developer token aposentado pelo Google em 09/09/2026; código não exige mais. **Nível de acesso Google Ads API:
-  Teste** — pedido de Explorer não enviado (clique bloqueado para o agente; titular precisa clicar em
-  Google Ads API → Níveis de acesso → Inscrever-se). Billing do projeto não conferido. Console mostra aviso de possível
+  **Explorer** aprovado em 20/11 (~04h40 BRT), após pedido enviado pelo agente com autorização do titular: contas de
+  produção, 2.880 operações/dia, gestão de campanhas e relatórios. Basic não pedido: projeto **sem conta de faturamento**
+  (nenhuma conta de faturamento ativa no Google Cloud; criar exige cartão do titular; vincular ao projeto Gemini muda
+  a Gemini API para uso pago). Vídeo de demonstração não gravado: a conta Google da ConnectyHub só acessa contas Ads da
+  Vision (Vision Humo, Vision Business Group), sem conta Ads própria; admin de plataforma é redirecionado para /admin e o
+  Google Ads do admin ainda lê refresh token da manutenção (mensagens citam Developer Token). Console mostra aviso de possível
   violação de política em vários projetos da conta (Protasio Motos e HoraSpace suspensos) — não investigado.
 - **Tag Google nas lojas:** cliente informa G-/AW-/rótulo em Conexões; loja carrega gtag só após consentimento, sem
   caminhos de checkout; eventos page_view, view_item, add_to_cart, begin_checkout e conversão escolhida. Compra via
