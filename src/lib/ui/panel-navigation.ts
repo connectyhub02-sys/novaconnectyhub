@@ -61,8 +61,8 @@ export const panelNavigation: Record<string, NavigationDefinition> = {
   },
   "/admin/redes-sociais/contas": {
     "group": "Sistema",
-    "label": "Conexões sociais",
-    "aliases": "Contas conectadas Redes sociais"
+    "label": "Conexões",
+    "aliases": "Conexões sociais Contas conectadas Redes sociais YouTube TikTok Instagram Facebook"
   },
   "/admin/trafego/meta-ads": {
     "group": "Divulgação",
@@ -359,11 +359,18 @@ export function attendanceChannels(mode: PanelMode): PanelContextLink[] {
     { href: base[2], label: "Direct e Messenger", icon: "meta-direct" },
   ];
 }
+/** Account pages open from Minha conta (identity menu, credits chip) and its tabs, not the sidebar. */
+export const clientAccountTabs: PanelContextLink[] = [
+  { href: "/dashboard/minha-conta", label: "Dados e cobrança" },
+  { href: "/dashboard/creditos", label: "Créditos e recargas" },
+  { href: "/dashboard/planos", label: "Planos" },
+];
 /** Sidebar shows one Atendimento entry; other channels stay reachable by its tabs and by search. */
 export function sidebarNavigation<T extends { href: string }>(sections: { label: string; items: T[] }[], mode: PanelMode) {
   const [primary, ...secondary] = attendanceChannels(mode).map(c => c.href);
-  if (!sections.some(s => s.items.some(i => i.href === primary))) return sections;
-  return sections.map(s => ({ ...s, items: s.items.filter(i => !secondary.includes(i.href)) })).filter(s => s.items.length);
+  const hidden = new Set<string>(mode === "client" ? clientAccountTabs.map(t => t.href) : []);
+  if (sections.some(s => s.items.some(i => i.href === primary))) secondary.forEach(h => hidden.add(h));
+  return sections.map(s => ({ ...s, items: s.items.filter(i => !hidden.has(i.href)) })).filter(s => s.items.length);
 }
 /** The sidebar entry to highlight: any attendance channel highlights Atendimento. */
 export function sidebarActiveHref(active: string, mode: PanelMode) {
@@ -375,8 +382,7 @@ export function sidebarActiveHref(active: string, mode: PanelMode) {
 export function panelContextLinks(active: string, mode: PanelMode): { label: string; items: PanelContextLink[] } | null {
   const channels=attendanceChannels(mode);
   if(channels.some(x=>x.href===active))return {label:"Canais de atendimento",items:channels};
-  if(mode==="client"&&["/dashboard/integracoes","/dashboard/meta","/dashboard/redes-sociais/contas"].includes(active))return {label:"Conexões",items:[{href:"/dashboard/integracoes",label:"Todas as conexões"},{href:"/dashboard/redes-sociais/contas",label:"Redes sociais"},{href:"/dashboard/meta",label:"Permissões Meta"}]};
-  if(mode==="client"&&["/dashboard/minha-conta","/dashboard/creditos","/dashboard/planos","/dashboard/meus-produtos","/dashboard/empresa"].includes(active))return {label:"Sua conta",items:[{href:"/dashboard/minha-conta",label:"Dados e cobrança"},{href:"/dashboard/creditos",label:"Saldo"},{href:"/dashboard/planos",label:"Plano"},{href:"/dashboard/meus-produtos",label:"Compras"},{href:"/dashboard/empresa",label:"Empresa"}]};
+  if(mode==="client"&&clientAccountTabs.some(x=>x.href===active))return {label:"Minha conta",items:clientAccountTabs};
   if(mode==="admin"&&["/admin/financeiro","/admin/planos"].includes(active))return {label:"Financeiro",items:[{href:"/admin/financeiro",label:"Visão geral"},{href:"/admin/planos",label:"Planos"},{href:"/admin/automacoes#financeiro",label:"Cobrança e renovação"}]};
   return null;
 }

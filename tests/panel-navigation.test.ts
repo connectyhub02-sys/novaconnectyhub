@@ -30,6 +30,15 @@ describe("panel navigation", () => {
     expect(sidebarActiveHref("/admin/meta/publicacoes","admin")).toBe("/admin/meta/publicacoes");
     expect(panelContextLinks("/admin/meta","admin")?.items.map(i=>i.icon)).toEqual(["whatsapp","whatsapp-official","meta-direct"]);
   });
+  it("keeps account pages out of the client sidebar, as tabs of Minha conta, with Minhas compras kept", () => {
+    const conta=[{label:"Conta",items:["/dashboard/empresa","/dashboard/integracoes","/dashboard/creditos","/dashboard/planos","/dashboard/meus-produtos","/dashboard/minha-conta"].map(href=>({href,label:href}))}];
+    expect(sidebarNavigation(conta,"client").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/dashboard/empresa","/dashboard/integracoes","/dashboard/meus-produtos"]);
+    expect(panelContextLinks("/dashboard/creditos","client")?.items.map(i=>i.label)).toEqual(["Dados e cobrança","Créditos e recargas","Planos"]);
+    expect(panelContextLinks("/dashboard/meus-produtos","client")).toBeNull();
+    expect(panelContextLinks("/dashboard/integracoes","client")).toBeNull();
+    // Admin keeps its own account links; only the attendance channels collapse.
+    expect(sidebarNavigation([{label:"Conta",items:[{href:"/dashboard/meus-produtos",label:"Compras"}]}],"admin")[0].items).toHaveLength(1);
+  });
   it("keeps restricted navigation restricted and merges only the existing maintenance alias", () => {
     const restricted=[{href:"/dashboard/meus-produtos",label:"Compras"},{href:"/dashboard/planos",label:"Plano"}];
     expect(groupPanelNavigation([{label:"Conta",items:restricted}],"client").flatMap(s=>s.items).map(i=>i.href)).toEqual(restricted.map(i=>i.href));

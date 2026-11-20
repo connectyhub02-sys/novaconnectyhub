@@ -19,6 +19,8 @@ import { socialAreas, socialNavigation, socialPath, type SocialArea, type Social
 export async function SocialWorkspacePage({ shell, area, outcome }: { shell: SocialShell; area: string; outcome?: string }) {
   await connection();
   if (!socialAreas.includes(area as SocialArea)) notFound();
+  // Client connected accounts moved into Conexões; keep OAuth outcomes and old links working.
+  if (shell === "client" && area === "contas") redirect(`/dashboard/integracoes${outcome ? `?connection=${encodeURIComponent(outcome)}` : ""}#redes-sociais`);
   const workspace = shell === "admin" ? await getMetaWorkspace() : await getCurrentWorkspace();
   if (!workspace) redirect(`/login?next=${encodeURIComponent(socialPath(shell, area as SocialArea))}`);
   if (shell === "admin" && !workspace.profile.isPlatformAdmin) return <AccessDenied/>;
@@ -41,7 +43,7 @@ export async function SocialWorkspacePage({ shell, area, outcome }: { shell: Soc
     }
   }
   return <ConnectyShell mode={shell} activeHref={socialPath(shell, area as SocialArea)} isPlatformAdmin={workspace.profile.isPlatformAdmin} userAvatarUrl={workspace.profile.avatarUrl} userLabel={workspace.profile.email ?? undefined} workspaceName={company.name}>
-    <nav aria-label="Redes sociais" className="mb-5 flex flex-wrap gap-2">{socialNavigation(shell).map(item => <Link key={item.key} href={item.href} aria-current={area === item.key ? "page" : undefined} className={`rounded-xl border px-3 py-2 text-sm ${area === item.key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}>{item.label}</Link>)}</nav>
+    <nav aria-label="Redes sociais" className="mb-5 flex flex-wrap gap-2">{socialNavigation(shell).filter(item => shell === "admin" || item.key !== "contas").map(item => <Link key={item.key} href={item.href} aria-current={area === item.key ? "page" : undefined} className={`rounded-xl border px-3 py-2 text-sm ${area === item.key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}>{item.label}</Link>)}</nav>
     {shell === "admin" && <p className="mb-4 text-sm text-slate-500">Operação própria · {company.name}</p>}
     {content}
   </ConnectyShell>;

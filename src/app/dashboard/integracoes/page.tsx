@@ -6,16 +6,18 @@ import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { getClientIntegrationHub } from "@/lib/client-os/integrations";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
-import { MetaInstagramOverview } from "@/components/connectyhub-os/meta-instagram-overview";
+import { SocialAccountsConsole } from "@/components/connectyhub-os/social-accounts-console";
+import { socialAccess } from "@/lib/social/access";
+import { socialAccountsOverview } from "@/lib/social/connections";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Integracoes | ConnectyHub",
+  title: "Conexões | ConnectyHub",
   description: "Central de integracoes por empresa para pagamentos, campanhas, e-commerce, agenda, frete e webhooks.",
 };
 
-export default async function DashboardIntegracoesPage() {
+export default async function DashboardIntegracoesPage({ searchParams }: { searchParams: Promise<{ connection?: string }> }) {
   await connection();
   const workspace = await getCurrentWorkspace();
 
@@ -30,6 +32,11 @@ export default async function DashboardIntegracoesPage() {
     client,
   });
   const organization = workspace.organization;
+  // YouTube and TikTok live here too (old Contas conectadas page redirects with ?connection=).
+  const social = organization
+    ? await socialAccess("client").then(access => socialAccountsOverview(access.client, access.organizationId, access.canManage)).catch(() => null)
+    : null;
+  const { connection: outcome } = await searchParams;
 
   return (
     <ConnectyShell
@@ -40,8 +47,12 @@ export default async function DashboardIntegracoesPage() {
       userLabel={workspace.profile.email ?? undefined}
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
-      <ClientIntegrationsConsole state={hubState} />
-      {organization && <MetaInstagramOverview userId={workspace.user.id} organizationId={organization.id} />}
+      <ClientIntegrationsConsole
+        state={hubState}
+        showDiagnostics={workspace.profile.isPlatformAdmin}
+        socialConnected={social ? Object.fromEntries(social.connections.map(c => [c.provider, c.connected])) : null}
+        social={social && organization ? <SocialAccountsConsole embedded overview={social} companyId={organization.id} shell="client" outcome={outcome} /> : null}
+      />
     </ConnectyShell>
   );
 }

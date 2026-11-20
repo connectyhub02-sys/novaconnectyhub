@@ -245,11 +245,13 @@ const clientSections: NavSection[] = [
   },
   {
     label: "Redes sociais",
-    items: socialNavigation("client").map(item => ({ label: item.label, href: item.href, icon: item.key === "calendario" ? CalendarDays : item.key === "contas" ? PlugZap : Globe2, tone: "blue" })),
+    // Connected accounts live in Conexões; this group only keeps publishing areas.
+    items: socialNavigation("client").filter(item => item.key !== "contas").map(item => ({ label: item.label, href: item.href, icon: item.key === "calendario" ? CalendarDays : item.key === "contas" ? PlugZap : Globe2, tone: "blue" })),
   },
   {
     label: "Meta",
-    items: metaWorkspaceItems.map(item => ({ label: item.label, href: item.href, icon: item.key === "ads" ? Megaphone : ["chat", "atendimento"].includes(item.key) ? MessageCircle : item.key === "analise" ? BarChart3 : Globe2, tone: "blue" })),
+    // The old Central Meta home now opens Conexões, so it is not listed.
+    items: metaWorkspaceItems.filter(item => item.key !== "overview").map(item => ({ label: item.label, href: item.href, icon: item.key === "ads" ? Megaphone : ["chat", "atendimento"].includes(item.key) ? MessageCircle : item.key === "analise" ? BarChart3 : Globe2, tone: "blue" })),
   },
   {
     label: "Crescimento",
@@ -344,7 +346,8 @@ function ConnectyShellRoot({
   const restricted = billingAccess && ["paid_expired", "trial_expired", "inactive"].includes(billingAccess.state);
   const sections = groupPanelNavigation(mode === "admin" ? adminSections : restricted ? restrictedClientSections : clientSections, mode);
   const activeItem = resolveActiveItem(sections, active);
-  const sidebarSections = sidebarNavigation(sections, mode);
+  // Restricted (expired) accounts keep their few account links visible.
+  const sidebarSections = restricted ? sections : sidebarNavigation(sections, mode);
   const sidebarActive = resolveActiveItem(sidebarSections, sidebarActiveHref(active, mode));
   const activeTone: AccentTone = activeItem?.tone ?? "blue";
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
@@ -1073,6 +1076,7 @@ function ConnectyShellRoot({
 
         {mobileMenuOpen ? (
           <MobileAppMenu
+            restricted={Boolean(restricted)}
             storageKey={`connectyhub.navigation.v1:${mode}:${userLabel ?? workspaceName ?? "local"}`}
             active={active}
             activeItem={activeItem}
@@ -1234,10 +1238,10 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
   const repliesLabel = replies === null ? null : `≈ ${replies.toLocaleString("pt-BR")} ${replies === 1 ? "resposta" : "respostas"}`;
 
   return (
-    <Link href="/docs/api#ia-creditos" aria-label={`Saldo ${label} créditos${repliesLabel ? `, ${repliesLabel}` : ""}. Como meus créditos são usados?`}
+    <Link href="/dashboard/creditos" aria-label={`Saldo ${label} créditos${repliesLabel ? `, ${repliesLabel}` : ""}. Abrir créditos e recargas`}
       className="ch-credit-chip"
       data-state={status?.canUseBillableFeatures === false ? "blocked" : undefined}
-      title={repliesLabel ? `${repliesLabel}. Como meus créditos são usados?` : "Como meus créditos são usados?"}
+      title={repliesLabel ? `${repliesLabel}. Créditos e recargas` : "Créditos e recargas"}
       style={{ color: status?.canUseBillableFeatures === false ? "var(--ch-danger)" : tone.color === "var(--ch-brand-primary)" ? "var(--ch-text)" : tone.color }}
     >
       <Coins className="h-4 w-4 shrink-0" aria-hidden="true" style={{ color: "var(--ch-warning)" }} />
@@ -2408,8 +2412,8 @@ function SidebarLink({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose, storageKey }: {
-  storageKey: string;
+function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose, storageKey, restricted = false }: {
+  storageKey: string; restricted?: boolean;
   active: string; activeItem?: NavItem; logoTone: "blue" | "white"; mode: "admin" | "client";
   name: string; pageLabel: string; role: string; sections: NavSection[];
   onComingSoonClick: (item: NavItem) => void; onClose: () => void;
@@ -2425,7 +2429,7 @@ function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose, sto
   }
   const favoriteItems = sections.flatMap(section => section.items).filter(item => favorites.includes(item.href));
   const current = sidebarActiveHref(active, mode);
-  const filtered = (query ? sections : sidebarNavigation(sections, mode)).map(section => ({ ...section, items: section.items.filter(item =>
+  const filtered = (query || restricted ? sections : sidebarNavigation(sections, mode)).map(section => ({ ...section, items: section.items.filter(item =>
     matchesMenuSearch(section.label, item, query)
   ) })).filter(section => section.items.length);
   return <>

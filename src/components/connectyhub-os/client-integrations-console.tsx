@@ -1,7 +1,7 @@
 "use client";
 import { MetaPixelPanel } from "./meta-pixel-panel";
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -13,8 +13,12 @@ import {
   CreditCard,
   ExternalLink,
   KeyRound,
-  Link2,
   Loader2,
+  MessageCircle,
+  Music2,
+  Search,
+  Video,
+  Globe2,
   PackageCheck,
   PlugZap,
   QrCode,
@@ -422,7 +426,19 @@ const metaSocialLiveChannels: { id: MetaSocialLiveChannelId; label: string; shor
   { id: "instagram_comments", label: "Comentarios Instagram", shortLabel: "Comentarios IG" },
 ];
 
-export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationHubState }) {
+export function ClientIntegrationsConsole({
+  state,
+  social,
+  socialConnected,
+  showDiagnostics = false,
+}: {
+  state: ClientIntegrationHubState;
+  /** YouTube and TikTok cards, rendered by the server page inside this hub. */
+  social?: ReactNode;
+  socialConnected?: Partial<Record<"youtube" | "tiktok", boolean>> | null;
+  /** Meta review, canary, webhook and runtime tools: platform admins only. */
+  showDiagnostics?: boolean;
+}) {
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
   const [growthAssets, setGrowthAssets] = useState(state.growthAssets);
@@ -513,20 +529,6 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     () => state.providers.filter((provider) => !isTopGuidedProvider(provider.id)),
     [state.providers],
   );
-  const metrics = useMemo(() => {
-    const connected = selectedConnections.filter((connection) => connection.status === "connected").length;
-    const active = state.providers.filter((provider) => provider.status === "active" || provider.status === "built_in").length;
-    const next = state.providers.filter((provider) => provider.status === "next").length;
-
-    return {
-      providers: state.providers.length,
-      connected,
-      active,
-      next,
-      endpoints: selectedEndpoints.length,
-    };
-  }, [selectedConnections, selectedEndpoints.length, state.providers]);
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const payment = params.get("payment");
@@ -1487,20 +1489,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   return (
     <div>
       <PageHeader
-        eyebrow="Client OS / Integracoes"
-        title="Integracoes"
-        description="Conecte contas externas quando elas forem fonte de dados, pagamento, campanha, agenda, frete ou entrada de eventos."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <NeonBadge tone={state.schemaReady ? "green" : "amber"}>
-              {state.schemaReady ? "modelo ativo" : "SQL pendente"}
-            </NeonBadge>
-            <NeonBadge tone="cyan">{metrics.providers} provedores</NeonBadge>
-          </div>
-        }
+        title="Conexões"
+        description="Conecte suas contas uma vez e use em toda a ConnectyHub: Meta, Google, pagamentos e redes sociais."
       />
 
-      <Link href="/dashboard/redes-sociais/contas" className="mb-5 block rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Redes sociais: gerencie as conexões de Instagram, Facebook, YouTube e TikTok em <strong>Contas conectadas →</strong></Link>
       {notice ? <NoticeBar notice={notice} /> : null}
 
       {!state.schemaReady && state.schemaMessage ? (
@@ -1512,18 +1504,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         </div>
       ) : null}
 
-      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
-        <Metric icon={PlugZap} label="Catalogo" value={String(metrics.providers)} detail="integracoes mapeadas" tone="cyan" />
-        <Metric icon={CheckCircle2} label="Conectadas" value={String(metrics.connected)} detail={selectedCompany?.name ?? "empresa"} tone="green" />
-        <Metric icon={ShieldCheck} label="Ativas" value={String(metrics.active)} detail="prontas ou internas" tone="violet" />
-        <Metric icon={Link2} label="Webhooks" value={String(metrics.endpoints)} detail="endpoints universais" tone="amber" />
-      </div>
 
-      <div
-        className="mb-5 grid gap-3 rounded-2xl p-3 sm:p-4 lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)]"
-        style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
-      >
-        <label className="block">
+
+      {state.companies.length > 1 ? (
+        <label className="mb-5 block max-w-sm">
           <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Empresa</span>
           <select
             value={selectedCompanyId}
@@ -1544,39 +1528,26 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             ))}
           </select>
         </label>
-        <div
-          className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
-          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-        >
-          A Central organiza as conexões por empresa. Asaas usa a API Key da própria conta; Google e Meta usam autorização oficial. Conexões, relatórios Meta Ads e Lead Ads já estão disponíveis conforme as permissões concedidas. Publicações e comentários dependem também da aprovação específica do aplicativo. Conectar uma conta não ativa campanhas nem envia mensagens.
-        </div>
-      </div>
+      ) : null}
+
+      {state.companies.length > 0 ? (
+        <ConnectionsOverview
+          items={[
+            { id: "meta-ads-guiado", name: "Meta", detail: "Facebook, Instagram e anúncios", icon: Globe2, status: metaFeatureLaunchPaused ? "soon" : metaConnection?.status === "connected" ? "on" : "off" },
+            { id: "whatsapp-oficial", name: "WhatsApp oficial", detail: "API oficial da Meta", icon: MessageCircle, status: "open" },
+            { id: "google-ads-guiado", name: "Google", detail: "Ads, Analytics e Search", icon: Search, status: googleConnection?.status === "connected" ? "on" : "off" },
+            { id: "asaas-guiado", name: "Asaas", detail: "Pix, boleto e cartão", icon: CreditCard, status: asaasConnected ? "on" : "off" },
+            { id: "redes-sociais", name: "YouTube", detail: "Publicar vídeos", icon: Video, status: socialConnected?.youtube ? "on" : "off" },
+            { id: "redes-sociais", name: "TikTok", detail: "Publicar vídeos", icon: Music2, status: socialConnected?.tiktok ? "on" : "off" },
+          ]}
+        />
+      ) : null}
 
       {state.companies.length > 0 ? (
         <div className="mb-5 grid gap-3 xl:grid-cols-2">
-          <AsaasGuidedCard
-            accountLabel={asaasConnection?.accountLabel ?? null}
-            apiKeyDraft={asaasApiKeyDraft}
-            connected={asaasConnected}
-            connecting={connectingAsaas}
-            disconnecting={disconnectingAsaas}
-            lastError={asaasConnection?.lastError ?? null}
-            mode={asaasMode}
-            asaasSettings={asaasSettingsDraft}
-            savingPreferences={savingAsaasPreferences}
-            selectedCompanyId={selectedCompanyId}
-            selectedCompanyName={selectedCompany?.name ?? null}
-            onApiKeyChange={setAsaasApiKeyDraft}
-            onConnect={connectAsaas}
-            onDisconnect={disconnectAsaas}
-            onModeChange={setAsaasMode}
-            onPreferenceChange={updateAsaasPreferenceDraft}
-            onSavePreferences={saveAsaasPreferences}
-            onTogglePaymentMethod={toggleAsaasPreferenceMethod}
-          />
 
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-slate-900">
-            <h3 className="font-semibold">WhatsApp oficial · Chat Meta</h3>
+          <div id="whatsapp-oficial" className="scroll-mt-24 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-slate-900">
+            <h3 className="font-semibold">WhatsApp oficial</h3>
             <p className="mt-2 text-sm">Conecte seu número pela API oficial, prepare modelos e acompanhe mensagens. A coexistência com o aplicativo WhatsApp Business depende da elegibilidade do número e do fluxo de conexão. Campanhas e envios exigem configuração e aprovação próprias.</p>
             <a className="mt-3 inline-block text-sm font-semibold text-blue-700 underline" href="/dashboard/chat-meta">Abrir conexão e chat oficial</a>
           </div>
@@ -1584,6 +1555,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             <MetaIntegrationComingSoonCard />
           ) : (
             <GuidedOAuthCard
+              showDiagnostics={showDiagnostics}
               accountLabel={metaConnection?.accountLabel ?? null}
               connected={metaConnection?.status === "connected"}
               connection={metaConnection}
@@ -1655,6 +1627,27 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               }));
             }}
           />
+          <AsaasGuidedCard
+            accountLabel={asaasConnection?.accountLabel ?? null}
+            apiKeyDraft={asaasApiKeyDraft}
+            connected={asaasConnected}
+            connecting={connectingAsaas}
+            disconnecting={disconnectingAsaas}
+            lastError={asaasConnection?.lastError ?? null}
+            mode={asaasMode}
+            asaasSettings={asaasSettingsDraft}
+            savingPreferences={savingAsaasPreferences}
+            selectedCompanyId={selectedCompanyId}
+            selectedCompanyName={selectedCompany?.name ?? null}
+            onApiKeyChange={setAsaasApiKeyDraft}
+            onConnect={connectAsaas}
+            onDisconnect={disconnectAsaas}
+            onModeChange={setAsaasMode}
+            onPreferenceChange={updateAsaasPreferenceDraft}
+            onSavePreferences={saveAsaasPreferences}
+            onTogglePaymentMethod={toggleAsaasPreferenceMethod}
+          />
+          {social ? <div id="redes-sociais" className="scroll-mt-24 xl:col-span-2">{social}</div> : null}
 
           {universalWebhookVisible ? (
           <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -2247,6 +2240,8 @@ function AsaasGuidedCard({
         </p>
       </div>
 
+      <details className="mt-4 rounded-xl border px-3 py-2" style={{ borderColor: "var(--ch-border)" }}>
+        <summary className="cursor-pointer text-[13px] font-semibold text-slate-700">Configurar pagamento</summary>
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -2454,6 +2449,7 @@ function AsaasGuidedCard({
           Salvar preferencias Asaas
         </button>
       </div>
+      </details>
     </section>
   );
 }
@@ -2527,6 +2523,7 @@ function formatAsaasCheckoutSummary(settings: SalesCatalogAsaasSettings) {
 }
 
 function GuidedOAuthCard({
+  showDiagnostics = false,
   accountLabel,
   actionLogs,
   assets,
@@ -2561,6 +2558,7 @@ function GuidedOAuthCard({
   onSelectionChange,
   onSimulateMetaWebhook,
 }: {
+  showDiagnostics?: boolean;
   accountLabel: string | null;
   actionLogs: ClientIntegrationActionLog[];
   assets: ClientGrowthIntegrationAsset[];
@@ -2767,6 +2765,8 @@ function GuidedOAuthCard({
         {kind === "meta" && connected ? <MetaPixelPanel key={`${selectedCompanyId}:${connection?.metadata?.selected_ad_account_id}`} companyId={selectedCompanyId} /> : null}
 
         {connected && assets.length > 0 ? (
+          <details className="mt-3 rounded-xl border px-3 py-2" style={{ borderColor: "var(--ch-border)" }}>
+          <summary className="cursor-pointer text-[12px] font-semibold text-slate-600">Contas encontradas na {kind === "meta" ? "Meta" : "Google"}</summary>
           <GrowthAssetsPanel
             assets={assets}
             kind={kind}
@@ -2774,9 +2774,10 @@ function GuidedOAuthCard({
             summary={assetSummary}
             onQueueSync={onQueueAssetSync}
           />
+          </details>
         ) : null}
 
-        {kind === "meta" ? (
+        {kind === "meta" && showDiagnostics ? (
           <MetaReadinessPanel
             actionLogs={actionLogs}
             activation={metaWebhookActivation}
@@ -3659,40 +3660,6 @@ function PaymentGuideStep({
   );
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  detail: string;
-  tone: "green" | "cyan" | "amber" | "violet";
-}) {
-  const colors = {
-    amber: "251,191,36",
-    cyan: "34,211,238",
-    green: "52,211,153",
-    violet: "167,139,250",
-  }[tone];
-
-  return (
-    <div className="min-w-0 rounded-2xl p-2.5 sm:p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
-        <div className="hidden h-9 w-9 items-center justify-center rounded-xl sm:flex" style={{ background: `rgba(${colors},0.14)`, color: `rgb(${colors})` }}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <p className="mt-2 truncate font-mono text-[17px] font-bold leading-none sm:mt-4 sm:text-[26px]" style={{ color: `rgb(${colors})` }}>{value}</p>
-      <p className="mt-1 truncate text-[11px] text-slate-500 sm:mt-3 sm:text-[12px]">{detail}</p>
-    </div>
-  );
-}
-
 function statusTone(status: IntegrationConnectionStatus): "online" | "warning" | "critical" | "idle" {
   if (status === "connected") return "online";
   if (status === "error") return "critical";
@@ -4465,4 +4432,39 @@ function formatShortDate(value: string) {
 
 function formatMetaWebhookScenario(value: MetaWebhookSimulationScenario) {
   return metaWebhookSimulationScenarios.find((scenario) => scenario.id === value)?.label ?? value;
+}
+
+type ConnectionTile = { id: string; name: string; detail: string; icon: LucideIcon; status: "on" | "off" | "soon" | "open" };
+/** One tile per service; the tile jumps to that service's card below. */
+function ConnectionsOverview({ items }: { items: ConnectionTile[] }) {
+  const chip = {
+    on: { label: "Conectado", className: "bg-emerald-50 text-emerald-700" },
+    off: { label: "Conectar", className: "bg-slate-100 text-slate-600" },
+    soon: { label: "Em breve", className: "bg-amber-50 text-amber-700" },
+    open: { label: "Abrir", className: "bg-blue-50 text-blue-700" },
+  } as const;
+  return (
+    <nav aria-label="Serviços para conectar" className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <a
+            key={item.name}
+            href={`#${item.id}`}
+            className="flex min-w-0 flex-col gap-2 rounded-xl border p-3 transition hover:border-blue-300 hover:shadow-sm"
+            style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}
+          >
+            <span className="flex items-center justify-between gap-2">
+              <Icon className="h-5 w-5 shrink-0 text-blue-600" aria-hidden="true" />
+              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", chip[item.status].className)}>{chip[item.status].label}</span>
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.name}</span>
+              <span className="block truncate text-[11.5px] text-slate-500">{item.detail}</span>
+            </span>
+          </a>
+        );
+      })}
+    </nav>
+  );
 }
