@@ -675,14 +675,15 @@ function buildConnectionGuidance({
         ? `${platformLabel} ainda nao esta pronto para os mostradores`
         : `${platformLabel} com leitura parcial nos mostradores`
       : paidBlocked
-        ? `Credenciais ${platformLabel} precisam de revisao`
+        ? platform === "google" ? `${platformLabel} ainda nao esta pronto para os mostradores` : `Credenciais ${platformLabel} precisam de revisao`
         : `${platformLabel} com aviso de leitura parcial`,
     detail: isClient
       ? paidBlocked
-        ? `Abra Integracoes, conecte ${platformLabel} pelo fluxo guiado e selecione a ${requiredAccount}. ${detail}`
+        ? `Abra Conexoes, conecte ${platformLabel} e selecione a ${requiredAccount}. ${detail}`
         : `A leitura paga esta ativa, mas existe um aviso complementar. ${detail}`
       : paidBlocked
-        ? `Revise o app tecnico e as credenciais de teste na manutencao. ${detail}`
+        // Admin Google now connects through OAuth, not maintenance credentials.
+        ? platform === "google" ? `Clique em Conectar Google e escolha a conta Google Ads da ConnectyHub. ${detail}` : `Revise o app tecnico e as credenciais de teste na manutencao. ${detail}`
         : `A leitura paga esta ativa, mas existe um aviso complementar. ${detail}`,
     items: [
       paidProvider.status === "online"
