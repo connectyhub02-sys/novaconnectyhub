@@ -2,7 +2,8 @@
 
 ## Google: conexão do admin, conta Ads da ConnectyHub e verificação enviada — 20/11/2026
 
-- **Atual:** release `c0e9f9d7f06ce03275885b8c8bf00d8b06d97e4a` ativa no **slot a**; retorno `97ba3d2f` no slot b. Conexão Google
+- **Atual:** release `540c3f59717482a566a38cbdaba383f63d3aed43` ativa no **slot b**; retorno `c0e9f9d7` no slot a (texto de
+  orientação do Google no admin aponta para “Conectar Google”; clientes, para Conexões). Antes: `c0e9f9d7`. Conexão Google
   não escolhe mais conta sozinha quando o login acessa várias (mantém escolha anterior válida; senão limpa e pede);
   admin tem seletor “Conta Google Ads deste painel”; “Testar conexão” do admin usa a empresa interna e deu 4/5 OK
   (falta só Conversion ID, recomendado). Releases anteriores do
@@ -15,7 +16,7 @@
   e cartão); pedido de vínculo 201-148-0762 → MCC enviado e **pendente** até o titular concluir a conta com cartão.
 - **Conexão do admin feita em 20/11 ~05h20 BRT** com connectyhub01 (consentimento inglês, “Selecionar tudo”). O callback
   escolheu sozinho a 1ª conta acessível (Vision Home 280-124-1888); corrigido pela rota de seleção para **5753432299**.
-  Pendência: texto do card de orientação no admin ainda cita manutenção (callback e teste corrigidos em `c0e9f9d7`).
+  Callback e teste corrigidos em `c0e9f9d7`; texto de orientação em `540c3f59`.
 - **Vídeo de demonstração:** https://youtu.be/Gwkq93rqXag (não listado, canal ConnectyHub, verificações do YouTube sem
   problema), sem dados de clientes. **Verificação Google enviada** (escopos `adwords` e `analytics.readonly`; questionário
   respondido: não pessoal, não interno, não só teste, não plugin SMTP). Central de verificação: “O acesso aos dados do seu
@@ -49,7 +50,8 @@
   a Gemini API para uso pago). Vídeo de demonstração não gravado: a conta Google da ConnectyHub só acessa contas Ads da
   Vision (Vision Humo, Vision Business Group), sem conta Ads própria; admin de plataforma é redirecionado para /admin e o
   Google Ads do admin ainda lê refresh token da manutenção (mensagens citam Developer Token). Console mostra aviso de possível
-  violação de política em vários projetos da conta (Protasio Motos e HoraSpace suspensos) — não investigado.
+  violação de política em vários projetos da conta: Protasio Motos suspenso por problema na conta de faturamento
+  012A66-471B0D-EF182A; HoraSpace suspenso sem detalhe. Projeto Connectyhub ativo e verificado. Lido em 20/11, sem ação.
 - **Tag Google nas lojas:** cliente informa G-/AW-/rótulo em Conexões; loja carrega gtag só após consentimento, sem
   caminhos de checkout; eventos page_view, view_item, add_to_cart, begin_checkout e conversão escolhida. Compra via
   servidor (como CAPI da Meta) ainda não existe para Google. Não testado com loja real.
