@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, ArrowLeft, ArrowUpRight, Database, GitBranch, LockKeyhole, Server } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpRight, Database } from "lucide-react";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { InfrastructureCapacity } from "@/components/connectyhub-os/infrastructure-capacity";
 import { HostingAdmin, RegisterInfrastructure } from "@/components/connectyhub-os/hosting-console";
@@ -17,6 +17,18 @@ function Badge({ health }: { health: Health }) {
   return <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${color}`}><span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />{healthLabels[health]}</span>;
 }
 function Section({ title, children }: { title: string; children: ReactNode }) { return <section className={`${panel} min-w-0 space-y-4`}><h2 className="text-lg font-bold">{title}</h2>{children}</section>; }
+/** Operational consoles already exposed on the server, behind their own password. */
+const projectTools: Record<string, Array<{ label: string; href: string; hint: string }>> = {
+  connectyhub: [
+    { label: "Supabase Studio", href: "https://supabase.connectyhub.com.br", hint: "Banco de dados, tabelas e SQL" },
+    { label: "Painel do Inngest", href: "https://inngest.connectyhub.com.br", hint: "Tarefas rodando, falhas e histórico" },
+  ],
+};
+function ProjectTools({ projectId }: { projectId: string }) {
+  const tools = projectTools[projectId] ?? [];
+  if (!tools.length) return <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Banco e tarefas deste projeto ainda sem acesso pelo painel.</p>;
+  return <div className="grid gap-2 sm:grid-cols-2">{tools.map(tool => <a key={tool.href} href={tool.href} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:border-blue-400"><span className="min-w-0"><span className="block">{tool.label}</span><span className="block text-xs font-normal text-slate-500">{tool.hint}</span></span><ArrowUpRight size={16} className="shrink-0 text-blue-700" /></a>)}</div>;
+}
 function Fact({ name, children }: { name: string; children: ReactNode }) { return <div className="min-w-0"><dt className="text-xs text-slate-500">{name}</dt><dd className="mt-1 break-all text-sm font-medium">{children}</dd></div>; }
 function Configuration({ config }: { config: ProjectConfiguration | undefined }) {
   if (!config) return null;
@@ -62,7 +74,6 @@ export function InfrastructureInventory() {
     <InfrastructureCapacity />
     <div className="flex flex-wrap gap-3 text-xs text-slate-500"><span className="flex items-center gap-2"><Activity size={14} />Projetos · atualização a cada 5 segundos</span><span>Última consulta: {date(updated)}</span><span>Horários no fuso do navegador</span></div>
     {error && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{error} {data && "Exibindo a última leitura; conexão interrompida."}</p>}
-    <div className="grid gap-4 md:grid-cols-3">{[[Server, "Inventário", "Empresa, projeto e ambiente"], [GitBranch, "Deploy VPS", "Etapas, container e healthcheck"], [LockKeyhole, "Controle protegido", "Confirmação e auditoria"]].map(([Icon, title, text]) => { const I = Icon as typeof Server; return <div key={String(title)} className={`${panel} flex items-center gap-4`}><I className="shrink-0 text-blue-700" size={24} /><div><p className="font-semibold">{String(title)}</p><p className="mt-1 text-xs text-slate-500">{String(text)}</p></div></div>; })}</div>
     {!data && !error && <p role="status">Carregando inventário…</p>}
     <RegisterInfrastructure />
     {data && <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">{data.projects.map(project => {
@@ -70,7 +81,7 @@ export function InfrastructureInventory() {
       return <article key={project.id} className={`${panel} space-y-5`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs text-slate-500">{project.company} · {project.environment}</p><h2 className="mt-1 text-xl font-bold">{project.name}</h2></div>{telemetry ? <Badge health={error ? "unknown" : projectHealth(telemetry)} /> : <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">Leitura bloqueada</span>}</div>
         <p className="w-fit rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{project.topology === "unknown" ? "Origem a confirmar" : originLabels[project.topology]}</p>
         <dl className="grid gap-3 sm:grid-cols-2"><Fact name="App / API">{project.app}</Fact><Fact name="Supabase">{project.supabase}</Fact><Fact name="Inngest">{project.inngest}</Fact><Fact name="Worker">{project.worker}</Fact><Fact name="Storage">{project.storage}</Fact><Fact name="Acesso">{data.canOperate ? "Admin infra · ações condicionadas à configuração" : "Leitura administrativa · ações restritas"}</Fact></dl>
-        <Configuration config={data.configuration?.[project.id]} /><Freshness telemetry={telemetry} /><Link className="flex min-h-11 items-center justify-between rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white" href={`/admin/infrastructure/${project.id}`}>Abrir operação <ArrowUpRight size={17} /></Link>
+        <ProjectTools projectId={project.id} /><Configuration config={data.configuration?.[project.id]} /><Freshness telemetry={telemetry} /><Link className="flex min-h-11 items-center justify-between rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white" href={`/admin/infrastructure/${project.id}`}>Abrir operação <ArrowUpRight size={17} /></Link>
       </article>;
     })}</div>}
     {!!data?.deletedProjects?.length && <details className={panel}><summary className="cursor-pointer text-sm font-semibold text-slate-600">Hospedagens excluídas · {data.deletedProjects.length}</summary><p className="mt-3 text-sm text-slate-500">Recursos locais removidos. Cadastros e auditoria preservados para consulta.</p><div className="mt-4 space-y-3">{data.deletedProjects.map(project => <div key={project.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4"><div><h2 className="font-semibold">{project.name}</h2><p className="mt-1 text-xs text-slate-500">{project.company} · Hospedagem excluída</p></div><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline" href={`/admin/infrastructure/${project.id}`}>Consultar histórico</Link></div>)}</div></details>}
@@ -135,6 +146,7 @@ export function InfrastructureProject({ projectId }: { projectId: string }) {
     {error && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{error} {data && "Última leitura preservada; conexão interrompida."}</p>}
     {!data && !error && <p role="status">Carregando operação…</p>}
     {data && <>
+      <Section title="Ferramentas"><ProjectTools projectId={projectId} /><p className="text-xs text-slate-500">Abrem em nova aba e pedem o usuário e a senha guardados no cofre de Infraestrutura.</p></Section>
       <Configuration config={data.configuration} />
       <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline" href="/admin/maintenance">Configurar administradores e coletores no cofre de Infraestrutura</Link>
       <HostingAdmin projectId={projectId} />

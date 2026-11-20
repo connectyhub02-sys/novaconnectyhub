@@ -326,7 +326,7 @@ function IntelligenceView({ overview }: { overview: AutonomousAdminOverview }) {
     <div className="grid gap-5 xl:grid-cols-[1fr_430px]">
       <Panel title="Memorias estruturadas" eyebrow="central de inteligencia">
         {overview.intelligenceMemory.length > 0 ? (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="divide-y rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
             {overview.intelligenceMemory.map((memory) => (
               <MemoryCard key={memory.id} memory={memory} />
             ))}
@@ -342,7 +342,7 @@ function IntelligenceView({ overview }: { overview: AutonomousAdminOverview }) {
 
       <Panel title="Eventos recentes" eyebrow="coleta / origem / confianca">
         {overview.intelligenceEvents.length > 0 ? (
-          <div className="space-y-3">
+          <div className="divide-y rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
             {overview.intelligenceEvents.map((event) => (
               <EventRow key={event.id} event={event} />
             ))}
@@ -883,43 +883,33 @@ function RunRow({ run }: { run: { runStatus: string; triggerSource: string | nul
   );
 }
 
+/** One line per memory; the full text opens on click so the page stays short. */
 function MemoryCard({ memory }: { memory: IntelligenceMemory }) {
   return (
-    <div
-      className="rounded-xl p-4"
-      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <NeonBadge tone="violet">{memory.memoryType}</NeonBadge>
-          <p className="mt-2 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{memory.title}</p>
-        </div>
-        <KpiStat label="peso" value={`${Math.round(memory.importance * 100)}%`} tone="violet" />
-      </div>
-      <p className="mt-3 text-[12px] leading-5 text-slate-500">{memory.content}</p>
+    <details className="group px-3 py-2">
+      <summary className="flex cursor-pointer list-none items-center gap-3">
+        <NeonBadge tone="violet">{memory.memoryType}</NeonBadge>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{memory.title}</span>
+        <span className="shrink-0 font-mono text-[11px] text-slate-500">peso {Math.round(memory.importance * 100)}%</span>
+      </summary>
+      <p className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-slate-500">{memory.content}</p>
       <TagRow tags={memory.tags} />
-    </div>
+    </details>
   );
 }
 
 function EventRow({ event }: { event: IntelligenceEvent }) {
   return (
-    <div
-      className="rounded-xl p-4"
-      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
-            {event.sourceType} / {event.eventType}
-          </p>
-          <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{event.title}</p>
-        </div>
-        <span className="font-mono text-[11px] text-slate-500">{formatDate(event.occurredAt)}</span>
-      </div>
-      <p className="mt-2 text-[12px] leading-5 text-slate-500">{event.summary ?? "Evento sem resumo."}</p>
+    <details className="px-3 py-2">
+      <summary className="flex cursor-pointer list-none items-center gap-3">
+        <span className="shrink-0 font-mono text-[11px] uppercase text-slate-500">{event.eventType}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{event.title}</span>
+        <span className="shrink-0 font-mono text-[11px] text-slate-500">{formatDate(event.occurredAt)}</span>
+      </summary>
+      <p className="mt-1 font-mono text-[11px] uppercase text-slate-500">{event.sourceType}</p>
+      <p className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-slate-500">{event.summary ?? "Evento sem resumo."}</p>
       <TagRow tags={event.tags} />
-    </div>
+    </details>
   );
 }
 
