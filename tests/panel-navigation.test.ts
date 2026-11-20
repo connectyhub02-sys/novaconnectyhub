@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupPanelNavigation, matchesMenuSearch, panelContextLinks, panelDockHrefs } from "@/lib/ui/panel-navigation";
+import { groupPanelNavigation, matchesMenuSearch, panelContextLinks, panelDockHrefs, sidebarActiveHref, sidebarNavigation } from "@/lib/ui/panel-navigation";
 
 describe("panel navigation", () => {
   it("matches accents, case and the attendance alias", () => {
@@ -17,6 +17,18 @@ describe("panel navigation", () => {
     expect(group).toHaveLength(1); expect(group[0].label).toBe("Atendimento");
     expect(matchesMenuSearch("Vendas", {href:"/dashboard/produtos",label:"Produtos para revender"},"produtos")).toBe(true);
     expect(panelContextLinks("/dashboard/chat-meta", "client")?.items).toHaveLength(3);
+  });
+  it("shows one Atendimento entry in the sidebar, with the channels as tabs, for client and admin", () => {
+    const client=[{label:"Atendimento",items:[{href:"/dashboard/whatsapp",label:"Agentes"},{href:"/dashboard/atendimento",label:"Atendimento"},{href:"/dashboard/chat-meta",label:"WhatsApp oficial"},{href:"/dashboard/meta/atendimento",label:"Direct"}]}];
+    expect(sidebarNavigation(client,"client").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/dashboard/whatsapp","/dashboard/atendimento"]);
+    const admin=[{label:"Operação",items:[{href:"/admin/whatsapp/atendimento",label:"Atendimento"},{href:"/admin/meta",label:"WhatsApp oficial"},{href:"/admin/meta/atendimento",label:"Direct"},{href:"/admin/setores",label:"Setores"}]}];
+    expect(sidebarNavigation(admin,"admin").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/admin/whatsapp/atendimento","/admin/setores"]);
+    // Without the main entry, the other channels stay visible instead of disappearing.
+    expect(sidebarNavigation([{label:"Atendimento",items:[{href:"/dashboard/chat-meta",label:"WhatsApp oficial"}]}],"client")[0].items).toHaveLength(1);
+    expect(sidebarActiveHref("/dashboard/chat-meta","client")).toBe("/dashboard/atendimento");
+    expect(sidebarActiveHref("/admin/meta/atendimento","admin")).toBe("/admin/whatsapp/atendimento");
+    expect(sidebarActiveHref("/admin/meta/publicacoes","admin")).toBe("/admin/meta/publicacoes");
+    expect(panelContextLinks("/admin/meta","admin")?.items.map(i=>i.icon)).toEqual(["whatsapp","whatsapp-official","meta-direct"]);
   });
   it("keeps restricted navigation restricted and merges only the existing maintenance alias", () => {
     const restricted=[{href:"/dashboard/meus-produtos",label:"Compras"},{href:"/dashboard/planos",label:"Plano"}];

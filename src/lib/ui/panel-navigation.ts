@@ -348,8 +348,32 @@ export function panelDockHrefs(mode: PanelMode) {
   return mode === "admin" ? ["/admin", "/admin/clientes", "/admin/whatsapp/atendimento", "/admin/infrastructure"] : ["/dashboard", "/dashboard/atendimento", "/dashboard/links", "/dashboard/whatsapp"];
 }
 
-export function panelContextLinks(active: string, mode: PanelMode) {
-  const channels=mode==="admin"?[{href:"/admin/whatsapp/atendimento",label:"WhatsApp"},{href:"/admin/meta",label:"WhatsApp oficial"},{href:"/admin/meta/atendimento",label:"Direct e Messenger"}]:[{href:"/dashboard/atendimento",label:"WhatsApp"},{href:"/dashboard/chat-meta",label:"WhatsApp oficial"},{href:"/dashboard/meta/atendimento",label:"Direct e Messenger"}];
+export type AttendanceChannelIcon = "whatsapp" | "whatsapp-official" | "meta-direct";
+export type PanelContextLink = { href: string; label: string; icon?: AttendanceChannelIcon };
+/** Attendance channels live as tabs inside Atendimento; the first one is the sidebar entry. */
+export function attendanceChannels(mode: PanelMode): PanelContextLink[] {
+  const base = mode === "admin" ? ["/admin/whatsapp/atendimento", "/admin/meta", "/admin/meta/atendimento"] : ["/dashboard/atendimento", "/dashboard/chat-meta", "/dashboard/meta/atendimento"];
+  return [
+    { href: base[0], label: "WhatsApp", icon: "whatsapp" },
+    { href: base[1], label: "WhatsApp oficial", icon: "whatsapp-official" },
+    { href: base[2], label: "Direct e Messenger", icon: "meta-direct" },
+  ];
+}
+/** Sidebar shows one Atendimento entry; other channels stay reachable by its tabs and by search. */
+export function sidebarNavigation<T extends { href: string }>(sections: { label: string; items: T[] }[], mode: PanelMode) {
+  const [primary, ...secondary] = attendanceChannels(mode).map(c => c.href);
+  if (!sections.some(s => s.items.some(i => i.href === primary))) return sections;
+  return sections.map(s => ({ ...s, items: s.items.filter(i => !secondary.includes(i.href)) })).filter(s => s.items.length);
+}
+/** The sidebar entry to highlight: any attendance channel highlights Atendimento. */
+export function sidebarActiveHref(active: string, mode: PanelMode) {
+  const channels = attendanceChannels(mode).map(c => c.href);
+  // Exact match only: /admin/meta/publicacoes is not an attendance channel.
+  return channels.includes(active) ? channels[0] : active;
+}
+
+export function panelContextLinks(active: string, mode: PanelMode): { label: string; items: PanelContextLink[] } | null {
+  const channels=attendanceChannels(mode);
   if(channels.some(x=>x.href===active))return {label:"Canais de atendimento",items:channels};
   if(mode==="client"&&["/dashboard/integracoes","/dashboard/meta","/dashboard/redes-sociais/contas"].includes(active))return {label:"Conexões",items:[{href:"/dashboard/integracoes",label:"Todas as conexões"},{href:"/dashboard/redes-sociais/contas",label:"Redes sociais"},{href:"/dashboard/meta",label:"Permissões Meta"}]};
   if(mode==="client"&&["/dashboard/minha-conta","/dashboard/creditos","/dashboard/planos","/dashboard/meus-produtos","/dashboard/empresa"].includes(active))return {label:"Sua conta",items:[{href:"/dashboard/minha-conta",label:"Dados e cobrança"},{href:"/dashboard/creditos",label:"Saldo"},{href:"/dashboard/planos",label:"Plano"},{href:"/dashboard/meus-produtos",label:"Compras"},{href:"/dashboard/empresa",label:"Empresa"}]};

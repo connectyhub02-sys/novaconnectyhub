@@ -4843,7 +4843,7 @@ html {
 /* ---------- Abas de contexto (ex.: canais de atendimento) ---------- */
 .ch-context-tabs { display: flex; gap: 4px; margin: -4px 0 16px; border-bottom: 1px solid var(--ch-border); overflow-x: auto; scrollbar-width: none; }
 .ch-context-tabs::-webkit-scrollbar { display: none; }
-.ch-context-tab { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; min-height: 42px; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--ch-muted); transition: color .15s; }
+.ch-context-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 42px; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--ch-muted); transition: color .15s; }
 .ch-context-tab:hover { color: var(--ch-text); }
 .ch-context-tab[aria-current="page"] { color: var(--ch-accent); font-weight: 600; }
 .ch-context-tab[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ch-accent); }

@@ -1,6 +1,7 @@
 "use client";
 import { panelTheme, panelAreas, panelAreaForHref } from "@/lib/ui/panel-theme";
-import { groupPanelNavigation, matchesMenuSearch, panelContextLinks, panelDockHrefs } from "@/lib/ui/panel-navigation";
+import { groupPanelNavigation, matchesMenuSearch, panelContextLinks, panelDockHrefs, sidebarActiveHref, sidebarNavigation } from "@/lib/ui/panel-navigation";
+import { AttendanceChannelIconMark } from "./attendance-channel-icon";
 import { metaWorkspaceItems } from "@/lib/meta/workspace-navigation";
 import { socialNavigation } from "@/lib/social/policy";
 import { DialogFrame } from "@/components/ui/dialog-frame";
@@ -343,6 +344,8 @@ function ConnectyShellRoot({
   const restricted = billingAccess && ["paid_expired", "trial_expired", "inactive"].includes(billingAccess.state);
   const sections = groupPanelNavigation(mode === "admin" ? adminSections : restricted ? restrictedClientSections : clientSections, mode);
   const activeItem = resolveActiveItem(sections, active);
+  const sidebarSections = sidebarNavigation(sections, mode);
+  const sidebarActive = resolveActiveItem(sidebarSections, sidebarActiveHref(active, mode));
   const activeTone: AccentTone = activeItem?.tone ?? "blue";
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
   const role      = mode === "admin" ? "Administrador da plataforma" : (userLabel && !userLabel.startsWith("workspace") ? userLabel : "Sua conta");
@@ -729,7 +732,7 @@ function ConnectyShellRoot({
 
         {/* Nav: every destination visible; group names are quiet labels. */}
         <nav aria-label="Navegação principal" className="ch-sidebar-nav flex-1 overflow-y-auto px-3 pb-4 pt-1">
-          {sections.map((section) => (
+          {sidebarSections.map((section) => (
             <div key={section.label} className="ch-sidebar-section">
               {section.label !== "Início" ? <p className="ch-sidebar-heading">{section.label}</p> : null}
               <div className="grid gap-px">
@@ -737,7 +740,7 @@ function ConnectyShellRoot({
                   <SidebarLink
                     key={item.href}
                     item={item}
-                    isActive={item.href === activeItem?.href}
+                    isActive={item.href === sidebarActive?.href}
                     onComingSoonClick={handleComingSoonClick}
                   />
                 ))}
@@ -1108,7 +1111,7 @@ function ConnectyShellRoot({
             )}
           >
             {contextLinks.length > 1 && <nav aria-label={contextNavigation?.label} data-panel-context-nav className="ch-context-tabs">
-              {contextLinks.map(item => <Link key={item.href} href={item.href} aria-current={active === item.href ? "page" : undefined} className="ch-context-tab">{item.label}</Link>)}
+              {contextLinks.map(item => <Link key={item.href} href={item.href} aria-current={active === item.href ? "page" : undefined} className="ch-context-tab"><AttendanceChannelIconMark icon={item.icon} />{item.label}</Link>)}
             </nav>}
             {children}
           </div>
@@ -2421,7 +2424,8 @@ function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose, sto
     setFavorites(next); try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Session-only if storage is unavailable. */ }
   }
   const favoriteItems = sections.flatMap(section => section.items).filter(item => favorites.includes(item.href));
-  const filtered = sections.map(section => ({ ...section, items: section.items.filter(item =>
+  const current = sidebarActiveHref(active, mode);
+  const filtered = (query ? sections : sidebarNavigation(sections, mode)).map(section => ({ ...section, items: section.items.filter(item =>
     matchesMenuSearch(section.label, item, query)
   ) })).filter(section => section.items.length);
   return <>
@@ -2439,7 +2443,7 @@ function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose, sto
       {!query && favoriteItems.length > 0 && <nav aria-label="Favoritos" className="ch-sheet-section"><p className="ch-sidebar-heading">Favoritos</p><div className="ch-sheet-list">{favoriteItems.map(item => <MobileMenuLink key={item.href} item={item} isActive={isActive(item.href, active)} onComingSoonClick={onComingSoonClick} onClick={onClose} />)}</div></nav>}
       <nav aria-label="Todas as funções">
         {filtered.map(section => <section key={section.label} className="ch-sheet-section">{section.label !== "Início" ? <p className="ch-sidebar-heading">{section.label}</p> : null}
-          <div className="ch-sheet-list">{section.items.map(item => <div key={item.href} className="flex min-w-0 items-center"><div className="min-w-0 flex-1"><MobileMenuLink item={item} isActive={isActive(item.href, active)} onComingSoonClick={onComingSoonClick} onClick={onClose} /></div><button type="button" onClick={() => toggleFavorite(item.href)} aria-label={`${favorites.includes(item.href) ? "Remover" : "Adicionar"} ${item.label} ${favorites.includes(item.href) ? "dos" : "aos"} favoritos`} aria-pressed={favorites.includes(item.href)} className="grid size-11 shrink-0 place-items-center rounded-xl text-slate-400"><Star className={cn("size-4", favorites.includes(item.href) && "fill-blue-600 text-blue-600")} /></button></div>)}</div>
+          <div className="ch-sheet-list">{section.items.map(item => <div key={item.href} className="flex min-w-0 items-center"><div className="min-w-0 flex-1"><MobileMenuLink item={item} isActive={isActive(item.href, query ? active : current)} onComingSoonClick={onComingSoonClick} onClick={onClose} /></div><button type="button" onClick={() => toggleFavorite(item.href)} aria-label={`${favorites.includes(item.href) ? "Remover" : "Adicionar"} ${item.label} ${favorites.includes(item.href) ? "dos" : "aos"} favoritos`} aria-pressed={favorites.includes(item.href)} className="grid size-11 shrink-0 place-items-center rounded-xl text-slate-400"><Star className={cn("size-4", favorites.includes(item.href) && "fill-blue-600 text-blue-600")} /></button></div>)}</div>
         </section>)}
         {!filtered.length && <p role="status" className="ch-meta px-1 py-6 text-center">Nenhuma área encontrada. Tente outro termo.</p>}
       </nav>
