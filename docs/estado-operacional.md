@@ -19,7 +19,8 @@
 - **Disco:** 96% (277/290 GB). ~200 GB eram histórico do Inngest (spans/traces/history/events). Script
   `deploy/ops/inngest-retention.sh` (em `/opt/connectyhub/ops/`) apaga em lotes o que tem mais de N dias, só execuções
   concluídas; fila/estado no Redis intocados. ConnectyHub: 37 GB → 4,9 GB, disco 97% → 86%; tarefas seguem rodando.
-  Vision (146 GB): primeira limpeza com `--vacuum-full` em andamento. Rotina diária em `/etc/cron.d/connectyhub-inngest-retention`
+  Vision: 146 GB → 29 GB (77 mi de registros; ~10 GB/dia de histórico, por isso 3 dias ainda somam ~29 GB). **Disco 96% →
+  44% (164 GB livres)** em 20/11 ~21h BRT; Inngest da Vision saudável (321 execuções em 15 min). Rotina diária em `/etc/cron.d/connectyhub-inngest-retention`
   (06:30/06:45 UTC, guarda 3 dias). Durante o VACUUM FULL houve erros transitórios de inserção de trace (tabela travada).
 - **Banco da Vision:** CPU 0,75 → 1,5 (`docker update` ao vivo + `/opt/vision/demo/supabase/compose.json`, backup
   `compose.json.before-db-cpu-20261120`).
