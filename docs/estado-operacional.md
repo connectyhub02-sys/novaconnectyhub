@@ -2,8 +2,10 @@
 
 ## Coexistência pelo painel — publicada, cadastro real pendente, 19/11/2026
 
-- **Atual:** release `d6405a61fd532ed5d945d419616fa0dd118c291c` ativa no **slot a** desde 19/11 ~23h40 BRT;
-  retorno `b0bbedcf` no slot b. Na página de agentes (cliente e admin) saíram a barra de resumo de 11 campos
+- **Atual:** release `372821670f36e830d083d53edb9ec1b45b3594e7` ativa no **slot b** desde 20/11 ~00h BRT; retorno
+  `d6405a61` no slot a. No celular: título/subtítulo das páginas menores (<640px), abas Prompt/Qualificação/
+  Comportamento numa linha com botão de salvar só com ícone (ponto laranja = pendente). Mesmo smoke aprovado;
+  conferência visual logada pendente (navegadores do agente sem sessão). Release anterior `d6405a61`: Na página de agentes (cliente e admin) saíram a barra de resumo de 11 campos
   e o card de três passos depois de configurado; “Salvar tudo” fica fixo na linha Prompt/Qualificação/
   Comportamento, com aviso curto só quando há pendências. Mesmo smoke aprovado. Release anterior `b0bbedcf`: Menu lateral do cliente e do admin com uma
   única entrada **Atendimento**: WhatsApp oficial e Direct e Messenger ficam só como abas dentro dela, com
