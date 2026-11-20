@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+// Platform admins select assets for ConnectyHub's internal company, like the OAuth connect routes.
+import { getMetaWorkspace as getCurrentWorkspace, requireMetaCompanyAccess as requireClientCompanyAccess } from "@/lib/meta/company-access";
 import {
   resolveDashboardCompanyId,
   statusForDashboardCompanyScopeError,
@@ -18,7 +19,6 @@ import {
 } from "@/lib/client-os/guided-oauth";
 import { markSelectedGrowthAssets } from "@/lib/client-os/growth-integrations";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
