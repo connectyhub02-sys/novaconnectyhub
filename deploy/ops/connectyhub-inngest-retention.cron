@@ -1,0 +1,6 @@
+# Prune Inngest run history (observability only) daily at 06:30 UTC (03:30 BRT). Keeps 3 days.
+# Script: /opt/connectyhub/ops/inngest-retention.sh (repo: deploy/ops/inngest-retention.sh)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 6 * * * root /opt/connectyhub/ops/inngest-retention.sh connectyhub-inngest-postgres-1 3 > /opt/connectyhub/logs/inngest-retention-connectyhub.log 2>&1
+45 6 * * * root /opt/connectyhub/ops/inngest-retention.sh vision-demo-inngest-postgres-1 3 > /opt/connectyhub/logs/inngest-retention-vision.log 2>&1
