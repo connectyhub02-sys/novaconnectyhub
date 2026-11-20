@@ -1,5 +1,24 @@
 # Estado operacional da ConnectyHub
 
+## Limpeza do disco, retenção do Inngest e remoção da Betel — 20/11/2026
+
+- **Disco:** 96% (277/290 GB). ~200 GB eram histórico do Inngest (spans/traces/history/events). Script
+  `deploy/ops/inngest-retention.sh` (em `/opt/connectyhub/ops/`) apaga em lotes o que tem mais de N dias, só execuções
+  concluídas; fila/estado no Redis intocados. ConnectyHub: 37 GB → 4,9 GB, disco 97% → 86%; tarefas seguem rodando.
+  Vision (146 GB): primeira limpeza com `--vacuum-full` em andamento. Rotina diária em `/etc/cron.d/connectyhub-inngest-retention`
+  (06:30/06:45 UTC, guarda 3 dias). Durante o VACUUM FULL houve erros transitórios de inserção de trace (tabela travada).
+- **Banco da Vision:** CPU 0,75 → 1,5 (`docker update` ao vivo + `/opt/vision/demo/supabase/compose.json`, backup
+  `compose.json.before-db-cpu-20261120`).
+- **Betel (projeto inexistente, autorizado pelo titular):** 13 funções dos apps `betel-ai`/`betel-ai-rehearsal` arquivadas no
+  Inngest da ConnectyHub e Inngest reiniciado (0 chamadas depois); blocos `betel.*` removidos do Caddy (backup
+  `Caddyfile.before-betel-removal-20261120`, validado e recarregado); 6 arquivos em `/opt/connectyhub-managed-portal/` apagados;
+  menções no código removidas. **Empresa Betel Leiloes (66cb4c5a…) apagada** com todos os dados (conversas, leads,
+  faturas, pagamentos, créditos etc.), após backup de 50 tabelas em
+  `/opt/connectyhub/backups/betel-leiloes-20261120.tar.gz` (chmod 600). Conta de login do membro (d***@gmail.com) mantida,
+  sem empresa; arquivos em storage/R2 da Betel não verificados.
+- **Empresas repetidas:** 528 `empresa-cliente-%` = 5 usuários Gmail com 103 empresas cada, todas criadas em 29/06/2026
+  e inativas — provável erro em lote. Nada apagado; investigar a origem.
+
 ## Admin: menu enxuto, Conexões dos clientes corrigida, setores no cadastro de agente — 20/11/2026
 
 - **Atual:** release `d4968cd4b3b76974cfebca1504f8782355d2c238` ativa no **slot a**; retorno `540c3f59` no slot b. Smoke aprovado.
