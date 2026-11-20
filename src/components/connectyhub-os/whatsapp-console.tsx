@@ -36,6 +36,7 @@ import {
   Plus,
   QrCode,
   RefreshCcw,
+  Save,
   Repeat,
   Send,
   ShieldCheck,
@@ -2457,7 +2458,7 @@ const whatsappConsoleTabs: Array<{
   comingSoon?: boolean;
 }> = [
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
-  { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
+  { id: "qualification", label: "Qualificação", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
 ];
 
@@ -2478,8 +2479,22 @@ function WhatsappSaveAction({
   const note = promptTooLong ? "Prompt longo" : changedAreas.length ? `Pendentes: ${changedAreas.join(", ")}` : null;
   return (
     <div className="flex min-w-0 items-center justify-end gap-2">
-      {note ? <span className="min-w-0 truncate text-xs font-semibold" style={{ color: "var(--ch-warning)" }} title={note}>{note}</span> : null}
-      <div className="shrink-0">
+      {note ? <span className="hidden min-w-0 truncate text-xs font-semibold sm:inline" style={{ color: "var(--ch-warning)" }} title={note}>{note}</span> : null}
+      {/* Phone: icon-only button on the tab row; a dot marks unsaved changes. */}
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={disabled || saving}
+        aria-label={note ? `Salvar tudo (${note})` : "Salvar tudo"}
+        title={note ?? "Salvar tudo"}
+        data-connecty-contrast="dark"
+        className="connecty-dark-action relative grid size-10 shrink-0 place-items-center rounded-lg text-white transition disabled:cursor-not-allowed disabled:opacity-60 sm:hidden"
+        style={{ background: "linear-gradient(135deg, var(--ch-brand-action), var(--ch-brand-primary))" }}
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {note ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-white" style={{ background: "var(--ch-warning)" }} /> : null}
+      </button>
+      <div className="hidden shrink-0 sm:block">
         <ActionButton
           compact
           icon={Wand2}
@@ -2507,10 +2522,10 @@ function WhatsappConsoleTabs({
 }) {
   return (
     <div
-      className="sticky top-[68px] z-20 mb-3 flex flex-col gap-1 rounded-xl border p-1 sm:top-3 sm:mb-4 sm:flex-row sm:items-center"
+      className="sticky top-[68px] z-20 mb-3 flex items-center gap-1 rounded-xl border p-1 sm:top-3 sm:mb-4"
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
-      <div role="tablist" aria-label="Secoes do painel WhatsApp" className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 lg:max-w-[720px]">
+      <div role="tablist" aria-label="Secoes do painel WhatsApp" className="flex min-w-0 flex-1 gap-1 sm:grid sm:grid-cols-3 lg:max-w-[720px]">
         {tabs.map((tab) => {
           const active = tab.id === activeTab;
           const comingSoon = tab.comingSoon && metaFeatureLaunchPaused;
@@ -2526,7 +2541,7 @@ function WhatsappConsoleTabs({
               aria-current={active ? "page" : undefined}
               data-connecty-contrast={active ? "dark" : undefined}
               className={cn(
-                "grid min-h-[52px] min-w-[132px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:min-w-0 sm:gap-2 sm:px-3",
+                "flex min-h-10 min-w-0 flex-auto items-center justify-center rounded-lg px-2 text-center transition sm:grid sm:min-h-[58px] sm:grid-cols-[18px_minmax(0,1fr)] sm:justify-stretch sm:gap-2 sm:px-3 sm:text-left",
                 active
                   ? "connecty-dark-action text-white ring-1 ring-white/25"
                   : comingSoon
@@ -2536,9 +2551,9 @@ function WhatsappConsoleTabs({
               style={active ? activeStyle : comingSoon ? { border: "1px solid rgba(var(--ch-brand-primary-rgb),0.24)" } : undefined}
               onClick={() => onChange(tab.id)}
             >
-              <Icon className={cn("h-4 w-4", active ? "text-white" : comingSoon ? "text-blue-600" : "text-slate-500")} />
+              <Icon className={cn("hidden h-4 w-4 sm:block", active ? "text-white" : comingSoon ? "text-blue-600" : "text-slate-500")} />
               <span className="min-w-0">
-                <span className="flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center justify-center gap-1.5 sm:justify-start">
                   <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-white" : "text-slate-800")}>{tab.label}</span>
                   {comingSoon ? (
                     <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase leading-none text-amber-700">

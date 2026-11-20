@@ -5060,3 +5060,10 @@ html {
   .ch-health { grid-template-columns: 1fr; justify-items: center; }
   .ch-health-list { width: 100%; }
 }
+
+/* Celular: título e subtítulo das páginas do painel mais compactos. */
+@media (max-width: 639px) {
+  .ch-page-header { margin-bottom: 14px; gap: 8px; }
+  .ch-page-title, [data-connecty-mode] .ch-page-title { font-size: 19px; line-height: 1.25; }
+  .ch-page-description { margin-top: 4px; font-size: 13px; line-height: 1.45; }
+}
