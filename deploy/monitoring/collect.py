@@ -42,8 +42,6 @@ def service_delta(current, previous, seconds):
 def group(name):
     if 'vision' in name:
         return 'Vision'
-    if 'betel' in name:
-        return 'Betel'
     if 'immov' in name:
         return 'Immov'
     if 'buildkit' in name:

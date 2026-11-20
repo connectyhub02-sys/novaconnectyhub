@@ -15,9 +15,6 @@ async function configuration(project: string): Promise<Config> {
   if (!projects || typeof projects !== "object" || Array.isArray(projects)) throw new Error("INVALID_CONFIG");
   const own = projects && Object.hasOwn(projects, project) ? projects[project] : {};
   if (!own || typeof own !== "object" || Array.isArray(own) || Object.values(own).some(v => typeof v !== "string")) throw new Error("INVALID_CONFIG");
-  // Public Betel origins verified against its VPS migration records. No key is
-  // inherited from ConnectyHub, and HTTP liveness is not job/database evidence.
-  if (project === "betel") return { app: "https://betel.connectyhub.com.br/login", supabaseUrl: "https://betel-supabase.connectyhub.com.br", ...own };
   if (project !== "connectyhub") return own;
   return {
     app: `${(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.connectyhub.com.br").replace(/\/$/, "")}/api/health`,
