@@ -822,6 +822,22 @@ async function fetchGooglePaidTraffic(
   });
 
   if (!result.ok) {
+    // Manager (MCC) accounts have no campaign metrics of their own; Google answers INVALID_ARGUMENT.
+    const manager = await fetchJson(`https://googleads.googleapis.com/${googleAdsApiVersion}/customers/${customerId}/googleAds:search`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query: "SELECT customer.manager, customer.descriptive_name FROM customer LIMIT 1" }),
+    });
+    const customer = readRecord(readRecord(readArray(readRecord(manager.data)?.results)[0])?.customer);
+    if (manager.ok && customer?.manager === true) {
+      return {
+        provider: {
+          ...emptyGooglePaid,
+          status: "online",
+          detail: `Conta de administrador ${readString(customer.descriptiveName) ?? customerId} conectada. As campanhas ficam nas contas de anúncios vinculadas a ela.`,
+        },
+      };
+    }
     const message = readProviderError(result.data) ?? "Google Ads nao retornou relatorio de campanhas.";
     return {
       provider: {
