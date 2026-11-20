@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+// Platform admins test ConnectyHub's internal company, the one their Google connection belongs to.
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 import { getClientTrafficOverview, type TrafficProviderSummary } from "@/lib/traffic/admin-traffic";
 
 export const runtime = "nodejs";
@@ -95,7 +96,7 @@ export async function POST() {
       endpoint: "googleAds:searchStream",
       surface: "google_ads",
       severity: "required",
-      action: "Confira Developer Token, refresh token e permissoes da conta.",
+      action: "Reconecte o Google e confira se a conta escolhida tem campanhas e permissão de acesso.",
     },
     {
       id: "google_conversion_tag",

@@ -16,6 +16,7 @@ import {
 } from "@/lib/client-os/guided-oauth";
 import { queueGrowthIntegrationSyncJob, syncGoogleOAuthAssets } from "@/lib/client-os/growth-integrations";
 import { createServiceClient } from "@/lib/supabase/service";
+import { chooseGoogleAdsCustomer } from "@/lib/google/customer-selection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -88,7 +89,16 @@ export async function GET(request: NextRequest) {
       accessToken: tokens.access_token!,
       config,
     });
-    const selectedCustomerId = accessibleCustomers[0] ?? "";
+    // Keep a still-valid previous choice; pick automatically only when there is a single account.
+    const previousCustomer = readRecord(integration.metadata).selected_customer_id;
+    const selectedCustomerId = chooseGoogleAdsCustomer(accessibleCustomers, typeof previousCustomer === "string" ? previousCustomer : null);
+    if (!selectedCustomerId) {
+      // Never leave an old account feeding the dashboards after a reconnect with several accounts.
+      const stale = await client.from("integration_credentials").delete()
+        .eq("scope", "organization").eq("organization_id", company.id)
+        .eq("integration_id", "google-ads").eq("env_name", "GOOGLE_ADS_CUSTOMER_ID");
+      if (stale.error) throw new Error(stale.error.message);
+    }
     const savedCredentials = await saveOAuthCredentials({
       client,
       organizationId: company.id,
@@ -118,7 +128,7 @@ export async function GET(request: NextRequest) {
       organizationId: company.id,
       providerId: "google-growth",
       status: "connected",
-      label: selectedCustomerId ? "Google conectado" : "Google autorizado",
+      label: selectedCustomerId ? "Google conectado" : "Google autorizado: escolha a conta Google Ads",
       externalAccountId: selectedCustomerId || null,
       externalAccountLabel: selectedCustomerId ? `Google Ads ${selectedCustomerId}` : "Google autorizado",
       scopes: tokens.scope ? tokens.scope.split(/\s+/).filter(Boolean) : config.scopes,

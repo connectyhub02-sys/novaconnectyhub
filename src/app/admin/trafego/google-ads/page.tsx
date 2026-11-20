@@ -5,6 +5,8 @@ import { AdminAdsPlatformDashboard } from "@/components/connectyhub-os/admin-ads
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { getAdminTrafficOverview } from "@/lib/traffic/admin-traffic";
 import { getMetaWorkspace } from "@/lib/meta/company-access";
+import { GoogleAccountPicker } from "@/components/connectyhub-os/google-account-picker";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const metadata: Metadata = {
   title: "Google Ads | Trafego IA",
@@ -22,11 +24,21 @@ export default async function AdminGoogleAdsPage() {
   // ConnectyHub's internal company (same one the admin Meta connection uses).
   const ownOrganizationId = await getMetaWorkspace().then(w => w?.organization?.id ?? null, () => null);
   const overview = await getAdminTrafficOverview(ownOrganizationId);
+  const googleConnection = ownOrganizationId
+    ? (await createServiceClient().from("organization_integrations").select("metadata")
+      .eq("organization_id", ownOrganizationId).eq("provider_id", "google-growth").maybeSingle()).data
+    : null;
+  const googleMetadata = (googleConnection?.metadata ?? {}) as Record<string, unknown>;
+  const accessibleCustomers = Array.isArray(googleMetadata.accessible_customers)
+    ? googleMetadata.accessible_customers.filter((id): id is string => typeof id === "string")
+    : [];
+  const selectedCustomer = typeof googleMetadata.selected_customer_id === "string" ? googleMetadata.selected_customer_id : null;
 
   return (
     <AdminAdsPlatformDashboard
       overview={overview}
       platform="google"
+      accountPicker={ownOrganizationId ? <GoogleAccountPicker companyId={ownOrganizationId} accessible={accessibleCustomers} selected={selectedCustomer} /> : null}
       {...(ownOrganizationId ? {
         credentialHref: `/api/dashboard/integrations/google/connect?companyId=${ownOrganizationId}`,
         credentialPrimaryLabel: "Conectar Google",

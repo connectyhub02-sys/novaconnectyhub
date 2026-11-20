@@ -792,14 +792,16 @@ async function fetchGooglePaidTraffic(
     };
   }
 
-  const customerId = await resolveGoogleAdsCustomerId(credentials, accessToken, developerToken);
+  const { customerId, accessible } = await resolveGoogleAdsCustomerId(credentials, accessToken, developerToken);
 
   if (!customerId) {
     return {
       provider: {
         ...emptyGooglePaid,
         status: "warning",
-        detail: "OAuth validado, mas nenhuma conta Google Ads acessivel foi encontrada.",
+        detail: accessible > 1
+          ? "O login Google acessa mais de uma conta Google Ads. Escolha qual alimenta este painel."
+          : "OAuth validado, mas nenhuma conta Google Ads acessivel foi encontrada.",
       },
     };
   }
@@ -1142,7 +1144,7 @@ async function exchangeGoogleRefreshToken(
 async function resolveGoogleAdsCustomerId(credentials: CredentialMap, accessToken: string, developerToken: string) {
   const configured = normalizeGoogleCustomerId(getCredential(credentials, ["GOOGLE_ADS_CUSTOMER_ID"]));
   if (configured) {
-    return configured;
+    return { customerId: configured, accessible: 1 };
   }
 
   const result = await fetchJson(`https://googleads.googleapis.com/${googleAdsApiVersion}/customers:listAccessibleCustomers`, {
@@ -1154,12 +1156,13 @@ async function resolveGoogleAdsCustomerId(credentials: CredentialMap, accessToke
   });
 
   if (!result.ok) {
-    return "";
+    return { customerId: "", accessible: 0 };
   }
 
   const resourceNames = readArray(readRecord(result.data)?.resourceNames);
-  const firstCustomer = resourceNames.map((item) => normalizeGoogleCustomerId(readString(item) ?? "")).find(Boolean);
-  return firstCustomer ?? "";
+  const customers = resourceNames.map((item) => normalizeGoogleCustomerId(readString(item) ?? "")).filter(Boolean);
+  // Several advertisers (own, clients, managers): never guess which one this dashboard is about.
+  return { customerId: customers.length === 1 ? customers[0] : "", accessible: customers.length };
 }
 
 function buildGoogleAdsHeaders(credentials: CredentialMap, accessToken: string, developerToken: string) {

@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 import type {
   AdminTrafficOverview,
@@ -90,6 +91,7 @@ export function AdminAdsPlatformDashboard({
   credentialPrimaryLabel = "Abrir conexoes",
   credentialSecondaryLabel = "Salvar na manutencao",
   credentialSecondaryHref,
+  accountPicker,
   isPlatformAdmin = true,
   organizationId,
   overview,
@@ -104,6 +106,8 @@ export function AdminAdsPlatformDashboard({
   credentialPrimaryLabel?: string;
   credentialSecondaryLabel?: string;
   credentialSecondaryHref?: string;
+  /** Rendered above the dashboard, e.g. the Google Ads account picker. */
+  accountPicker?: ReactNode;
   isPlatformAdmin?: boolean;
   organizationId?: string | null;
   overview: AdminTrafficOverview;
@@ -167,6 +171,7 @@ export function AdminAdsPlatformDashboard({
       />
 
       {platform === "meta" && <><MetaPixelPanel companyId={shellMode === "client" ? organizationId ?? undefined : undefined} /><MetaAdsLeadsPanel /></>}
+      {accountPicker}
       <Panel
         title={config.trackingTitle}
         eyebrow={config.trackingEyebrow}
