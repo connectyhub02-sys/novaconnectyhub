@@ -18,7 +18,7 @@ it("does not operate without platform and infra access", async () => {
 });
 it("rejects foreign origins and mismatched project confirmation", async () => {
   expect((await POST(req(body(), "POST", "https://evil.test"), context)).status).toBe(400);
-  expect((await POST(req({ ...body(), confirmation: "immov-ai:pause" }), context)).status).toBe(400);
+  expect((await POST(req({ ...body(), confirmation: "projeto-removido:pause" }), context)).status).toBe(400);
   expect(m.broker).not.toHaveBeenCalled();
 });
 it("fails closed if intent cannot be audited", async () => { m.audit.mockRejectedValue(new Error("DB_SECRET")); const r = await POST(req(body()), context); expect(r.status).toBe(503); expect(m.broker).not.toHaveBeenCalled(); expect(await r.text()).not.toContain("DB_SECRET"); });

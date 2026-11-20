@@ -25,7 +25,7 @@ O outro chat deve integrar as alterações atuais de `origin/master` antes de co
 | Relay de IA e Cloudflare R2 | Preservados nos destinos existentes |
 | Vercel | Projeto antigo pausado, Git desconectado; assinatura Pro ainda sem cancelamento confirmado na última verificação |
 
-A VPS é compartilhada com outros sistemas, incluindo Betel, Vision e Immov. Esses serviços foram preservados. Os registros de subdomínios da Betel foram copiados para manter o DNS existente: **nenhum dado da ConnectyHub foi transferido para a Betel**.
+A VPS é compartilhada com outros sistemas, incluindo Betel, Vision e projeto removido. Esses serviços foram preservados. Os registros de subdomínios da Betel foram copiados para manter o DNS existente: **nenhum dado da ConnectyHub foi transferido para a Betel**.
 
 ## 3. Versão efetivamente publicada
 

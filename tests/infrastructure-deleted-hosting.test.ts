@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { deletedHostingProjects } from "@/lib/infrastructure/hosting-lifecycle";
-const mocks = vi.hoisted(() => ({ deleted: new Set(["immov-ai"]), allowed: true, health: vi.fn(), jobs: vi.fn() }));
+const mocks = vi.hoisted(() => ({ deleted: new Set(["projeto-removido"]), allowed: true, health: vi.fn(), jobs: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/infrastructure/hosting-lifecycle-server", () => ({ readDeletedHosting: async () => mocks.deleted }));
 vi.mock("@/lib/infrastructure/collector", () => ({ collectHealth: mocks.health }));
@@ -13,18 +13,18 @@ vi.mock("@/lib/infrastructure/server", async () => {
     getProject: async (id: string) => ({ id, name: id }) };
 });
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({ from: (table: string) => {
-  const data = table === "infra_projects" ? [{ id: "immov-ai" }, { id: "vision" }] : [];
+  const data = table === "infra_projects" ? [{ id: "projeto-removido" }, { id: "vision" }] : [];
   const chain = { select: () => chain, order: () => chain, limit: () => chain, eq: () => chain, neq: () => chain,
     maybeSingle: async () => ({ data: null, error: null }), then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve) };
   return chain;
 } }) }));
 import { GET as overview } from "@/app/api/admin/infrastructure/route";
 import { GET as detail } from "@/app/api/admin/infrastructure/[project]/route";
-beforeEach(() => { vi.clearAllMocks(); mocks.allowed = true; mocks.deleted = new Set(["immov-ai"]); mocks.health.mockResolvedValue({ checks: [], telemetry: null }); });
+beforeEach(() => { vi.clearAllMocks(); mocks.allowed = true; mocks.deleted = new Set(["projeto-removido"]); mocks.health.mockResolvedValue({ checks: [], telemetry: null }); });
 it("separates deleted hosting and never health-checks its removed services", async () => {
   const response = await overview(), data = await response.json();
   expect(response.status).toBe(200);
-  expect(data.projects).toEqual([{ id: "vision" }]); expect(data.deletedProjects).toEqual([{ id: "immov-ai" }]);
+  expect(data.projects).toEqual([{ id: "vision" }]); expect(data.deletedProjects).toEqual([{ id: "projeto-removido" }]);
   expect(mocks.health.mock.calls).toEqual([["vision"]]);
 });
 it("retains unknown projects instead of hiding them without deletion evidence", async () => {
@@ -32,7 +32,7 @@ it("retains unknown projects instead of hiding them without deletion evidence", 
   expect(data.projects).toHaveLength(2); expect(data.deletedProjects).toEqual([]);
 });
 it("preserves audit access for deleted projects without querying old health or job endpoints", async () => {
-  const response = await detail(new Request("https://example.com/api/admin/infrastructure/immov-ai"), { params: Promise.resolve({ project: "immov-ai" }) });
+  const response = await detail(new Request("https://example.com/api/admin/infrastructure/projeto-removido"), { params: Promise.resolve({ project: "projeto-removido" }) });
   expect(response.status).toBe(200); const data = await response.json();
   expect(data.hostingDeleted).toBe(true); expect(data.audit).toEqual([]);
   expect(mocks.health).not.toHaveBeenCalled(); expect(mocks.jobs).not.toHaveBeenCalled();

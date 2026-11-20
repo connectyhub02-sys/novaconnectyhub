@@ -25,7 +25,7 @@ Cloudflare oferece DNS gratuito. O Registro.br também disponibiliza DNS e é um
 | DNS | NS `ns1.vercel-dns.com` e `ns2.vercel-dns.com`; apex e www ainda resolvem para Vercel | Sair da hospedagem não retira automaticamente o DNS |
 | VPS | `connectyhub-vps`, `13.140.34.227`, host `vmi3571281`; SSH funcional | Acesso de operação disponível |
 | Capacidade | 8 CPUs; 23 GiB RAM, cerca de 7,1 GiB usados e 16 GiB disponíveis; disco 290 GB, 152 GB usados e 138 GB livres; sem swap | Há espaço aparente para o app; a amostra não é teste de carga |
-| Concorrência no servidor | Supabase, Inngest, relay, portal e serviços Betel, Vision e Immov ativos; load médio de 6,22/4,94/4,76 na primeira amostra | Limitar build e aplicação; não tratar a VPS como exclusiva |
+| Concorrência no servidor | Supabase, Inngest, relay, portal e serviços Betel, Vision e projeto removido ativos; load médio de 6,22/4,94/4,76 na primeira amostra | Limitar build e aplicação; não tratar a VPS como exclusiva |
 | HTTPS | Caddy em Docker com rede host; config `/opt/connectyhub/proxy/Caddyfile` | Adicionar dois hosts ao proxy existente; preservar todos os outros blocos |
 | Supabase | Containers em execução, healthchecks saudáveis onde configurados; API em `supabase.connectyhub.com.br`, apontando para a VPS | Banco, Auth e Storage permanecem; não copiar dados novamente |
 | Inngest | GET assinado do handler de produção: 200, autenticação válida, **51 funções**; API/eventos em `inngest.connectyhub.com.br` | Esse é o inventário atual para comparação, substituindo contagens históricas |
@@ -40,7 +40,7 @@ As consultas ao Auth e ao health público do Inngest sem credencial retornaram 4
 ### Acessos e lacunas
 
 - Titular confirmou acesso ao **Registro.br** nesta conversa; sessão e autorização sobre a zona ainda precisam ser conferidas na execução.
-- CLI Vercel está na conta/equipe `immovai`, sem acesso à ConnectyHub. Não remover `.vercel`, não vincular outro projeto e não publicar em outra equipe para contornar isso.
+- CLI Vercel está na conta/equipe de outro projeto, sem acesso à ConnectyHub. Não remover `.vercel`, não vincular outro projeto e não publicar em outra equipe para contornar isso.
 - A aba do perfil Chrome `connectyhub02` exibiu o projeto correto e o aviso de cobrança, mas redirecionou ao login ao abrir Environment Variables. Nova autenticação foi solicitada ao titular.
 - **Ambiente Production completo ainda não exportado.** O `.env.local` não contém, entre outros, `INNGEST_BASE_URL`, `INNGEST_DEV`, `AI_RELAY_SECRET`, `AI_RELAY_PUBLIC_URL`, `TRACKING_PUBLIC_TOKEN_SECRET`, `ASAAS_PLATFORM_API_KEY` e flags de Estúdio. Parte da configuração também vive no cofre criptografado do banco. Ausência local não comprova ausência em produção.
 - Zona DNS completa, aliases adicionais, integrações/Storage gerenciados pela Vercel e configurações de firewall/crons no painel ainda não foram inventariados. Não há dependência direta `@vercel/*` em `package.json`, nem `vercel.json` ou pipeline `.github` encontrados no checkout; isso não prova inexistência de recursos configurados no painel.

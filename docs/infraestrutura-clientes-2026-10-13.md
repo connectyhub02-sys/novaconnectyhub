@@ -34,7 +34,7 @@ prévia, depois de quarentena. Preserva cadastro comercial, contratos, auditoria
 R2, DNS, backups externos, proxy, imagens e redes Docker. Não apresentar como
 "apagou todos os dados do cliente". A prévia informa as exclusões.
 
-Vision e Immov.ai têm inventário privado revisado. Exclusão local de Immov.ai
+Vision e projeto removido têm inventário privado revisado. Exclusão local de projeto removido
 liberável após quarentena; a de Vision continua bloqueada para revisão adicional
 dos serviços externos. Pausar/retomar não corresponde a suspender a conta da
 ConnectyHub inteira. Publicações por SSH fora deste executor não estão coordenadas
@@ -56,7 +56,7 @@ incluindo seleção de cliente, liberação explícita e confirmação desabilit
 preenchimento. Nenhum vínculo real criado para testar.
 
 Executor instalado como `connectyhub-hosting.service`, socket privado, coletas a
-cada 30 segundos. GETs reais validaram inventário de Vision/Immov e bloquearam o
+cada 30 segundos. GETs reais validaram inventário de Vision/projeto removido e bloquearam o
 projeto compartilhado ConnectyHub. Testes Python cobrem propriedade, mounts
 compartilhados, revisão, idempotência, retomada e falha. Durante o ensaio descartável,
 Docker bloqueou consultas ao container que desligava: acompanhamento corrigido
@@ -67,8 +67,8 @@ política `always` restaurada, quarentena e exclusão do container, volume e dir
 de teste. Configuração temporária retirada, recibos preservados. Nove testes Python
 passaram, incluindo consulta rápida ao recibo enquanto Docker desliga o container
 e rejeição de propriedade duplicada entre projetos. Na conferência final, dois
-containers de QA da Vision foram retirados do mapeamento de Immov.ai antes da
-liberação da tela: Vision ficou com 394 containers (18 ativos) e Immov.ai com 15
+containers de QA da Vision foram retirados do mapeamento de projeto removido antes da
+liberação da tela: Vision ficou com 394 containers (18 ativos) e projeto removido com 15
 (todos ativos). Nenhum vínculo de cliente estava habilitado durante essa revisão.
 Nenhum serviço de cliente foi desligado ou excluído para homologar.
 
@@ -79,7 +79,7 @@ Build de 120 páginas passou. Candidato e domínio público passaram: health/hom
 200, páginas protegidas 307 anônimo, APIs administrativas e de cliente 401 sem
 sessão, Inngest exigindo assinatura e GET assinado 200 com 58 funções. Métricas
 montadas read-only atuais, socket consultado com UID 1000 retornando 15 serviços
-exclusivos de Immov.ai. Builder parado após a publicação.
+exclusivos de projeto removido. Builder parado após a publicação.
 
 O teste visual usou dados simulados localmente. Não houve sessão real de cliente
 nem vínculo real para homologar; o titular determinou que essa escolha seja feita

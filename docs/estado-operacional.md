@@ -923,7 +923,7 @@ mensagens; envio/recebimento real e confirmação pelo titular ainda pendentes.
 
 Publicada a correção `d7c403cc` no slot b/3131, fallback `0972dc2b` no a/3130.
 A lista administrativa antes consultava somente `infra_projects` e healthchecks;
-por isso o cadastro preservado do Immov.ai continuava aparecendo com erro após a
+por isso o cadastro preservado do projeto removido continuava aparecendo com erro após a
 exclusão real. Agora a API consulta o estado recente do coletor do host e separa
 somente projetos explicitamente `deleted` e sem serviços. Pausa/quarentena e
 leitura ausente, inválida ou antiga não ocultam projetos.
@@ -936,16 +936,16 @@ Cadastro, contratos e auditoria continuam preservados; nenhuma nova exclusão.
 
 111 testes infra, TypeScript, ESLint e build passaram. Candidato e HTTPS público
 passaram em saúde/versão, páginas/assets, proteção das rotas, Inngest assinado,
-métricas e socket privado. Leitura pelo aplicativo confirmou Immov.ai excluído
+métricas e socket privado. Leitura pelo aplicativo confirmou projeto removido excluído
 com zero serviços e Vision ativa com 18, em snapshot recente. Builder parado.
 Isolamento/filtragem e ausência de healthchecks após exclusão conferidos por
 testes de rotas. Nova conferência visual autenticada pelo titular pendente.
 
-## Exclusão da hospedagem local do Immov.ai — 13/10/2026, 12h43 BRT
+## Exclusão da hospedagem local do projeto removido — 13/10/2026, 12h43 BRT
 
 Exclusão autorizada explicitamente pelo titular no chat, após ele colocar o
 projeto em quarentena no painel. Executor confirmou os 15 containers parados,
-quatro volumes exclusivos e somente `/opt/immov-ai`; operação executada pelo
+quatro volumes exclusivos e somente `/opt/<projeto removido>`; operação executada pelo
 socket privado com revisão atual, sem comandos genéricos de limpeza. Recibo
 `62b2fb44-e6a5-465e-8934-48d4f0ba4822`: `delete/completed`; estado `deleted`.
 Confirmados zero containers/volumes remanescentes do inventário e ausência do
@@ -959,11 +959,11 @@ com a atividade dos demais serviços. R2, DNS, recursos externos, imagens Docker
 compartilhadas, cadastro e contratos preservados. Não foi feita limpeza geral.
 
 `hosting.json` confirmou hospedagem excluída e Vision ativa com 18 serviços.
-Nova medição exclusiva do Immov.ai retornou zero bytes locais. ConnectyHub
+Nova medição exclusiva do projeto removido retornou zero bytes locais. ConnectyHub
 respondeu saúde `ok` em HTTPS, versão `0972dc2b`; fontes R2 da Vision permaneceram
 válidas. Ajuste `a1ab6379` instalado no coletor ignora as fontes de credenciais de
 hospedagens excluídas, evitando invalidar o R2 de outros projetos. Sete testes
-Python passaram. O R2 preservado do Immov.ai não será mais remedido usando seu
+Python passaram. O R2 preservado do projeto removido não será mais remedido usando seu
 container removido; a última leitura tem data histórica e futuras coletas o
 mostrarão indisponível, sem afirmar que os arquivos externos foram apagados.
 
@@ -972,10 +972,10 @@ mostrarão indisponível, sem afirmar que os arquivos externos foram apagados.
 Produção `0972dc2b` no slot a/3130; fallback `f36b370b` no b/3131. Relógios
 separados de Cloudflare R2 e disco local mostram quantidade e maiores categorias,
 com escala azul adaptativa e sem cota/cobrança inventada. Fontes exclusivas
-revisadas: Vision e Immov.ai. Demais projetos ficam sem leitura até revisão.
+revisadas: Vision e projeto removido. Demais projetos ficam sem leitura até revisão.
 
 Vision: aproximadamente 83,65 GB locais (53,80 GB automações e 28,70 GB aplicações/
-versões), mais 6,59 GB R2. Immov.ai: 35,12 GB locais (34,46 GB aplicações/versões),
+versões), mais 6,59 GB R2. projeto removido: 35,12 GB locais (34,46 GB aplicações/versões),
 mais 314,11 MB R2. Leituras de 12h08–12h17 BRT. Disco geral observado em 96%.
 Coletor root restrito ao inventário revisado, local horário/R2 seis horas; agregado
 sanitizado chega ao app pela montagem somente leitura. Timer ativo e repetição
@@ -1028,7 +1028,7 @@ no fluxo existente, sem suspensão por `past_due` nem retomada automática.
 
 Migration 0204 aplicada e registrada com backup privado; cinco projetos sem
 vínculo e com acesso cliente desabilitado. Executor privado instalado e ativo,
-com inventário exclusivo de Vision (18 containers ativos) e Immov.ai (15).
+com inventário exclusivo de Vision (18 containers ativos) e projeto removido (15).
 Pausa/retomada/quarentena/exclusão verificadas somente em recursos descartáveis;
 nenhum cliente real desligado ou excluído. Recibos persistidos e duplicidade de
 propriedade bloqueada. Exclusão é local, preserva R2/DNS/backups externos e cadastro

@@ -41,10 +41,10 @@ Leituras entre 12h08 e 12h17 BRT, base 1024 (interface MB/GB):
 | Projeto | Disco local estimado | R2 | Maior consumo local |
 | --- | ---: | ---: | --- |
 | Vision | 89.819.693.056 bytes (83,65 GB) | 7.075.895.193 bytes (6,59 GB), 45.290 objetos em dois espaços | Históricos das automações: 57.769.078.784 bytes (53,80 GB); aplicações/versões: 30.814.580.736 bytes (28,70 GB) |
-| Immov.ai | 37.713.637.376 bytes (35,12 GB) | 329.370.443 bytes (314,11 MB), 276 objetos em um espaço | Aplicações/versões: 37.000.278.016 bytes (34,46 GB) |
+| projeto removido | 37.713.637.376 bytes (35,12 GB) | 329.370.443 bytes (314,11 MB), 276 objetos em um espaço | Aplicações/versões: 37.000.278.016 bytes (34,46 GB) |
 
 No R2 da Vision, imagens ocupam 7.055.633.603 bytes; áudios 18.012.700 e vídeos
-2.248.890. No Immov.ai a leitura R2 é composta de imagens. A revisão configurada
+2.248.890. No projeto removido a leitura R2 é composta de imagens. A revisão configurada
 cobre estes dois projetos. Outros projetos permanecem sem leitura até revisão
 explícita de recursos exclusivos; não recebem o total da máquina como substituto.
 
