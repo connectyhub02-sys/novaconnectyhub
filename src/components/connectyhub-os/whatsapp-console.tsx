@@ -1779,14 +1779,14 @@ export function WhatsAppConsole({
       />
 
       {notice && <NoticeBar notice={notice} />}
-      {!loading && !canManageInternalAgents ? (
+      {/* Setup guide only while setup is incomplete; once done it was just information. */}
+      {!loading && !canManageInternalAgents && !(state?.agent && isConnected) ? (
         <div className="my-4 rounded-xl border bg-white p-4" aria-label="Configuração inicial em três passos">
           <ol className="grid gap-3 sm:grid-cols-3">
             <li className="text-sm"><span className="font-semibold">1. Seu negócio</span><p className="mt-1 text-xs text-slate-500">{selectedCompany?.name || "Cadastre seu nome profissional ou comercial."}</p></li>
             <li><button className="text-left text-sm" onClick={() => state?.agent ? setActiveTab("prompt") : startNewClientAgent()}><span className="font-semibold">2. Sua atividade</span><span className="mt-1 block text-xs text-slate-500">{state?.agent ? agentPromptTemplates.find((item) => item.id === state.agent?.promptTemplateConfig?.templateId)?.label || "Revisar atividade" : "Escolha e receba o atendimento pronto."}</span></button></li>
             <li><button className="text-left text-sm" disabled={!state?.agent} onClick={() => { const agent = agents.find(item => item.id === selectedAgentId); if (agent) void openClientAgentEdit(agent); }}><span className="font-semibold">3. Conectar WhatsApp</span><span className="mt-1 block text-xs text-slate-500">{isConnected ? "WhatsApp conectado" : "Leia o QR Code para conectar."}</span></button></li>
           </ol>
-          {state?.agent && isConnected ? <p className="mt-3 border-t pt-3 text-xs text-slate-600">{settingsChanged ? "Há alterações para salvar antes de usar no atendimento." : state.behavior.agentEnabled ? "Configuração salva e WhatsApp conectado. Envie uma mensagem de teste para conferir o atendimento. Você pode adicionar produtos e informações aos poucos." : "O agente está pausado. Ative o atendimento na aba Comportamento quando quiser retomar."}</p> : null}
         </div>
       ) : null}
       {metaComingSoonChannel ? (
@@ -1900,29 +1900,27 @@ export function WhatsAppConsole({
         ) : null}
 
         {state?.agent ? <>
-        <WhatsappConsoleCommandBar
-          agent={state.agent}
-          productCount={state.salesCatalog.length}
-          knowledgeFileCount={state.knowledge.files.length}
-          activityKind={selectedActivity.kind}
-          behavior={behaviorDraft}
-          company={selectedCompany}
-          entityLabel={variant.entityPromptLabel}
-          instance={state.instance}
-          promptChanged={promptChanged}
-          promptTemplateChanged={promptTemplateChanged}
-          cloneProfileChanged={cloneProfileChanged}
-          qualificationChanged={qualificationChanged}
-          channelConfigChanged={channelConfigChanged}
-          settingsChanged={settingsChanged}
-          behaviorChanged={behaviorChanged}
-          promptTooLong={promptTooLong}
-          saving={running === "save_settings"}
-          disabled={!state.capability.schemaReady || !settingsChanged || promptTooLong}
-          onSave={saveAgentSettings}
+        <WhatsappConsoleTabs
+          activeTab={activeWhatsappTab}
+          onChange={handleWhatsappTabChange}
+          tabs={visibleWhatsappTabs}
+          action={
+            <WhatsappSaveAction
+              changedAreas={[
+                promptChanged ? "Prompt" : null,
+                promptTemplateChanged ? "Modelo" : null,
+                cloneProfileChanged ? "Personalidade" : null,
+                qualificationChanged ? "CRM" : null,
+                channelConfigChanged ? "Canais" : null,
+                behaviorChanged ? "Comportamento" : null,
+              ].filter((area): area is string => Boolean(area))}
+              promptTooLong={promptTooLong}
+              saving={running === "save_settings"}
+              disabled={!state.capability.schemaReady || !settingsChanged || promptTooLong}
+              onSave={saveAgentSettings}
+            />
+          }
         />
-
-        <WhatsappConsoleTabs activeTab={activeWhatsappTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
 
         {activeWhatsappTab === "prompt" ? (
         <Panel
@@ -2463,90 +2461,25 @@ const whatsappConsoleTabs: Array<{
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
 ];
 
-function WhatsappConsoleCommandBar({
-  agent,
-  productCount,
-  knowledgeFileCount,
-  activityKind,
-  behavior,
-  company,
-  entityLabel,
-  instance,
-  promptChanged,
-  promptTemplateChanged,
-  cloneProfileChanged,
-  qualificationChanged,
-  channelConfigChanged,
-  settingsChanged,
-  behaviorChanged,
+/** Save button that sits on the tab row; shows a short note only when something is pending. */
+function WhatsappSaveAction({
+  changedAreas,
   promptTooLong,
   saving,
   disabled,
   onSave,
 }: {
-  agent: NonNullable<WhatsappState["agent"]>;
-  productCount: number;
-  knowledgeFileCount: number;
-  activityKind: "professional" | "company" | "general";
-  behavior: WhatsappBehaviorConfig;
-  company: ClientCompany | null;
-  entityLabel: string;
-  instance: WhatsappState["instance"];
-  promptChanged: boolean;
-  promptTemplateChanged: boolean;
-  cloneProfileChanged: boolean;
-  qualificationChanged: boolean;
-  channelConfigChanged: boolean;
-  settingsChanged: boolean;
-  behaviorChanged: boolean;
+  changedAreas: string[];
   promptTooLong: boolean;
   saving: boolean;
   disabled: boolean;
   onSave: () => void;
 }) {
-  const statusMeta = getStatusMeta(instance?.status ?? "draft");
-  const displayAgentName = agent.name;
-  const changedAreas = [
-    promptChanged ? "Prompt" : null,
-    promptTemplateChanged ? "Modelo" : null,
-    cloneProfileChanged ? "Personalidade" : null,
-    qualificationChanged ? "CRM" : null,
-    channelConfigChanged ? "Canais" : null,
-    behaviorChanged ? "Comportamento" : null,
-  ].filter(Boolean);
-  const changeLabel = promptTooLong
-    ? "Prompt longo"
-    : changedAreas.length > 0
-      ? `Pendentes: ${changedAreas.join(", ")}`
-      : "Salvo";
-
+  const note = promptTooLong ? "Prompt longo" : changedAreas.length ? `Pendentes: ${changedAreas.join(", ")}` : null;
   return (
-    <div
-      aria-label="Resumo do agente"
-      className="sticky top-[68px] z-20 mb-3 min-w-0 rounded-xl border p-2 backdrop-blur sm:top-3 sm:mb-4"
-      style={{
-        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.12), rgba(var(--ch-accent-2-rgb),0.055) 42%, rgba(255,255,255,0.94) 100%), rgba(255,255,255,0.86)",
-        borderColor: "rgba(var(--ch-accent-rgb),0.22)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.82), 0 14px 34px rgba(var(--ch-accent-rgb),0.10)",
-      }}
-    >
-      <div className="flex min-w-0 items-center gap-1.5">
-        <div className="min-w-0 flex-1 overflow-x-auto" tabIndex={0} role="region" aria-label="Informações do agente">
-        <div className="grid min-w-[1000px] xl:min-w-0 grid-cols-[1.15fr_1.45fr_.8fr_1.1fr_.8fr_.7fr_.9fr_.65fr_.9fr_1.1fr_1.1fr] gap-1">
-          <SummaryPill label="Agente" value={displayAgentName} />
-          <SummaryPill label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
-          <SummaryPill label="WhatsApp" value={statusMeta.label} tone={instance?.status === "connected" ? "green" : "amber"} />
-          <SummaryPill label="Número" value={formatPhone(instance?.phoneNumber)} />
-          <SummaryPill label="Conversa" value={formatResponseMode(behavior.responseMode)} />
-          <SummaryPill label="Rapport" value={formatRapportMode(behavior.adaptiveRapportMode)} />
-          <SummaryPill label="Plano" value={company ? `${company.planCode} / ${company.status}` : "Não informado"} />
-          <SummaryPill label="Produtos" value={productCount.toLocaleString("pt-BR")} />
-          <SummaryPill label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
-          <SummaryPill label="Atuação" value={activityKind === "professional" ? "Profissional individual" : activityKind === "company" ? "Empresa" : "Atendimento geral"} />
-          <SummaryPill label="Alterações" value={changeLabel} tone={settingsChanged ? "amber" : "green"} />
-        </div>
-        </div>
-        <div className="shrink-0">
+    <div className="flex min-w-0 items-center justify-end gap-2">
+      {note ? <span className="min-w-0 truncate text-xs font-semibold" style={{ color: "var(--ch-warning)" }} title={note}>{note}</span> : null}
+      <div className="shrink-0">
         <ActionButton
           compact
           icon={Wand2}
@@ -2556,7 +2489,6 @@ function WhatsappConsoleCommandBar({
           loading={saving}
           onClick={onSave}
         />
-        </div>
       </div>
     </div>
   );
@@ -2566,19 +2498,19 @@ function WhatsappConsoleTabs({
   activeTab,
   onChange,
   tabs,
+  action,
 }: {
   activeTab: WhatsappConsoleTab;
   onChange: (tab: WhatsappConsoleTab) => void;
   tabs: typeof whatsappConsoleTabs;
+  action?: ReactNode;
 }) {
   return (
     <div
-      className="mb-3 overflow-hidden rounded-xl border p-1 sm:mb-4 sm:overflow-visible"
-      role="tablist"
-      aria-label="Secoes do painel WhatsApp"
+      className="sticky top-[68px] z-20 mb-3 flex flex-col gap-1 rounded-xl border p-1 sm:top-3 sm:mb-4 sm:flex-row sm:items-center"
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
-      <div className="flex min-w-max gap-1 overflow-x-auto pb-1 sm:grid sm:min-w-0 sm:grid-cols-3 sm:overflow-visible sm:pb-0 md:grid-cols-4 xl:grid-cols-7">
+      <div role="tablist" aria-label="Secoes do painel WhatsApp" className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 lg:max-w-[720px]">
         {tabs.map((tab) => {
           const active = tab.id === activeTab;
           const comingSoon = tab.comingSoon && metaFeatureLaunchPaused;
@@ -2620,6 +2552,7 @@ function WhatsappConsoleTabs({
           );
         })}
       </div>
+      {action ? <div className="shrink-0 px-1 pb-1 sm:pb-0">{action}</div> : null}
     </div>
   );
 }
@@ -2643,54 +2576,6 @@ function getWhatsappTabActiveStyle(tab: WhatsappConsoleTab) {
     background: "linear-gradient(135deg, var(--ch-brand-action), var(--ch-brand-primary))",
     boxShadow: "0 14px 28px rgba(var(--ch-brand-primary-rgb),0.18)",
   };
-}
-
-function SummaryPill({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "green" | "amber";
-}) {
-  const toneStyle = tone === "green"
-    ? {
-        background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-whatsapp-rgb),0.045))",
-        borderColor: "rgba(var(--ch-whatsapp-rgb),0.18)",
-        color: "var(--ch-whatsapp-deep)",
-      }
-    : tone === "amber"
-      ? {
-          background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-warning-rgb),0.055))",
-          borderColor: "rgba(var(--ch-warning-rgb),0.22)",
-          color: "var(--ch-warning)",
-        }
-      : {
-          background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(var(--ch-accent-rgb),0.024)), rgba(255,255,255,0.88)",
-          borderColor: "rgba(var(--ch-accent-rgb),0.13)",
-          color: "var(--ch-text)",
-        };
-
-  return (
-    <div
-      className="min-w-0 rounded-md border px-1.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]"
-      title={`${label}: ${value}`}
-      style={{
-        background: toneStyle.background,
-        borderColor: toneStyle.borderColor,
-      }}
-    >
-      <p className="truncate font-mono text-[9px] uppercase leading-3 text-slate-500">{label}</p>
-      <p
-        className="mt-1 truncate text-[10px] font-semibold leading-3"
-        style={{ color: toneStyle.color }}
-        title={value}
-      >
-        {value}
-      </p>
-    </div>
-  );
 }
 
 function getAgentConnectionIndicator(status: string | null | undefined) {
