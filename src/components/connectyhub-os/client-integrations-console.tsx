@@ -1,5 +1,6 @@
 "use client";
 import { MetaPixelPanel } from "./meta-pixel-panel";
+import { GoogleTagPanel } from "./google-tag-panel";
 
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
@@ -1662,6 +1663,7 @@ export function ClientIntegrationsConsole({
             onSavePreferences={saveAsaasPreferences}
             onTogglePaymentMethod={toggleAsaasPreferenceMethod}
           />
+          {selectedCompanyId ? <GoogleTagPanel key={selectedCompanyId} companyId={selectedCompanyId} /> : null}
           {social ? <div id="redes-sociais" className="scroll-mt-24 xl:col-span-2">{social}</div> : null}
 
           {universalWebhookVisible ? (

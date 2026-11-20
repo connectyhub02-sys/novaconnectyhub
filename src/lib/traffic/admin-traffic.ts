@@ -770,7 +770,7 @@ async function fetchGooglePaidTraffic(
   const emptyGooglePaid = buildEmptyGooglePaidProvider(credentialScope);
   const developerToken = getCredential(credentials, ["GOOGLE_ADS_DEVELOPER_TOKEN"]);
 
-  if (!developerToken || !accessToken) {
+  if (!accessToken) {
     return {
       provider: {
         ...emptyGooglePaid,
@@ -805,7 +805,7 @@ async function fetchGooglePaidTraffic(
   const result = await fetchJson(`https://googleads.googleapis.com/${googleAdsApiVersion}/customers/${customerId}/googleAds:search`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ pageSize: 500, query }),
+    body: JSON.stringify({ query }), // search no longer accepts pageSize; LIMIT bounds rows
   });
 
   if (!result.ok) {
@@ -1118,7 +1118,7 @@ async function resolveGoogleAdsCustomerId(credentials: CredentialMap, accessToke
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${accessToken}`,
-      "developer-token": developerToken,
+      ...(developerToken ? { "developer-token": developerToken } : {}),
     },
   });
 
@@ -1137,7 +1137,7 @@ function buildGoogleAdsHeaders(credentials: CredentialMap, accessToken: string, 
     Accept: "application/json",
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
-    "developer-token": developerToken,
+    ...(developerToken ? { "developer-token": developerToken } : {}),
   };
 
   if (loginCustomerId) {

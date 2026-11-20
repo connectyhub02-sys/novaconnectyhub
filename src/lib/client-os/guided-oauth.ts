@@ -117,8 +117,6 @@ const defaultGoogleScopes = [
   "https://www.googleapis.com/auth/adwords",
   "https://www.googleapis.com/auth/analytics.readonly",
   "https://www.googleapis.com/auth/webmasters.readonly",
-  "https://www.googleapis.com/auth/business.manage",
-  "https://www.googleapis.com/auth/calendar",
 ];
 
 const googleScopeAliases: Record<string, string> = {
@@ -156,8 +154,13 @@ export function getGuidedOAuthConfig(kind: GuidedOAuthProviderKind) {
 
 export async function loadGoogleGuidedOAuthConfig(input: { client?: SupabaseClient } = {}): Promise<GoogleGuidedOAuthConfig> {
   const credentials = await loadPlatformCredentialMap(input.client, "google-ads", googlePlatformCredentialNames);
-  const clientId = getCredentialValue(credentials, ["GOOGLE_ADS_CLIENT_ID"]);
-  const clientSecret = getCredentialValue(credentials, ["GOOGLE_ADS_CLIENT_SECRET"]);
+  // One verified Google project serves YouTube, Ads, Analytics and Search Console:
+  // without a dedicated Ads client, reuse that project's OAuth client.
+  const youtube = await loadPlatformCredentialMap(input.client, "youtube", ["YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET"]);
+  const dedicated = Boolean(getCredentialValue(credentials, ["GOOGLE_ADS_CLIENT_ID"]));
+  const clientId = dedicated ? getCredentialValue(credentials, ["GOOGLE_ADS_CLIENT_ID"]) : getCredentialValue(youtube, ["YOUTUBE_CLIENT_ID"]);
+  const clientSecret = dedicated ? getCredentialValue(credentials, ["GOOGLE_ADS_CLIENT_SECRET"]) : getCredentialValue(youtube, ["YOUTUBE_CLIENT_SECRET"]);
+  // Google sunset developer tokens on 2026-09-09; sent only if still configured.
   const developerToken = getCredentialValue(credentials, ["GOOGLE_ADS_DEVELOPER_TOKEN"]);
   const redirectUri = getCredentialValue(credentials, ["GOOGLE_OAUTH_REDIRECT_URI"])
     || `${getAppBaseUrl()}/api/dashboard/integrations/google/callback`;
@@ -165,8 +168,8 @@ export async function loadGoogleGuidedOAuthConfig(input: { client?: SupabaseClie
   const apiVersion = normalizeVersion(getCredentialValue(credentials, ["GOOGLE_ADS_API_VERSION"]) || "v24");
   const loginCustomerId = normalizeGoogleCustomerId(getCredentialValue(credentials, ["GOOGLE_ADS_LOGIN_CUSTOMER_ID"])) || null;
 
-  if (!clientId || !clientSecret || !developerToken) {
-    throw new Error("Configure Google OAuth Client ID, Client Secret e Developer Token na sala de manutencao.");
+  if (!clientId || !clientSecret) {
+    throw new Error("Configure o Client ID e o Client Secret do Google na manutenção.");
   }
 
   return {
@@ -316,7 +319,7 @@ export async function listGoogleAdsAccessibleCustomers(input: {
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${input.accessToken}`,
-      "developer-token": input.config.developerToken,
+      ...(input.config.developerToken ? { "developer-token": input.config.developerToken } : {}),
       ...(input.config.loginCustomerId ? { "login-customer-id": input.config.loginCustomerId } : {}),
     },
   });

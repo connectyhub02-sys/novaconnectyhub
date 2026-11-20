@@ -412,15 +412,11 @@ async function syncGoogleGrowthData(input: {
     warnings.push("Google OAuth sem access token. Verifique refresh token, client id e client secret.");
   }
 
-  if (!developerToken) {
-    warnings.push("Google Ads Developer Token nao configurado na manutencao.");
-  }
-
   if (!customerId) {
     warnings.push("Google sem conta Ads selecionada.");
   }
 
-  if (accessToken && developerToken && customerId) {
+  if (accessToken && customerId) {
     const paidResult = await fetchGoogleCampaignInsights({
       accessToken,
       assetId: customerAsset?.id ?? null,
@@ -687,7 +683,8 @@ async function fetchGoogleCampaignInsights(input: {
   const result = await fetchJson(`https://googleads.googleapis.com/${apiVersion}/customers/${input.customerId}/googleAds:search`, {
     method: "POST",
     headers: buildGoogleAdsHeaders(input.credentials, input.accessToken, input.developerToken),
-    body: JSON.stringify({ pageSize: 500, query }),
+    // Google Ads search no longer accepts pageSize; LIMIT in the query bounds the rows.
+    body: JSON.stringify({ query }),
   });
 
   if (!result.ok) {
@@ -1032,7 +1029,7 @@ function buildGoogleAdsHeaders(credentials: CredentialMap, accessToken: string, 
     Accept: "application/json",
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
-    "developer-token": developerToken,
+    ...(developerToken ? { "developer-token": developerToken } : {}),
   };
 
   if (loginCustomerId) {

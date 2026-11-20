@@ -1,6 +1,7 @@
 "use client";
 
 import { MetaStorePixel } from "./meta-store-pixel";
+import { GoogleStoreTag } from "./google-store-tag";
 import { useEffect } from "react";
 import { StoreAvailabilityMonitor } from "@/components/checkout/store-availability-monitor";
 import {
@@ -20,5 +21,5 @@ export function PublicTrackingContextBridge({ context }: PublicTrackingContextBr
     writePublicTrackingContext(context);
   }, [context, signature]);
 
-  return context?.scope === "organization" && context.organization_id ? <><StoreAvailabilityMonitor organizationId={context.organization_id} /><MetaStorePixel key={context.organization_id} context={context} /></> : null;
+  return context?.scope === "organization" && context.organization_id ? <><StoreAvailabilityMonitor organizationId={context.organization_id} /><MetaStorePixel key={context.organization_id} context={context} /><GoogleStoreTag key={`g:${context.organization_id}`} context={context} /></> : null;
 }
