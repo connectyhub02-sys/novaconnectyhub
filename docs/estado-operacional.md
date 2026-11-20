@@ -2,9 +2,12 @@
 
 ## Coexistência pelo painel — publicada, cadastro real pendente, 19/11/2026
 
-- **Atual:** release `3f4edc61377ad502694952d535eb128308e96aaf` (orientações de coexistência no
-  painel) ativa no **slot a**; retorno `e46f4ecd` no slot b. Mesmo smoke no candidato e por HTTPS
-  aprovado; builder parado.
+- **Atual:** release `b0bbedcf5d16a3e4a50e7113a67e82bca824f6c9` ativa no **slot b** desde 19/11 ~23h20 BRT;
+  retorno `3f4edc61` (orientações de coexistência) no slot a. Menu lateral do cliente e do admin com uma
+  única entrada **Atendimento**: WhatsApp oficial e Direct e Messenger ficam só como abas dentro dela, com
+  ícones das redes, e continuam na busca do menu. Smoke no candidato (health/SHA, 20 assets, 307/401,
+  Inngest assinado 61 funções, opção de coexistência) e HTTPS aprovados. Conferência visual logada pendente:
+  o perfil do Chrome usado pelo agente não tem sessão no painel.
 - **Tentativa real do titular (19/11, ~17h BRT) bloqueada pela Meta:** o fluxo chegou ao passo
   “Confirmar conta do WhatsApp Business” da conta “Eliane Dias - ConnectyHub” e falhou com
   “está no portfólio de negócios da app à qual estás a associar, pelo que não pode ser associada
