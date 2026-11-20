@@ -2,7 +2,10 @@
 
 ## Google: conexão do admin, conta Ads da ConnectyHub e verificação enviada — 20/11/2026
 
-- **Atual:** release `97ba3d2f483b8b1a7bab8a664e75ec75a24f8f48` ativa no **slot b**; retorno `b981893c` no slot a. Releases do
+- **Atual:** release `c0e9f9d7f06ce03275885b8c8bf00d8b06d97e4a` ativa no **slot a**; retorno `97ba3d2f` no slot b. Conexão Google
+  não escolhe mais conta sozinha quando o login acessa várias (mantém escolha anterior válida; senão limpa e pede);
+  admin tem seletor “Conta Google Ads deste painel”; “Testar conexão” do admin usa a empresa interna e deu 4/5 OK
+  (falta só Conversion ID, recomendado). Releases anteriores do
   dia: `57028823` (admin “Conectar Google”, renovação do token com o cliente OAuth do YouTube, guarda de prefetch),
   `ab554b07` (Google usa a empresa interna c5b8e371 “ConnectyHub Interno”, como a Meta; antes pegava empresa de teste
   “connectyhub” com trial vencido), `b981893c` (rota de seleção de ativos também), `97ba3d2f` (conta administradora
@@ -12,8 +15,7 @@
   e cartão); pedido de vínculo 201-148-0762 → MCC enviado e **pendente** até o titular concluir a conta com cartão.
 - **Conexão do admin feita em 20/11 ~05h20 BRT** com connectyhub01 (consentimento inglês, “Selecionar tudo”). O callback
   escolheu sozinho a 1ª conta acessível (Vision Home 280-124-1888); corrigido pela rota de seleção para **5753432299**.
-  Pendências: callback ainda escolhe a primeira conta acessível; botão “Testar conexão” falha em conta administradora;
-  texto do card de orientação no admin ainda cita manutenção.
+  Pendência: texto do card de orientação no admin ainda cita manutenção (callback e teste corrigidos em `c0e9f9d7`).
 - **Vídeo de demonstração:** https://youtu.be/Gwkq93rqXag (não listado, canal ConnectyHub, verificações do YouTube sem
   problema), sem dados de clientes. **Verificação Google enviada** (escopos `adwords` e `analytics.readonly`; questionário
   respondido: não pessoal, não interno, não só teste, não plugin SMTP). Central de verificação: “O acesso aos dados do seu
