@@ -431,6 +431,7 @@ export function ClientIntegrationsConsole({
   social,
   socialConnected,
   showDiagnostics = false,
+  googleAvailable = true,
 }: {
   state: ClientIntegrationHubState;
   /** YouTube and TikTok cards, rendered by the server page inside this hub. */
@@ -438,6 +439,8 @@ export function ClientIntegrationsConsole({
   socialConnected?: Partial<Record<"youtube" | "tiktok", boolean>> | null;
   /** Meta review, canary, webhook and runtime tools: platform admins only. */
   showDiagnostics?: boolean;
+  /** False while the platform has no Google Ads OAuth client and developer token. */
+  googleAvailable?: boolean;
 }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
@@ -1535,7 +1538,7 @@ export function ClientIntegrationsConsole({
           items={[
             { id: "meta-ads-guiado", name: "Meta", detail: "Facebook, Instagram e anúncios", icon: Globe2, status: metaFeatureLaunchPaused ? "soon" : metaConnection?.status === "connected" ? "on" : "off" },
             { id: "whatsapp-oficial", name: "WhatsApp oficial", detail: "API oficial da Meta", icon: MessageCircle, status: "open" },
-            { id: "google-ads-guiado", name: "Google", detail: "Ads, Analytics e Search", icon: Search, status: googleConnection?.status === "connected" ? "on" : "off" },
+            { id: "google-ads-guiado", name: "Google", detail: "Ads, Analytics e Search", icon: Search, status: googleConnection?.status === "connected" ? "on" : googleAvailable ? "off" : "soon" },
             { id: "asaas-guiado", name: "Asaas", detail: "Pix, boleto e cartão", icon: CreditCard, status: asaasConnected ? "on" : "off" },
             { id: "redes-sociais", name: "YouTube", detail: "Publicar vídeos", icon: Video, status: socialConnected?.youtube ? "on" : "off" },
             { id: "redes-sociais", name: "TikTok", detail: "Publicar vídeos", icon: Music2, status: socialConnected?.tiktok ? "on" : "off" },
@@ -1597,6 +1600,7 @@ export function ClientIntegrationsConsole({
             />
           )}
 
+          {googleAvailable || googleConnection ? (
           <GuidedOAuthCard
             accountLabel={googleConnection?.accountLabel ?? null}
             connected={googleConnection?.status === "connected"}
@@ -1627,6 +1631,17 @@ export function ClientIntegrationsConsole({
               }));
             }}
           />
+          ) : (
+            <section id="google-ads-guiado" className="scroll-mt-24 rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>Google Ads, Analytics e Search</h2>
+                  <p className="mt-2 text-[12px] leading-5 text-slate-500">A conexão com o Google será liberada em breve. Seus dados continuam seguros e nada precisa ser feito agora.</p>
+                </div>
+                <NeonBadge tone="amber">em breve</NeonBadge>
+              </div>
+            </section>
+          )}
           <AsaasGuidedCard
             accountLabel={asaasConnection?.accountLabel ?? null}
             apiKeyDraft={asaasApiKeyDraft}

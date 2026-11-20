@@ -8,6 +8,7 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { SocialAccountsConsole } from "@/components/connectyhub-os/social-accounts-console";
 import { socialAccess } from "@/lib/social/access";
+import { loadGoogleGuidedOAuthConfig } from "@/lib/client-os/guided-oauth";
 import { socialAccountsOverview } from "@/lib/social/connections";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,8 @@ export default async function DashboardIntegracoesPage({ searchParams }: { searc
     ? await socialAccess("client").then(access => socialAccountsOverview(access.client, access.organizationId, access.canManage)).catch(() => null)
     : null;
   const { connection: outcome } = await searchParams;
+  // Google Ads/Analytics needs the platform OAuth client and developer token first.
+  const googleAvailable = await loadGoogleGuidedOAuthConfig({ client }).then(() => true, () => false);
 
   return (
     <ConnectyShell
@@ -50,6 +53,7 @@ export default async function DashboardIntegracoesPage({ searchParams }: { searc
       <ClientIntegrationsConsole
         state={hubState}
         showDiagnostics={workspace.profile.isPlatformAdmin}
+        googleAvailable={googleAvailable}
         socialConnected={social ? Object.fromEntries(social.connections.map(c => [c.provider, c.connected])) : null}
         social={social && organization ? <SocialAccountsConsole embedded overview={social} companyId={organization.id} shell="client" outcome={outcome} /> : null}
       />
