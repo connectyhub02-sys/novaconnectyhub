@@ -1,5 +1,25 @@
 # Estado operacional da ConnectyHub
 
+## Google: conexão do admin, conta Ads da ConnectyHub e verificação enviada — 20/11/2026
+
+- **Atual:** release `97ba3d2f483b8b1a7bab8a664e75ec75a24f8f48` ativa no **slot b**; retorno `b981893c` no slot a. Releases do
+  dia: `57028823` (admin “Conectar Google”, renovação do token com o cliente OAuth do YouTube, guarda de prefetch),
+  `ab554b07` (Google usa a empresa interna c5b8e371 “ConnectyHub Interno”, como a Meta; antes pegava empresa de teste
+  “connectyhub” com trial vencido), `b981893c` (rota de seleção de ativos também), `97ba3d2f` (conta administradora
+  mostrada como conectada em vez de erro). Smoke em todas aprovado.
+- **Google Ads da ConnectyHub:** conta de administrador **ConnectyHub 575-343-2299** criada pelo titular (reCAPTCHA e
+  confirmação de identidade feitos por ele). Conta comum **201-148-0762** ficou em rascunho (assistente exige campanha
+  e cartão); pedido de vínculo 201-148-0762 → MCC enviado e **pendente** até o titular concluir a conta com cartão.
+- **Conexão do admin feita em 20/11 ~05h20 BRT** com connectyhub01 (consentimento inglês, “Selecionar tudo”). O callback
+  escolheu sozinho a 1ª conta acessível (Vision Home 280-124-1888); corrigido pela rota de seleção para **5753432299**.
+  Pendências: callback ainda escolhe a primeira conta acessível; botão “Testar conexão” falha em conta administradora;
+  texto do card de orientação no admin ainda cita manutenção.
+- **Vídeo de demonstração:** https://youtu.be/Gwkq93rqXag (não listado, canal ConnectyHub, verificações do YouTube sem
+  problema), sem dados de clientes. **Verificação Google enviada** (escopos `adwords` e `analytics.readonly`; questionário
+  respondido: não pessoal, não interno, não só teste, não plugin SMTP). Central de verificação: “O acesso aos dados do seu
+  app está em análise”. Até aprovar: tela “app não verificado” e limite de 100 usuários. Basic da Google Ads API ainda não
+  pedido (projeto sem faturamento). Google Meu Negócio (business.manage) fora deste pedido.
+
 ## Conexões unificadas, Google Ads/Analytics e tag Google nas lojas — 20/11/2026
 
 - **Atual:** release `4e3b7a9377833c7754f63e5c0f41c31d1b10cb45` ativa no **slot b** (~04h20 BRT); retorno `4fd0de00` no slot a.
