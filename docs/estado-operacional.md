@@ -1,5 +1,19 @@
 # Estado operacional da ConnectyHub
 
+## Infraestrutura como painel de operação, com Inngest e Supabase embutidos — 20/11/2026
+
+- **Atual:** release `e885b9df6cb0c197165c4f672adf8f5dfc483c1e` ativa no **slot a**; retorno `7b9c2109` no slot b. Smoke aprovado.
+- **Tela:** cards da lista sem texto de configuração; projeto abre em **Visão geral** (relógios, armazenamento, consumo) com
+  abas Inngest, Supabase, Publicações, Migrations, Auditoria e Configuração (checagens, vínculo de cliente, operações).
+- **Consoles embutidos:** `ops-studio`, `ops-inngest`, `ops-vision-studio`, `ops-vision-inngest` .connectyhub.com.br (DNS curinga)
+  no Caddy com `forward_auth` para `https://www.connectyhub.com.br/api/admin/ops/verify`; o painel assina cookie `ch_ops`
+  (domínio .connectyhub.com.br, 8 h, HMAC derivado de CREDENTIAL_ENCRYPTION_KEY) em `/api/admin/ops/grant` só para admin da
+  plataforma. Caddy injeta Basic do dashboard Kong (Studio) e Bearer do Inngest; remove X-Frame-Options/CSP e define
+  `frame-ancestors https://www.connectyhub.com.br`. Backup `Caddyfile.before-ops-consoles-20261120T230145Z`.
+  Conferido: sem login 401, cookie forjado 401, grant sem login 403; logado, Inngest e Studio da Vision abrem no iframe.
+  Observação: o Bearer antigo do bloco `inngest.connectyhub.com.br` não corresponde às chaves atuais do Inngest (o dashboard
+  não valida esse cabeçalho).
+
 ## Limpeza do disco, retenção do Inngest e remoção da Betel — 20/11/2026
 
 - **Disco:** 96% (277/290 GB). ~200 GB eram histórico do Inngest (spans/traces/history/events). Script
