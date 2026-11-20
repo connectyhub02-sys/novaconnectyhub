@@ -18,7 +18,7 @@ export default async function AdminTrafficPage() {
     return <AccessDenied />;
   }
 
-  const overview = await getAdminTrafficOverview();
+  const overview = await getAdminTrafficOverview(workspace.organization?.id ?? null);
 
   return <AdminTrafficConsole overview={overview} userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} />;
 }

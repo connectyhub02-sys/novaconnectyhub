@@ -89,6 +89,7 @@ export function AdminAdsPlatformDashboard({
   credentialHref = "/admin/maintenance#credenciais-do-sistema",
   credentialPrimaryLabel = "Abrir conexoes",
   credentialSecondaryLabel = "Salvar na manutencao",
+  credentialSecondaryHref,
   isPlatformAdmin = true,
   organizationId,
   overview,
@@ -102,6 +103,7 @@ export function AdminAdsPlatformDashboard({
   credentialHref?: string;
   credentialPrimaryLabel?: string;
   credentialSecondaryLabel?: string;
+  credentialSecondaryHref?: string;
   isPlatformAdmin?: boolean;
   organizationId?: string | null;
   overview: AdminTrafficOverview;
@@ -198,7 +200,7 @@ export function AdminAdsPlatformDashboard({
             </div>
             <div className="flex flex-wrap gap-2">
               <LinkButton href={credentialHref} icon={ExternalLink} label={credentialPrimaryLabel} tone={config.tone} />
-              <LinkButton href={credentialHref} icon={Save} label={credentialSecondaryLabel} tone="cyan" />
+              <LinkButton href={credentialSecondaryHref ?? credentialHref} icon={Save} label={credentialSecondaryLabel} tone="cyan" />
             </div>
           </div>
         </div>
@@ -208,6 +210,7 @@ export function AdminAdsPlatformDashboard({
         <ConnectionGuidanceCard
           guidance={connectionGuidance}
           href={credentialHref}
+          secondaryHref={credentialSecondaryHref ?? credentialHref}
           primaryLabel={credentialPrimaryLabel}
           secondaryLabel={credentialSecondaryLabel}
           tone={config.tone}
@@ -411,6 +414,7 @@ function LinkButton({ href, icon: Icon, label, tone }: { href: string; icon: Luc
   return (
     <Link
       href={href}
+      prefetch={href.startsWith("/api/") ? false : undefined}
       className={cn("inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 font-mono text-[11px] uppercase tracking-wide", t.border, t.bg, t.text)}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -424,12 +428,14 @@ function ConnectionGuidanceCard({
   href,
   primaryLabel,
   secondaryLabel,
+  secondaryHref,
   tone,
 }: {
   guidance: ConnectionGuidance;
   href: string;
   primaryLabel: string;
   secondaryLabel: string;
+  secondaryHref: string;
   tone: Tone;
 }) {
   const t = toneClass(guidance.tone);
@@ -450,7 +456,7 @@ function ConnectionGuidanceCard({
 
         <div className="flex shrink-0 flex-wrap gap-2">
           <LinkButton href={href} icon={ExternalLink} label={primaryLabel} tone={tone} />
-          <LinkButton href={href} icon={Save} label={secondaryLabel} tone="cyan" />
+          <LinkButton href={secondaryHref} icon={Save} label={secondaryLabel} tone="cyan" />
         </div>
       </div>
 

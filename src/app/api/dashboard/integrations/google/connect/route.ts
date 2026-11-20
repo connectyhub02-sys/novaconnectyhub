@@ -17,9 +17,16 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  // Speculative navigation must never restart OAuth.
+  if (request.headers.has("next-router-prefetch") || request.headers.get("purpose") === "prefetch"
+    || request.headers.get("sec-purpose")?.includes("prefetch") || request.headers.get("rsc") === "1") {
+    return new NextResponse(null, { status: 204, headers: { "Cache-Control": "private, no-store" } });
+  }
   const baseUrl = getAppBaseUrl();
   const returnUrl = new URL("/dashboard/integracoes", baseUrl);
   const workspace = await getCurrentWorkspace();
+  // Platform admins connect ConnectyHub's own Google from the admin Google Ads page.
+  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/trafego/google-ads";
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);

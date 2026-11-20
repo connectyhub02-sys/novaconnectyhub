@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
   const baseUrl = getAppBaseUrl();
   const returnUrl = new URL("/dashboard/integracoes", baseUrl);
   const workspace = await getCurrentWorkspace();
+  // Platform admins connect ConnectyHub's own Google from the admin Google Ads page.
+  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/trafego/google-ads";
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);

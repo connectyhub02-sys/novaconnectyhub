@@ -18,12 +18,18 @@ export default async function AdminGoogleAdsPage() {
     return <AccessDenied />;
   }
 
-  const overview = await getAdminTrafficOverview();
+  const ownOrganizationId = workspace.organization?.id ?? null;
+  const overview = await getAdminTrafficOverview(ownOrganizationId);
 
   return (
     <AdminAdsPlatformDashboard
       overview={overview}
       platform="google"
+      {...(ownOrganizationId ? {
+        credentialHref: `/api/dashboard/integrations/google/connect?companyId=${ownOrganizationId}`,
+        credentialPrimaryLabel: "Conectar Google",
+        credentialSecondaryHref: "/admin/maintenance#credenciais-do-sistema",
+      } : {})}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     />
   );

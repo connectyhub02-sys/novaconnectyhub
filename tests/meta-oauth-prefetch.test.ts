@@ -25,4 +25,20 @@ describe("Meta OAuth navigation", () => {
     expect(workspace).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
   });
+  it("does not restart Google OAuth during speculative loading", async () => {
+    const workspace = vi.fn();
+    const route = serverModuleHarness<typeof import("../src/app/api/dashboard/integrations/google/connect/route")>(
+      "src/app/api/dashboard/integrations/google/connect/route.ts", {
+        "next/server": { NextResponse },
+        "@/lib/billing/trial": {},
+        "@/lib/client-os/companies": {},
+        "@/lib/client-os/dashboard-route-scope": {},
+        "@/lib/client-os/guided-oauth": {},
+        "@/lib/supabase/profile": { getCurrentWorkspace: workspace },
+        "@/lib/supabase/service": {},
+      });
+    const response = await route.GET(new NextRequest("https://example.test/api/dashboard/integrations/google/connect", { headers: { "next-router-prefetch": "1" } }));
+    expect(response.status).toBe(204);
+    expect(workspace).not.toHaveBeenCalled();
+  });
 });

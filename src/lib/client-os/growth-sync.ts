@@ -80,6 +80,8 @@ const growthCredentialEnvNames = [
   "GOOGLE_ADS_DEVELOPER_TOKEN",
   "GOOGLE_ADS_CLIENT_ID",
   "GOOGLE_ADS_CLIENT_SECRET",
+  "YOUTUBE_CLIENT_ID",
+  "YOUTUBE_CLIENT_SECRET",
   "GOOGLE_ADS_REFRESH_TOKEN",
   "GOOGLE_ADS_CUSTOMER_ID",
   "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
@@ -902,8 +904,10 @@ async function loadGrowthCredentials(input: {
 }
 
 async function exchangeGoogleRefreshToken(credentials: CredentialMap) {
-  const clientId = getCredential(credentials, ["GOOGLE_ADS_CLIENT_ID"]);
-  const clientSecret = getCredential(credentials, ["GOOGLE_ADS_CLIENT_SECRET"]);
+  // Tokens minted by the shared verified project's client (YouTube) refresh with that client.
+  const dedicated = Boolean(getCredential(credentials, ["GOOGLE_ADS_CLIENT_ID"]));
+  const clientId = getCredential(credentials, [dedicated ? "GOOGLE_ADS_CLIENT_ID" : "YOUTUBE_CLIENT_ID"]);
+  const clientSecret = getCredential(credentials, [dedicated ? "GOOGLE_ADS_CLIENT_SECRET" : "YOUTUBE_CLIENT_SECRET"]);
   const refreshToken = getCredential(credentials, ["GOOGLE_ADS_REFRESH_TOKEN"]);
 
   if (!clientId || !clientSecret || !refreshToken) {

@@ -44,7 +44,8 @@ type TrafficRange = {
 };
 
 type TrafficCredentialScope =
-  | { scope: "platform"; organizationId?: null }
+  // ownOrganizationId: ConnectyHub's own company, whose "Conectar Google" connection feeds the admin dashboards.
+  | { scope: "platform"; organizationId?: null; ownOrganizationId?: string | null }
   | { scope: "organization"; organizationId: string };
 
 export type TrafficProviderStatus = "online" | "warning" | "offline";
@@ -167,6 +168,8 @@ const credentialEnvNames = [
   "GOOGLE_ADS_DEVELOPER_TOKEN",
   "GOOGLE_ADS_CLIENT_ID",
   "GOOGLE_ADS_CLIENT_SECRET",
+  "YOUTUBE_CLIENT_ID",
+  "YOUTUBE_CLIENT_SECRET",
   "GOOGLE_ADS_REFRESH_TOKEN",
   "GOOGLE_ADS_CUSTOMER_ID",
   "GOOGLE_ADS_CONVERSION_ID",
@@ -176,9 +179,10 @@ const credentialEnvNames = [
 ];
 
 const googleAdsApiVersion = "v24";
+const ownGoogleEnvNames = new Set(["GOOGLE_ADS_REFRESH_TOKEN", "GOOGLE_ADS_CUSTOMER_ID", "GOOGLE_ADS_LOGIN_CUSTOMER_ID"]);
 
-export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
-  return getTrafficOverview({ scope: "platform" });
+export async function getAdminTrafficOverview(ownOrganizationId?: string | null): Promise<AdminTrafficOverview> {
+  return getTrafficOverview({ scope: "platform", ownOrganizationId: ownOrganizationId ?? null });
 }
 
 export async function getClientTrafficOverview(organizationId: string): Promise<AdminTrafficOverview> {
@@ -532,6 +536,7 @@ function latestSnapshotCollectedAt(rows: MetricSnapshotRow[]) {
 async function loadTrafficCredentials(warnings: string[], credentialScope: TrafficCredentialScope) {
   const values: CredentialMap = new Map();
   const scopedValues = credentialScope.scope === "organization" ? new Map<string, string>() : values;
+  const ownValues = new Map<string, string>();
 
   try {
     const client = createServiceClient();
@@ -540,8 +545,11 @@ async function loadTrafficCredentials(warnings: string[], credentialScope: Traff
       .select("scope, organization_id, integration_id, env_name, encrypted_value")
       .in("env_name", credentialEnvNames);
 
+    const own = credentialScope.scope === "platform" ? credentialScope.ownOrganizationId : null;
     if (credentialScope.scope === "organization") {
       query = query.or(`and(scope.eq.platform,organization_id.is.null),and(scope.eq.organization,organization_id.eq.${credentialScope.organizationId})`);
+    } else if (own && /^[0-9a-f-]{36}$/i.test(own)) {
+      query = query.or(`and(scope.eq.platform,organization_id.is.null),and(scope.eq.organization,organization_id.eq.${own})`);
     } else {
       query = query.eq("scope", "platform").is("organization_id", null);
     }
@@ -565,6 +573,9 @@ async function loadTrafficCredentials(warnings: string[], credentialScope: Traff
             && row.organization_id === credentialScope.organizationId
           ) {
             scopedValues.set(row.env_name, decrypted);
+          } else if (row.scope === "organization") {
+            // Admin: only the own company's Google connection, and only where maintenance has nothing.
+            if (ownGoogleEnvNames.has(row.env_name)) ownValues.set(row.env_name, decrypted);
           } else if (!values.has(row.env_name)) {
             values.set(row.env_name, decrypted);
           }
@@ -588,6 +599,8 @@ async function loadTrafficCredentials(warnings: string[], credentialScope: Traff
     for (const [envName, value] of scopedValues) {
       values.set(envName, value);
     }
+  } else if (!values.has("GOOGLE_ADS_REFRESH_TOKEN") && ownValues.has("GOOGLE_ADS_REFRESH_TOKEN")) {
+    for (const [envName, value] of ownValues) values.set(envName, value);
   }
 
   return values;
@@ -1070,8 +1083,10 @@ async function exchangeGoogleRefreshToken(
   warnings: string[],
   credentialScope: TrafficCredentialScope,
 ) {
-  const clientId = getCredential(credentials, ["GOOGLE_ADS_CLIENT_ID"]);
-  const clientSecret = getCredential(credentials, ["GOOGLE_ADS_CLIENT_SECRET"]);
+  // Tokens minted by the shared verified project's client (YouTube) refresh with that client.
+  const dedicated = Boolean(getCredential(credentials, ["GOOGLE_ADS_CLIENT_ID"]));
+  const clientId = getCredential(credentials, [dedicated ? "GOOGLE_ADS_CLIENT_ID" : "YOUTUBE_CLIENT_ID"]);
+  const clientSecret = getCredential(credentials, [dedicated ? "GOOGLE_ADS_CLIENT_SECRET" : "YOUTUBE_CLIENT_SECRET"]);
   const refreshToken = getCredential(credentials, ["GOOGLE_ADS_REFRESH_TOKEN"]);
 
   if (!clientId || !clientSecret || !refreshToken) {
@@ -1233,7 +1248,7 @@ function buildEmptyGooglePaidProvider(credentialScope: TrafficCredentialScope) {
     kind: "paid",
     detail: credentialScope.scope === "organization"
       ? "Conecte Google em Integracoes e selecione a conta Google Ads que alimenta este dashboard."
-      : "Configure o app ConnectyHub Google, Developer Token e credenciais de teste na Sala de Manutencao.",
+      : "Clique em Conectar Google para ligar a conta Google Ads da ConnectyHub.",
   });
 }
 
