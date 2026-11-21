@@ -1,5 +1,19 @@
 # Estado operacional da ConnectyHub
 
+## Remoção do projeto de demonstração descontinuado (ex-hospedagem) — 20/11/2026
+
+- **Atual:** release `9fc44ae591d2d97c6db55cb158baeab182df0fc1` ativa no **slot b**; retorno `e885b9df` no slot a. Smoke aprovado.
+- A pedido do titular, removidos sem backup: redes Docker, cadastro em `infra_projects` e auditoria, entradas em
+  `hosting/projects.json`, `storage-r2.json`, estado do broker e monitoramento (serviço `connectyhub-hosting` reiniciado; só
+  Vision listada), rotas no Caddy (backups do proxy, inclusive da Vision, também limpos), scripts e arquivos exclusivos, 39
+  eventos de clique no painel, menções em código/testes/docs, 25 pastas antigas de release e 57 pacotes em `/tmp`.
+- **Mantido de propósito:** (1) app Inngest da Vision chamado internamente como o projeto removido (~130 funções ativas da
+  Vision — removê-las derrubaria a Vision; renomear exige mudar o código da Vision); (2) a única chave SSH root do servidor tem
+  esse nome (é a chave usada para acessar a VPS — trocar exige gerar chave nova antes); (3) dumps da migração de 11/09 em
+  `/opt/connectyhub/migration-supabase/` (3,4 GB, cópia completa do banco da ConnectyHub, com arquivos .env antigos);
+  (4) conversas/resumos de clientes (Vision, Imobiliária Pilger) que citam o nome; (5) bucket R2 de mídia do projeto (sem
+  credencial no servidor; exige login na Cloudflare); (6) histórico do Git.
+
 ## Infraestrutura como painel de operação, com Inngest e Supabase embutidos — 20/11/2026
 
 - **Atual:** release `e885b9df6cb0c197165c4f672adf8f5dfc483c1e` ativa no **slot a**; retorno `7b9c2109` no slot b. Smoke aprovado.
