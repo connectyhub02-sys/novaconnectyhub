@@ -10,7 +10,7 @@
 - **Mantido de propósito:** (1) app Inngest da Vision chamado internamente como o projeto removido (~130 funções ativas da
   Vision — removê-las derrubaria a Vision; renomear exige mudar o código da Vision); (2) a única chave SSH root do servidor tem
   esse nome (é a chave usada para acessar a VPS — trocar exige gerar chave nova antes); (3) dumps da migração de 11/09 em
-  `/opt/connectyhub/migration-supabase/` (3,4 GB, cópia completa do banco da ConnectyHub, com arquivos .env antigos);
+  `/opt/connectyhub/migration-supabase/` (3,4 GB, cópia completa do banco da ConnectyHub, com arquivos .env antigos; mantidos por decisão do titular em 20/11);
   (4) conversas/resumos de clientes (Vision, Imobiliária Pilger) que citam o nome; (5) bucket R2 de mídia do projeto (sem
   credencial no servidor; exige login na Cloudflare); (6) histórico do Git.
 
