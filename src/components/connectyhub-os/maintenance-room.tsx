@@ -2,11 +2,7 @@ import type { MaintenanceStoredCredential } from "@/lib/maintenance-vault";
 import { getMaintenanceVaultSnapshot } from "@/lib/maintenance-vault";
 import { ConnectyShell } from "./connecty-shell";
 import { CredentialVaultForm } from "./credential-vault-form";
-import Link from "next/link";
-import {
-  PageHeader,
-  Panel,
-} from "./panel-primitives";
+import { PageHeader } from "./panel-primitives";
 
 export function MaintenanceRoom({
   storedCredentials = [],
@@ -20,22 +16,12 @@ export function MaintenanceRoom({
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel}>
       <PageHeader
-        eyebrow="Admin OS / Sala de Manutencao"
-        title="Manutencao da Plataforma"
-        description="Credenciais, APIs e webhooks do ambiente ConnectyHub."
+        eyebrow="Sistema"
+        title="Manutenção da plataforma"
+        description="Chaves e credenciais dos aplicativos da ConnectyHub em cada serviço. As contas da operação própria ficam em Redes sociais › Contas conectadas."
       />
 
-      <Panel title="Meta · Configuração e homologação" className="mb-5">
-        <p className="text-sm">Facebook e Instagram disponíveis para conexão nos painéis. WhatsApp oficial tem configuração própria de Embedded Signup, modelos e chat. As permissões efetivas continuam sendo conferidas pela Meta.</p>
-        <div className="mt-3 flex flex-wrap gap-4 text-sm text-blue-700"><Link href="/admin/meta">Abrir laboratório e chat oficial</Link><Link href="/dashboard/integracoes">Integrações do painel do usuário</Link></div>
-        <p className="mt-3 text-xs text-slate-500">Para a revisão WhatsApp: conecte o número de teste, crie um modelo neste painel e registre um envio chegando ao destinatário. A criação do modelo e o envio precisam de demonstrações distintas.</p>
-      </Panel>
-      <Panel
-        className="mb-5"
-        id="credenciais-do-sistema"
-        title="Conexoes e credenciais do sistema"
-        eyebrow="credenciais / tokens / OAuth"
-      >
+      <section id="credenciais-do-sistema" aria-label="Credenciais do sistema">
         <CredentialVaultForm
           integrations={vault.integrations.map((integration) => ({
             id: integration.id,
@@ -50,10 +36,12 @@ export function MaintenanceRoom({
               section: field.section,
               multiline: field.multiline,
               help: field.help,
+              environmentConfigured: field.environmentConfigured,
+              savedInVault: field.source === "vault",
             })),
           }))}
         />
-      </Panel>
+      </section>
     </ConnectyShell>
   );
 }

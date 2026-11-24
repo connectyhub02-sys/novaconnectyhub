@@ -32,6 +32,8 @@ export type CredentialSnapshot = CredentialDefinition & {
   displayValue: string;
   resolvedEnv: string;
   source: "environment" | "vault" | "missing";
+  /** Valor presente nas variáveis de ambiente do servidor, mesmo quando o cofre prevalece. */
+  environmentConfigured: boolean;
 };
 
 export type IntegrationSnapshot = Omit<IntegrationDefinition, "fields"> & {
@@ -1146,6 +1148,8 @@ function buildCredentialSnapshot(
   storedCredentials: StoredCredentialMap,
 ): CredentialSnapshot {
   const stored = resolveStoredCredential(integrationId, field, storedCredentials);
+  const resolved = resolveEnvValue(field);
+  const environmentConfigured = Boolean(resolved.value);
 
   if (stored) {
     return {
@@ -1154,10 +1158,9 @@ function buildCredentialSnapshot(
       displayValue: stored.value_preview,
       resolvedEnv: stored.env_name,
       source: "vault",
+      environmentConfigured,
     };
   }
-
-  const resolved = resolveEnvValue(field);
 
   return {
     ...field,
@@ -1165,6 +1168,7 @@ function buildCredentialSnapshot(
     displayValue: resolved.value ? maskValue(resolved.value, field.kind) : "Nao configurado",
     resolvedEnv: resolved.env,
     source: resolved.value ? "environment" : "missing",
+    environmentConfigured,
   };
 }
 

@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   CircleDot,
   Eye,
   EyeOff,
@@ -22,6 +24,15 @@ import {
   getGeminiModelReplacement,
 } from "@/lib/gemini/models";
 import type { CredentialKind, CredentialRequirement } from "@/lib/maintenance-vault";
+import {
+  hasOwnAccountsLink,
+  integrationArea,
+  maintenanceAreas,
+  resolveFieldSource,
+  summarizeIntegration,
+  type FieldSource,
+  type MaintenanceArea,
+} from "@/lib/maintenance-layout";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +45,8 @@ type VaultField = {
   section?: string;
   multiline?: boolean;
   help?: string;
+  environmentConfigured?: boolean;
+  savedInVault?: boolean;
 };
 
 type VaultIntegration = {
@@ -118,6 +131,10 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
   const [editingFields, setEditingFields]          = useState<Record<string, boolean>>({});
   const [visibleSecrets, setVisibleSecrets]        = useState<Record<string, boolean>>({});
   const [geminiModelsState, setGeminiModelsState]  = useState<GeminiModelsState>({ status: "idle", models: [] });
+  const [credentialsLoaded, setCredentialsLoaded]  = useState(false);
+  const [activeArea, setActiveArea]                = useState<MaintenanceArea | "all">("all");
+  const [onlyPending, setOnlyPending]              = useState(false);
+  const [openIds, setOpenIds]                      = useState<Set<string>>(() => new Set());
 
   const savedCredentialByField = useMemo(() => {
     const map = new Map<string, StoredCredential>();
@@ -140,11 +157,6 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
     [geminiApiCredentialKey, geminiModelsState.models],
   );
 
-  const configuredFields = integrations.reduce(
-    (total, int) => total + int.fields.filter((f) => Boolean(findSavedCredential(savedCredentialByField, int.id, f))).length,
-    0,
-  );
-  const fieldTotal = integrations.reduce((total, int) => total + int.fields.length, 0);
 
   const refreshGeminiModels = useCallback(async () => {
     setGeminiModelsState((cur) => ({ ...cur, status: "loading", message: "Carregando modelos Gemini..." }));
@@ -199,6 +211,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
       return;
     }
     setCredentials(data.credentials ?? []);
+    setCredentialsLoaded(true);
     setListStatus("idle");
   }
 
@@ -378,130 +391,300 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
     }));
   }
 
-  return (
-    <div className="space-y-4">
+  function renderField(integration: VaultIntegration, field: VaultField) {
+    const saved    = findSavedCredential(savedCredentialByField, integration.id, field);
+    const fieldKey = credKey(integration.id, field.env);
+    const isEditing = Boolean(editingFields[fieldKey]);
+    const isGeminiModelField = integration.id === "gemini" && field.env === "GEMINI_DEFAULT_MODEL";
+    const isSecretVisible = Boolean(visibleSecrets[fieldKey]);
+    const value = isGeminiModelField
+      ? getGeminiModelValue(saved, isEditing, values[fieldKey])
+      : isEditing ? values[fieldKey] ?? "" : saved ? getSavedDisplay(saved) : values[fieldKey] ?? "";
+    const selectedGeminiModel = isGeminiModelField ? getGeminiModelSelectValue(value, geminiSelectOptions) : "";
 
-      {/* Header bar */}
+    return (
       <div
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3"
+        key={field.env}
+        className="rounded-xl p-4"
         style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
       >
-        <div>
-          <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Conexões da plataforma</p>
-          <p className="mt-0.5 text-[11px] text-slate-500">
-            Cole URL, usuario, senha ou token e salve. Campos vazios nao alteram nada.
+        {/* Field header */}
+        {field.section && (
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">
+            {field.section}
           </p>
+        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <label
+              htmlFor={fieldKey}
+              className="block text-[12.5px] font-semibold"
+              style={{ color: "var(--ch-text)" }}
+            >
+              {field.label}
+            </label>
+            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-slate-400">
+              {field.env}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <RequirementBadge requirement={field.requirement} />
+            <SourceBadge source={resolveFieldSource(isSavedInVault(integration, field), Boolean(field.environmentConfigured))} requirement={field.requirement} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="rounded-lg px-2.5 py-1 font-mono text-[11px]"
-            style={{ background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
-          >
-            {configuredFields}/{fieldTotal} salvas
-          </span>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="flex h-8 items-center gap-1.5 rounded-lg px-3 font-mono text-[11px] uppercase tracking-wide transition"
-            style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
-          >
-            {listStatus === "loading"
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <RefreshCcw className="h-3 w-3" />}
-            Atualizar
-          </button>
-        </div>
+
+        {isGeminiModelField ? (
+          <div className="mt-3 grid gap-2">
+            <select
+              id={fieldKey}
+              value={selectedGeminiModel}
+              onChange={(e) => {
+                const next = e.target.value === "custom" ? "" : e.target.value;
+                updateField(fieldKey, next);
+              }}
+              className="h-9 w-full rounded-lg px-3 font-mono text-[11px] outline-none transition"
+              style={{
+                background: "var(--ch-surface)",
+                border: "1px solid var(--ch-border)",
+                color: "var(--ch-text)",
+              }}
+            >
+              {geminiSelectOptions.map((option) => (
+                <option key={option.value} value={option.value} disabled={!option.enabled}>
+                  {option.label} - {option.detail}
+                </option>
+              ))}
+              <option value="custom">Modelo customizado</option>
+            </select>
+
+            {selectedGeminiModel === "custom" && (
+              <div className="relative">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={value}
+                  onChange={(e) => updateField(fieldKey, e.target.value)}
+                  placeholder="Ex: gemini-3.6-flash"
+                  className="h-9 w-full rounded-lg pl-9 pr-3 font-mono text-[11px] outline-none transition"
+                  style={{
+                    background: "var(--ch-surface)",
+                    border: "1px solid var(--ch-border)",
+                    color: "var(--ch-text)",
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        ) : field.multiline ? (
+          <div className="mt-3 flex gap-2">
+            <textarea
+              id={fieldKey}
+              autoComplete="off"
+              value={value}
+              onFocus={() => beginEdit(fieldKey, saved)}
+              onBlur={() => resetEmptyEdit(fieldKey)}
+              onChange={(e) => updateField(fieldKey, e.target.value)}
+              placeholder={getPlaceholder(field, saved ? null : isSavedInVault(integration, field) ? "vault" : field.environmentConfigured ? "environment" : null)}
+              rows={4}
+              className="min-h-24 w-full resize-y rounded-lg px-3 py-2 font-mono text-[11px] leading-5 outline-none transition"
+              style={{
+                background: "var(--ch-surface)",
+                border: "1px solid var(--ch-border)",
+                color: "var(--ch-text)",
+              }}
+            />
+
+            {saved && (
+              <button
+                type="button"
+                aria-label={`Remover ${field.label}`}
+                disabled={deletingId === saved.id}
+                onClick={() => void handleDelete(saved)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50"
+                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}
+              >
+                {deletingId === saved.id
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+                {field.kind === "secret"
+                  ? <EyeOff className="h-3.5 w-3.5 text-slate-400" />
+                  : <KeyRound className="h-3.5 w-3.5 text-slate-400" />}
+              </div>
+              <input
+                id={fieldKey}
+                type={field.kind === "secret" && isSecretVisible ? "text" : getInputType(field)}
+                autoComplete={getAutocomplete(field)}
+                value={value}
+                onFocus={() => beginEdit(fieldKey, saved)}
+                onBlur={() => resetEmptyEdit(fieldKey)}
+                onChange={(e) => updateField(fieldKey, e.target.value)}
+                placeholder={getPlaceholder(field, saved ? null : isSavedInVault(integration, field) ? "vault" : field.environmentConfigured ? "environment" : null)}
+                className={`h-9 w-full rounded-lg pl-9 font-mono text-[11px] outline-none transition ${field.kind === "secret" ? "pr-10" : "pr-3"}`}
+                style={{
+                  background:   "var(--ch-surface)",
+                  border:       "1px solid var(--ch-border)",
+                  color:        "var(--ch-text)",
+                }}
+              />
+              {field.kind === "secret" && (
+                <button
+                  type="button"
+                  aria-label={isSecretVisible ? `Ocultar ${field.label}` : `Mostrar ${field.label}`}
+                  aria-pressed={isSecretVisible}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => toggleSecretVisibility(fieldKey)}
+                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md transition"
+                  style={{ color: "var(--ch-muted)" }}
+                >
+                  {isSecretVisible
+                    ? <EyeOff className="h-3.5 w-3.5" />
+                    : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              )}
+            </div>
+
+            {saved && (
+              <button
+                type="button"
+                aria-label={`Remover ${field.label}`}
+                disabled={deletingId === saved.id}
+                onClick={() => void handleDelete(saved)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50"
+                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}
+              >
+                {deletingId === saved.id
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Help */}
+        <p className="mt-2 text-[11px] leading-4 text-slate-400">{field.help ?? getKindLabel(field.kind)}</p>
+
       </div>
+    );
+  }
 
-      {/* List error */}
-      {listMessage && (
-        <div
-          className="flex items-start gap-3 rounded-xl px-4 py-3"
-          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-          <p className="text-[12px] text-rose-600">{listMessage}</p>
-        </div>
-      )}
+  const isSavedInVault = (integration: VaultIntegration, field: VaultField) =>
+    credentialsLoaded
+      ? Boolean(findSavedCredential(savedCredentialByField, integration.id, field))
+      : Boolean(field.savedInVault);
+  const summaries = new Map(integrations.map((integration) => [
+    integration.id,
+    summarizeIntegration(integration.id, integration.fields.map((field) => ({
+      requirement: field.requirement,
+      source: resolveFieldSource(isSavedInVault(integration, field), Boolean(field.environmentConfigured)),
+    }))),
+  ]));
+  const summaryOf = (integration: VaultIntegration) => summaries.get(integration.id)!;
+  const counts = {
+    ready: integrations.filter((integration) => summaryOf(integration).state === "ready").length,
+    pending: integrations.filter((integration) => summaryOf(integration).state === "pending").length,
+    standby: integrations.filter((integration) => summaryOf(integration).state === "standby").length,
+  };
+  const inArea = (integration: VaultIntegration) => activeArea === "all" || integrationArea(integration.id) === activeArea;
+  const visible = integrations.filter((integration) => inArea(integration)
+    && (!onlyPending || summaryOf(integration).state === "pending"));
+  const activeVisible = visible.filter((integration) => summaryOf(integration).state !== "standby");
+  const standbyVisible = visible.filter((integration) => summaryOf(integration).state === "standby");
+  const pendingInArea = (area: MaintenanceArea | "all") => integrations.filter((integration) =>
+    (area === "all" || integrationArea(integration.id) === area) && summaryOf(integration).state === "pending").length;
 
-      {/* Integration forms */}
-      <div className="space-y-3">
-        {integrations.map((integration) => {
-          const savedCount = integration.fields.filter((f) =>
-            Boolean(findSavedCredential(savedCredentialByField, integration.id, f)),
-          ).length;
+  function toggleOpen(integrationId: string) {
+    setOpenIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(integrationId)) next.delete(integrationId); else next.add(integrationId);
+      return next;
+    });
+  }
+
+  function renderIntegration(integration: VaultIntegration) {
+          const summary = summaryOf(integration);
+          const isOpen = openIds.has(integration.id);
           const isSaving = savingIntegrationId === integration.id;
           const message  = messages[integration.id];
           const connectionTest = connectionTests[integration.id] ?? { status: "idle" as const };
-          const fieldGridClass = getFieldGridClass(integration.fields.length);
+          const mainFields = integration.fields.filter((field) => field.requirement !== "optional");
+          const advancedFields = integration.fields.filter((field) => field.requirement === "optional");
+          const fieldGridClass = getFieldGridClass(mainFields.length);
           const isMercadoPagoBilling = integration.id === "mercado-pago-billing";
           const hasMercadoPagoBillingConnection = isMercadoPagoBilling && integration.fields.some((field) =>
             field.env === "MERCADO_PAGO_BILLING_ACCESS_TOKEN"
             && Boolean(findSavedCredential(savedCredentialByField, integration.id, field)),
           );
+          const panelId = `integracao-${integration.id}`;
 
           return (
-            <form key={integration.id} onSubmit={(e) => void handleSave(e, integration)}>
+            <form key={integration.id} id={panelId} onSubmit={(e) => void handleSave(e, integration)}>
               <div
-                className="overflow-hidden rounded-2xl"
+                className="overflow-hidden rounded-xl"
                 style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
               >
-                {/* Integration header */}
-                <div
-                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
-                  style={{ borderBottom: "1px solid var(--ch-border)" }}
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                        {integration.name}
-                      </span>
-                      <ConnectionBadge savedCount={savedCount} total={integration.fields.length} />
-                      <ConnectionTestBadge test={connectionTest} />
-                    </div>
-                    {integration.description && (
-                      <p className="mt-0.5 text-[12px] text-slate-500">{integration.description}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {isMercadoPagoBilling && (
-                      <a
-                        href="/api/admin/billing/mercado-pago/connect"
-                        className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[11px] uppercase tracking-wide transition hover:opacity-90"
-                        style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#10b981" }}
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        {hasMercadoPagoBillingConnection ? "Reconectar" : "Conectar Mercado Pago"}
-                      </a>
-                    )}
+                {/* Integration row */}
+                <div className="flex items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={`${panelId}-corpo`}
+                    onClick={() => toggleOpen(integration.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+                  >
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "" : "-rotate-90"}`}
+                    />
+                    <span className="truncate text-[13px] font-semibold sm:text-[14px]" style={{ color: "var(--ch-text)" }}>
+                      {integration.name}
+                    </span>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <IntegrationStateBadge summary={summary} />
+                    {connectionTest.status !== "idle" && <span className="hidden sm:inline-flex"><ConnectionTestBadge test={connectionTest} /></span>}
                     <button
                       type="button"
                       onClick={() => void handleTestConnection(integration)}
                       disabled={connectionTest.status === "testing"}
-                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[11px] uppercase tracking-wide transition disabled:opacity-60"
+                      aria-label={`Testar ${integration.name}`}
+                      className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] transition disabled:opacity-60 sm:px-3"
                       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
                     >
                       {connectionTest.status === "testing"
                         ? <Loader2 className="h-3 w-3 animate-spin" />
                         : <Wifi className="h-3 w-3" />}
-                      Testar conexao
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[11px] uppercase tracking-wide transition disabled:opacity-60"
-                      style={{
-                        background: "var(--ch-accent)",
-                        color:      "#fff",
-                      }}
-                    >
-                      {isSaving
-                        ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : <Save className="h-3 w-3" />}
-                      Salvar
+                      <span className="hidden sm:inline">Testar</span>
                     </button>
                   </div>
                 </div>
+
+                {connectionTest.status !== "idle" && !isOpen && connectionTest.status !== "testing" && (
+                  <p className={`px-4 pb-3 text-[12px] ${connectionTest.status === "online" ? "text-emerald-600" : "text-rose-600"}`}>
+                    {connectionTest.message}
+                  </p>
+                )}
+
+                {isOpen && (
+                <div id={`${panelId}-corpo`} style={{ borderTop: "1px solid var(--ch-border)" }}>
+                {(integration.description || hasOwnAccountsLink(integration.id)) && (
+                  <div className="flex flex-wrap items-start justify-between gap-2 px-5 pt-4">
+                    {integration.description && (
+                      <p className="min-w-0 flex-1 basis-72 text-[12px] text-slate-500">{integration.description}</p>
+                    )}
+                    {hasOwnAccountsLink(integration.id) && (
+                      <Link href="/admin/redes-sociais/contas" className="text-[12px] font-medium text-blue-700 hover:underline">
+                        Contas da operação própria →
+                      </Link>
+                    )}
+                  </div>
+                )}
 
                 {/* Uazapi notice */}
                 {integration.id === "uazapi" && (
@@ -573,189 +756,39 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
 
                 {/* Fields grid */}
                 <div className={fieldGridClass}>
-                  {integration.fields.map((field) => {
-                    const saved    = findSavedCredential(savedCredentialByField, integration.id, field);
-                    const fieldKey = credKey(integration.id, field.env);
-                    const isEditing = Boolean(editingFields[fieldKey]);
-                    const isGeminiModelField = integration.id === "gemini" && field.env === "GEMINI_DEFAULT_MODEL";
-                    const isSecretVisible = Boolean(visibleSecrets[fieldKey]);
-                    const value = isGeminiModelField
-                      ? getGeminiModelValue(saved, isEditing, values[fieldKey])
-                      : isEditing ? values[fieldKey] ?? "" : saved ? getSavedDisplay(saved) : values[fieldKey] ?? "";
-                    const selectedGeminiModel = isGeminiModelField ? getGeminiModelSelectValue(value, geminiSelectOptions) : "";
+                  {mainFields.map((field) => renderField(integration, field))}
+                </div>
+                {advancedFields.length > 0 && (
+                  <details className="mx-5 mb-5 rounded-xl" style={{ border: "1px solid var(--ch-border)" }}>
+                    <summary className="cursor-pointer px-4 py-3 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      Avançado · {advancedFields.length} campo{advancedFields.length === 1 ? "" : "s"} opciona{advancedFields.length === 1 ? "l" : "is"}
+                    </summary>
+                    <div className={getFieldGridClass(advancedFields.length).replace("p-5", "px-4 pb-4")}>
+                      {advancedFields.map((field) => renderField(integration, field))}
+                    </div>
+                  </details>
+                )}
 
-                    return (
-                      <div
-                        key={field.env}
-                        className="rounded-xl p-4"
-                        style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-                      >
-                        {/* Field header */}
-                        {field.section && (
-                          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">
-                            {field.section}
-                          </p>
-                        )}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <label
-                              htmlFor={fieldKey}
-                              className="block text-[12.5px] font-semibold"
-                              style={{ color: "var(--ch-text)" }}
-                            >
-                              {field.label}
-                            </label>
-                            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-slate-400">
-                              {field.env}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <RequirementBadge requirement={field.requirement} />
-                            <SavedBadge saved={Boolean(saved)} />
-                          </div>
-                        </div>
-
-                        {isGeminiModelField ? (
-                          <div className="mt-3 grid gap-2">
-                            <select
-                              id={fieldKey}
-                              value={selectedGeminiModel}
-                              onChange={(e) => {
-                                const next = e.target.value === "custom" ? "" : e.target.value;
-                                updateField(fieldKey, next);
-                              }}
-                              className="h-9 w-full rounded-lg px-3 font-mono text-[11px] outline-none transition"
-                              style={{
-                                background: "var(--ch-surface)",
-                                border: "1px solid var(--ch-border)",
-                                color: "var(--ch-text)",
-                              }}
-                            >
-                              {geminiSelectOptions.map((option) => (
-                                <option key={option.value} value={option.value} disabled={!option.enabled}>
-                                  {option.label} - {option.detail}
-                                </option>
-                              ))}
-                              <option value="custom">Modelo customizado</option>
-                            </select>
-
-                            {selectedGeminiModel === "custom" && (
-                              <div className="relative">
-                                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                                <input
-                                  type="text"
-                                  autoComplete="off"
-                                  value={value}
-                                  onChange={(e) => updateField(fieldKey, e.target.value)}
-                                  placeholder="Ex: gemini-3.6-flash"
-                                  className="h-9 w-full rounded-lg pl-9 pr-3 font-mono text-[11px] outline-none transition"
-                                  style={{
-                                    background: "var(--ch-surface)",
-                                    border: "1px solid var(--ch-border)",
-                                    color: "var(--ch-text)",
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        ) : field.multiline ? (
-                          <div className="mt-3 flex gap-2">
-                            <textarea
-                              id={fieldKey}
-                              autoComplete="off"
-                              value={value}
-                              onFocus={() => beginEdit(fieldKey, saved)}
-                              onBlur={() => resetEmptyEdit(fieldKey)}
-                              onChange={(e) => updateField(fieldKey, e.target.value)}
-                              placeholder={getPlaceholder(field)}
-                              rows={4}
-                              className="min-h-24 w-full resize-y rounded-lg px-3 py-2 font-mono text-[11px] leading-5 outline-none transition"
-                              style={{
-                                background: "var(--ch-surface)",
-                                border: "1px solid var(--ch-border)",
-                                color: "var(--ch-text)",
-                              }}
-                            />
-
-                            {saved && (
-                              <button
-                                type="button"
-                                aria-label={`Remover ${field.label}`}
-                                disabled={deletingId === saved.id}
-                                onClick={() => void handleDelete(saved)}
-                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50"
-                                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}
-                              >
-                                {deletingId === saved.id
-                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  : <Trash2 className="h-3.5 w-3.5" />}
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="mt-3 flex gap-2">
-                            <div className="relative min-w-0 flex-1">
-                              <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-                                {field.kind === "secret"
-                                  ? <EyeOff className="h-3.5 w-3.5 text-slate-400" />
-                                  : <KeyRound className="h-3.5 w-3.5 text-slate-400" />}
-                              </div>
-                              <input
-                                id={fieldKey}
-                                type={field.kind === "secret" && isSecretVisible ? "text" : getInputType(field)}
-                                autoComplete={getAutocomplete(field)}
-                                value={value}
-                                onFocus={() => beginEdit(fieldKey, saved)}
-                                onBlur={() => resetEmptyEdit(fieldKey)}
-                                onChange={(e) => updateField(fieldKey, e.target.value)}
-                                placeholder={getPlaceholder(field)}
-                                className={`h-9 w-full rounded-lg pl-9 font-mono text-[11px] outline-none transition ${field.kind === "secret" ? "pr-10" : "pr-3"}`}
-                                style={{
-                                  background:   "var(--ch-surface)",
-                                  border:       "1px solid var(--ch-border)",
-                                  color:        "var(--ch-text)",
-                                }}
-                              />
-                              {field.kind === "secret" && (
-                                <button
-                                  type="button"
-                                  aria-label={isSecretVisible ? `Ocultar ${field.label}` : `Mostrar ${field.label}`}
-                                  aria-pressed={isSecretVisible}
-                                  onMouseDown={(event) => event.preventDefault()}
-                                  onClick={() => toggleSecretVisibility(fieldKey)}
-                                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md transition"
-                                  style={{ color: "var(--ch-muted)" }}
-                                >
-                                  {isSecretVisible
-                                    ? <EyeOff className="h-3.5 w-3.5" />
-                                    : <Eye className="h-3.5 w-3.5" />}
-                                </button>
-                              )}
-                            </div>
-
-                            {saved && (
-                              <button
-                                type="button"
-                                aria-label={`Remover ${field.label}`}
-                                disabled={deletingId === saved.id}
-                                onClick={() => void handleDelete(saved)}
-                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50"
-                                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}
-                              >
-                                {deletingId === saved.id
-                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  : <Trash2 className="h-3.5 w-3.5" />}
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Help */}
-                        <p className="mt-2 text-[11px] leading-4 text-slate-400">{field.help ?? getKindLabel(field.kind)}</p>
-
-                      </div>
-                    );
-                  })}
+                <div className="flex flex-wrap items-center justify-end gap-2 px-5 pb-5">
+                  {isMercadoPagoBilling && (
+                    <a
+                      href="/api/admin/billing/mercado-pago/connect"
+                      className="flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12px] font-medium transition hover:opacity-90"
+                      style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#059669" }}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {hasMercadoPagoBillingConnection ? "Reconectar" : "Conectar Mercado Pago"}
+                    </a>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex h-9 items-center gap-1.5 rounded-lg px-4 text-[12px] font-semibold transition disabled:opacity-60"
+                    style={{ background: "var(--ch-accent)", color: "#fff" }}
+                  >
+                    {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Salvar alterações
+                  </button>
                 </div>
 
                 {connectionTest.status !== "idle" && (
@@ -804,30 +837,161 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                     </p>
                   </div>
                 )}
+                </div>
+                )}
               </div>
             </form>
           );
-        })}
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Resumo */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <SummaryTile label="Prontas" value={counts.ready} tone="ok" />
+        <SummaryTile
+          label="Com pendência"
+          value={counts.pending}
+          tone={counts.pending > 0 ? "alert" : "ok"}
+          pressed={onlyPending}
+          onClick={() => setOnlyPending((cur) => !cur)}
+        />
+        <SummaryTile label="Em standby" value={counts.standby} tone="muted" />
       </div>
+
+      {/* Áreas e filtros */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-2"
+        style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+      >
+        <nav aria-label="Áreas da manutenção" className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1">
+          {[{ key: "all" as const, label: "Todas" }, ...maintenanceAreas].map((area) => {
+            const pending = pendingInArea(area.key);
+            const active = activeArea === area.key;
+            return (
+              <button
+                key={area.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setActiveArea(area.key)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] transition ${active ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}
+              >
+                {area.label}
+                {pending > 0 && (
+                  <span className="rounded-full bg-rose-100 px-1.5 text-[11px] font-semibold text-rose-700" aria-label={`${pending} com pendência`}>
+                    {pending}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-[13px] text-slate-600">
+            <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />
+            Só pendências
+          </label>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            aria-label="Atualizar lista de credenciais"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] transition"
+            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
+          >
+            {listStatus === "loading" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      {listMessage && (
+        <div
+          className="flex items-start gap-3 rounded-xl px-4 py-3"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+          <p className="text-[12px] text-rose-600">{listMessage}</p>
+        </div>
+      )}
+
+      <p className="text-[12px] text-slate-500">
+        Clique numa integração para ver os campos. <strong>Salva aqui</strong>: guardada nesta tela, criptografada.{" "}
+        <strong>No servidor</strong>: definida na configuração da VPS e já em uso. <strong>Faltando</strong>: obrigatória e não encontrada.
+      </p>
+
+      {activeVisible.length === 0 && standbyVisible.length === 0 && (
+        <p className="rounded-xl border border-dashed px-4 py-8 text-center text-[13px] text-slate-500">
+          {onlyPending ? "Nenhuma pendência nesta área." : "Nenhuma integração nesta área."}
+        </p>
+      )}
+
+      <div className="space-y-2">{activeVisible.map(renderIntegration)}</div>
+
+      {standbyVisible.length > 0 && (
+        <section aria-label="Integrações em standby" className="space-y-2 pt-2">
+          <h3 className="text-[13px] font-semibold text-slate-500">Em standby · fora de operação, não contam como pendência</h3>
+          {standbyVisible.map(renderIntegration)}
+        </section>
+      )}
     </div>
   );
 }
 
-// ─── Badges ───────────────────────────────────────────────────────────────────
+function SummaryTile({
+  label,
+  value,
+  tone,
+  pressed,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone: "ok" | "alert" | "muted";
+  pressed?: boolean;
+  onClick?: () => void;
+}) {
+  const color = tone === "alert" ? "text-rose-600" : tone === "ok" ? "text-emerald-600" : "text-slate-500";
+  const content = (
+    <>
+      <span className={`block text-xl font-semibold sm:text-2xl ${color}`}>{value}</span>
+      <span className="block text-[12px] text-slate-500">{label}</span>
+    </>
+  );
+  const className = "rounded-xl px-3 py-2.5 text-left sm:px-4 sm:py-3";
+  const style = {
+    background: "var(--ch-surface)",
+    border: pressed ? "1px solid #3b82f6" : "1px solid var(--ch-border)",
+  };
 
-function ConnectionBadge({ savedCount, total }: { savedCount: number; total: number }) {
-  const saved = savedCount > 0;
+  return onClick
+    ? <button type="button" aria-pressed={pressed} onClick={onClick} className={className} style={style}>{content}</button>
+    : <div className={className} style={style}>{content}</div>;
+}
+
+function IntegrationStateBadge({ summary }: { summary: ReturnType<typeof summarizeIntegration> }) {
+  const config = summary.state === "standby"
+    ? { short: "Standby", label: "Standby", style: { background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" } }
+    : summary.state === "pending"
+      ? {
+          short: `Falta ${summary.missingRequired}`,
+          label: `Falta${summary.missingRequired === 1 ? "" : "m"} ${summary.missingRequired} obrigatória${summary.missingRequired === 1 ? "" : "s"}`,
+          style: { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#dc2626" },
+        }
+      : {
+          short: "Pronta",
+          label: summary.requiredTotal > 0 ? `Pronta · ${summary.requiredConfigured}/${summary.requiredTotal}` : "Sem obrigatórias",
+          style: { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#059669" },
+        };
+
   return (
-    <span
-      className="inline-flex items-center rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide"
-      style={saved
-        ? { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10b981" }
-        : { background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
-    >
-      {saved ? `${savedCount}/${total} salvas` : "Aguardando"}
+    <span className="inline-flex items-center whitespace-nowrap rounded-lg px-2 py-0.5 text-[12px] font-medium" style={config.style} title={config.label}>
+      <span className="sm:hidden">{config.short}</span>
+      <span className="hidden sm:inline">{config.label}</span>
     </span>
   );
 }
+
+// ─── Badges ───────────────────────────────────────────────────────────────────
 
 function ConnectionTestBadge({ test }: { test: ConnectionTest }) {
   const styles: Record<ConnectionTest["status"], { bg: string; border: string; color: string; label: string }> = {
@@ -853,24 +1017,38 @@ function ConnectionTestBadge({ test }: { test: ConnectionTest }) {
   );
 }
 
-function SavedBadge({ saved }: { saved: boolean }) {
+function SourceBadge({ source, requirement }: { source: FieldSource; requirement: CredentialRequirement }) {
+  const styles: Record<FieldSource, { bg: string; border: string; color: string; label: string; title: string }> = {
+    vault: {
+      bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.25)", color: "#059669",
+      label: "Salva aqui", title: "Valor salvo nesta tela, criptografado. Prevalece sobre o servidor.",
+    },
+    environment: {
+      bg: "rgba(59,130,246,0.08)", border: "rgba(59,130,246,0.25)", color: "#2563eb",
+      label: "No servidor", title: "Definida nas variáveis de ambiente do servidor. O sistema já usa este valor; salvar aqui passa a prevalecer.",
+    },
+    missing: requirement === "required"
+      ? { bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.25)", color: "#dc2626", label: "Faltando", title: "Obrigatória e não encontrada nesta tela nem no servidor." }
+      : { bg: "var(--ch-hover)", border: "var(--ch-border)", color: "var(--ch-muted)", label: "Não preenchida", title: "Não encontrada nesta tela nem no servidor." },
+  };
+  const style = styles[source];
+
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide"
-      style={saved
-        ? { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10b981" }
-        : { background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
+      title={style.title}
+      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-medium"
+      style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}
     >
-      {saved ? <CheckCircle2 className="h-2.5 w-2.5" /> : <CircleDot className="h-2.5 w-2.5" />}
-      {saved ? "Salva" : "Ausente"}
+      {source === "missing" ? <CircleDot className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5" />}
+      {style.label}
     </span>
   );
 }
 
 function RequirementBadge({ requirement }: { requirement: CredentialRequirement }) {
   const styles: Record<CredentialRequirement, { bg: string; border: string; color: string }> = {
-    required:    { bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.25)",   color: "#ef4444" },
-    recommended: { bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.25)",  color: "#f59e0b" },
+    required:    { bg: "var(--ch-hover)", border: "var(--ch-border)", color: "var(--ch-text)" },
+    recommended: { bg: "var(--ch-hover)", border: "var(--ch-border)", color: "var(--ch-muted)" },
     optional:    { bg: "var(--ch-hover)",         border: "var(--ch-border)",       color: "var(--ch-muted)" },
   };
   const s = styles[requirement];
@@ -911,6 +1089,14 @@ function OAuthAppNotice({ integrationId }: { integrationId: string }) {
         <div className="min-w-0">
           <p className="text-[12px] font-semibold" style={{ color: styles.color }}>{config.title}</p>
           <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{config.text}</p>
+          {integrationId === "meta" && (
+            <p className="mt-2 text-[11px] leading-4 text-slate-500">
+              WhatsApp oficial tem configuração própria (Embedded Signup, modelos e chat). Para a revisão WhatsApp: conecte o
+              número de teste, crie um modelo e registre um envio chegando ao destinatário; criação e envio exigem demonstrações
+              distintas.{" "}
+              <Link href="/admin/meta" className="font-medium text-blue-700 hover:underline">Abrir laboratório e chat oficial</Link>
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {config.items.map((item) => (
               <span
@@ -1210,7 +1396,9 @@ function getAutocomplete(field: VaultField) {
   return "off";
 }
 
-function getPlaceholder(field: VaultField) {
+function getPlaceholder(field: VaultField, existing: "vault" | "environment" | null = null) {
+  if (existing === "vault") return "Valor salvo. Preencha só para substituir.";
+  if (existing === "environment") return "Definida no servidor. Preencha só para substituir.";
   if (field.multiline) return "Cole uma lista separada por virgulas ou uma permissao por linha.";
   if (field.env.includes("STATUS")) return "Ex: teste, em revisao, aprovado.";
   if (field.env.includes("VERSION")) return "Ex: v25.0.";
