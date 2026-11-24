@@ -17,6 +17,16 @@ Criação de empresas adicionais mantém o contrato e a carteira responsáveis e
 
 ## Validação local
 
-95 testes passaram em 12 arquivos: PF/PJ, escolha explícita do nome, preservação de nome editado, idempotência, rollback transacional, prazo vencido pelo resolvedor SQL real, permissões do RPC, isolamento e acesso assistido, cadastro incompleto e navegação restrita. ESLint dos arquivos alterados e git diff --check passaram.
+96 testes passaram em 13 arquivos: PF/PJ, escolha explícita do nome, preservação de nome editado, idempotência, rollback transacional, prazo vencido pelo resolvedor SQL real, permissões do RPC, isolamento e acesso assistido, cadastro incompleto e navegação restrita. ESLint dos arquivos alterados e git diff --check passaram.
 
-Publicação e observação em produção serão registradas separadamente após a ativação. Não foram criadas contas ou empresas reais para validar os testes automatizados.
+## Publicação e observação
+
+Release `dab097d11ed6d7843bfe75a6d6ad33374c4fc5b9` ativada no slot a em 23/11/2026, 22h34 BRT. Base `f07f299ef273869c418190b9915c0e9633afc5cf` preservada no slot b para rollback. Preparação intermediária `89da40e2` foi cancelada para incluir a proteção de revalidação do telefone e nunca ativada.
+
+Migration 0227 aplicada em transação, com timeout de locks e permissões conferidas: anon/authenticated sem EXECUTE, service_role permitido. Compilação, TypeScript de produção e geração de 126 páginas concluídos. Smoke candidato e público confirmaram SHA, health/login, 25 assets, proteções de rotas, redirecionamento do link de login e leitura autenticada Inngest com 61 funções; nenhum job disparado.
+
+Chrome Connecty: acesso assistido ao Ivan abriu Empresa, com menus de conta e formulário vazio para escolher o nome. Dados e cobrança carregou Cadastro completo, dados pessoais, primeira empresa e segurança. Nenhum formulário foi salvo. Consulta posterior confirmou zero empresas próprias e zero vínculos para Ivan. Connectyhub16 manteve quatro menus restritos e a tela de planos. Retorno ao Admin OS confirmado, sem sessão assistida restante.
+
+A criação PF/PJ, concessão inicial, renomeação preservada e rollback foram validados nos testes locais; não foi feito novo cadastro real PF/PJ nem criada empresa real em produção nesta rodada. O nome de empresas existentes, planos, créditos e datas de clientes foram preservados. Nenhuma mensagem, redefinição, campanha ou cobrança enviada/ativada.
+
+Evidências: `output/cadastro-pf-pj-20261123/`: `validacao-local.txt`, `migration-result.txt`, `smoke-candidate.json`, `smoke-public.json`, `ivan-preservado.txt`, `ivan-primeira-empresa.jpg` e `conta-vencida-menus.jpg`.

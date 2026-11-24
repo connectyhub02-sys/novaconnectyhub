@@ -1,5 +1,14 @@
 # Estado operacional da ConnectyHub
 
+## Cadastro PF/PJ e menus — publicado e observado, 23/11/2026, 22h34 BRT
+
+- Após o mapeamento, titular autorizou implementar a regra: PF escolhe explicitamente o nome da primeira empresa; PJ recebe a empresa com o nome empresarial do cadastro completo. Nome pessoal deixa de ser fallback. Nome da empresa continua editável no painel. Empresas existentes preservadas; Ivan não foi provisionado manualmente.
+- Conta sem empresa agora tem navegação restrita e caminho de criação; Dados e cobrança funciona sem organização. Cadastro incompleto mantém a conclusão obrigatória. Plano vencido mantém as restrições existentes. Criação posterior não reinicia prazo de teste nem concede créditos vencidos, inclusive na revalidação do telefone.
+- Release `dab097d11ed6d7843bfe75a6d6ad33374c4fc5b9` ativa no slot a, migration aditiva 0227 aplicada com EXECUTE somente service_role. Slot b `f07f299ef273869c418190b9915c0e9633afc5cf` preservado. Implementação isolada em ConnectyHub-admin-support, branch codex/cadastro-pf-pj-20261123; alterações não relacionadas do checkout principal não incluídas.
+- 96 testes passaram em 13 arquivos, lint e tipos da aplicação aprovados; build/TypeScript de produção e 126 páginas concluídos. Smoke candidato/público confirmou SHA, 25 assets, login, proteções e Inngest autenticado (somente leitura).
+- Chrome: Ivan abriu Empresa, formulário vazio e Dados e cobrança sem erro; continua com zero empresas e zero vínculos. Connectyhub16 manteve quatro menus restritos e tela de planos. Retorno ao administrador confirmado. Nenhuma criação real PF/PJ, envio, cobrança ou alteração de plano usada como teste. [Relatório e evidências](cadastro-pf-pj-2026-11-23.md).
+- Esta autorização posterior substitui a pausa anterior dos ajustes de navegação, preservada abaixo como histórico.
+
 ## Infraestrutura como painel de operação, com Inngest e Supabase embutidos — 20/11/2026
 
 - **Atual:** release `e885b9df6cb0c197165c4f672adf8f5dfc483c1e` ativa no **slot a**; retorno `7b9c2109` no slot b. Smoke aprovado.

@@ -14,6 +14,12 @@ Agente onipresente: o atendimento deve continuar nos dois sentidos entre WhatsAp
 
 O titular quer vender os recursos de IA em créditos, contabilizando o custo do fornecedor. Não é uma equivalência fixa de um crédito para um token. A aplicação usa regras por modelo, modalidade, operação e plano; ferramentas, mídia e armazenamento faturável podem ter unidades próprias. O objetivo é cobrar consumo faturável uma vez, sem débito duplicado ao consultar/repetir uma solicitação e sem apresentar custo incerto como uso gratuito.
 
+### Cadastro e primeira empresa — decisão de 23/11/2026
+
+Pessoa física completa sua conta sem empresa automática baseada no nome pessoal; depois escolhe o nome e confirma a criação da primeira empresa no painel. Pessoa jurídica recebe a primeira empresa com o nome empresarial informado no cadastro completo. Nos dois casos, o nome pode ser editado no painel. Não renomear empresas existentes pelo login nem provisionar empresa implicitamente no acesso assistido sem organização.
+
+Cadastro incompleto conserva a conclusão obrigatória; ausência de empresa é uma etapa válida com menus de conta e criação; plano vencido mantém restrição operacional. A criação tardia não reinicia o prazo inicial de teste nem concede bônus vencido. [Implementação, publicação e limites](cadastro-pf-pj-2026-11-23.md).
+
 ## Arquitetura de referência
 
 ### Expansão social e WhatsApp oficial — decisão de 11/10/2026
