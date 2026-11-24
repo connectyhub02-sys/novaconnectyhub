@@ -4189,3 +4189,18 @@ identificar a métrica correta. Clientes dependem da revisão Meta dessas permis
   16/11 por URL incompleta no vídeo), sem decisão. Escopos pedidos: `user.info.basic`, `video.publish`,
   `video.upload`. Não inclui `video.list` (listar vídeos e visualizações) nem a API de anúncios do TikTok
   (TikTok for Business / Marketing API), que é um app separado ainda não criado.
+
+### Conexões do cliente — publicação de 24/11/2026, 17h38 BRT
+
+- Release `54575794da606668cac3b327ab8959bc1c4c64bd` ativa no slot A; health público e smoke
+  aprovados. Slot B anterior `87eaae164d07aa1006cc8d51a6387b81cce13176` preservado.
+- `/dashboard/integracoes` usa os cartões compactos do admin: quatro no desktop e dois no
+  celular, ações dentro de Gerenciar; Google Tag dentro de Google. Links antigos preservados.
+- Conferido em produção no painel de Buffalo Mass/Luna por acesso assistido: seis cartões,
+  abertura/fechamento de todos os Gerenciar, link direto da Meta e viewport móvel de 390 px.
+  Nenhuma conexão, publicação, pagamento ou credencial foi alterada na conferência.
+- Build, TypeScript, ESLint e 51 testes focados aprovados; Inngest GET assinado autenticado
+  com 61 funções. Sessão assistida encerrada e tamanho do navegador restaurado.
+- Google desse cliente continua autorizado, sem conta Ads encontrada/selecionada. A mudança
+  de interface não resolve aprovações externas nem comprova entrega de anúncios/publicações.
+- Detalhes: [conferência das conexões do cliente](conexoes-cliente-2026-11-24.md).
