@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MetaSocialConnectionActions } from "./meta-social-connection-actions";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CircleHelp, Link2, Loader2, Video, Music2, Globe2, MessageCircle } from "lucide-react";
@@ -39,7 +40,7 @@ export function SocialAccountsConsole({ overview, shell, companyId, outcome, emb
         <p className="mt-2 text-sm text-slate-600">{!overview.meta.available ? "Consulta indisponível" : overview.meta.connected ? "Conexão registrada" : "Nenhuma conta conectada"}</p>
         {overview.meta.account && <p className="mt-2 break-words font-medium">{overview.meta.account}</p>}
         <p className="mb-5 mt-3 text-sm leading-6 text-slate-500">{overview.meta.connected && overview.meta.publishingScopes ? "Permissões de publicação registradas. O envio confere o acesso atual e os ativos selecionados." : "A publicação depende da conexão, dos ativos selecionados e das permissões concedidas pela Meta."}</p>
-        <Link className={`${button} mt-auto`} href={shell === "admin" ? "/admin/meta/social" : "/dashboard/integracoes#meta-ads-guiado"}><Link2 size={16}/>Gerenciar Instagram e Facebook</Link>
+        <div className="mt-auto space-y-3"><MetaSocialConnectionActions companyId={companyId} shell={shell} connected={overview.meta.connected} canManage={overview.canManage}/><Link className={secondary} href={shell === "admin" ? "/admin/meta/social" : "/dashboard/integracoes#meta-ads-guiado"}>Ver perfis e permissões</Link></div>
       </article>}
       {!embedded && <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 text-slate-900"><MessageCircle size={28} className="mb-4 text-emerald-600"/><h2 className="text-lg font-semibold">WhatsApp oficial</h2><p className="mb-5 mt-3 text-sm leading-6 text-slate-500">Conexão opcional e independente. Gerencie o número, o atendimento e os modelos de mensagem da API oficial.</p><Link className={`${secondary} mt-auto`} href={shell === "admin" ? "/admin/meta" : "/dashboard/chat-meta"}>Gerenciar WhatsApp oficial</Link></article>}
       {overview.connections.map(account => {

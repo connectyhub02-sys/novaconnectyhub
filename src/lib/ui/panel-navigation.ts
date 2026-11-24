@@ -45,17 +45,17 @@ export const panelNavigation: Record<string, NavigationDefinition> = {
     "aliases": "Aprovações Operação"
   },
   "/admin/redes-sociais/publicacoes": {
-    "group": "Divulgação",
+    "group": "Redes sociais",
     "label": "Publicações",
     "aliases": "Publicações Redes sociais"
   },
   "/admin/redes-sociais/calendario": {
-    "group": "Divulgação",
+    "group": "Redes sociais",
     "label": "Calendário de posts",
     "aliases": "Calendário de posts Redes sociais"
   },
   "/admin/redes-sociais/biblioteca": {
-    "group": "Divulgação",
+    "group": "Redes sociais",
     "label": "Biblioteca de mídias",
     "aliases": "Biblioteca de mídias Redes sociais"
   },
@@ -210,17 +210,17 @@ export const panelNavigation: Record<string, NavigationDefinition> = {
     "aliases": "Agenda Vendas"
   },
   "/dashboard/redes-sociais/publicacoes": {
-    "group": "Divulgação",
+    "group": "Redes sociais",
     "label": "Publicações",
     "aliases": "Publicações Redes sociais"
   },
   "/dashboard/redes-sociais/calendario": {
-    "group": "Divulgação",
+    "group": "Redes sociais",
     "label": "Calendário de posts",
     "aliases": "Calendário de posts Redes sociais"
   },
   "/dashboard/redes-sociais/biblioteca": {
-    "group": "Divulgação",
+    "group": "Redes sociais",
     "label": "Biblioteca de mídias",
     "aliases": "Biblioteca de mídias Redes sociais"
   },
@@ -340,7 +340,7 @@ export function groupPanelNavigation<T extends { href: string; label: string }>(
     const group=definition?.group ?? (mode==="admin"?"Sistema":"Ferramentas");
     groups.set(group,[...(groups.get(group)??[]),{...item,label:definition?.label??item.label}]);
   }
-  const order=mode==="admin"?["Início","Clientes","Operação","Comercial","Divulgação","Financeiro","Sistema","Conta"]:["Início","Atendimento","Vendas","Divulgação","Automações","Conta","Ferramentas"];
+  const order=mode==="admin"?["Início","Clientes","Operação","Redes sociais","Comercial","Divulgação","Financeiro","Sistema","Conta"]:["Início","Atendimento","Redes sociais","Vendas","Divulgação","Automações","Conta","Ferramentas"];
   return order.filter(label=>groups.has(label)).map(label=>({label,items:groups.get(label)!}));
 }
 

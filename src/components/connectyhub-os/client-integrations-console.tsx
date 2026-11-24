@@ -2614,11 +2614,11 @@ function GuidedOAuthCard({
     ? {
         id: "meta-ads-guiado",
         eyebrow: "integracao guiada",
-        title: "Meta Ads / Instagram",
+        title: "Instagram, Facebook e Meta Ads",
         body: "Conecte a conta Meta pela autorizacao oficial. A ConnectyHub recebe permissao para ler campanhas, leads e sinais organicos aprovados.",
         icon: BarChart3,
         iconColor: "text-sky-300",
-        connectLabel: connected ? "Reconectar Meta" : "Conectar Meta",
+        connectLabel: connected ? "Reconectar Instagram e Facebook" : "Conectar Instagram e Facebook",
         dashboardHref: "/dashboard/trafego/meta-ads",
         providerLabel: "Meta",
         stepTwo: "Autorizar Meta",
@@ -2716,6 +2716,8 @@ function GuidedOAuthCard({
             Desconectar
           </button>
         </div>
+
+        {kind === "meta" && <div className="mt-3 flex flex-wrap gap-3 text-sm"><Link className="font-semibold text-blue-600 underline" href="/dashboard/redes-sociais/publicacoes?create=1">Criar publicação</Link><Link className="text-blue-600 underline" href="/dashboard/redes-sociais/publicacoes">Ver conteúdos</Link>{connected && <a className="text-blue-600 underline" href={buildGuidedOAuthConnectUrl(kind, selectedCompanyId)} target="_blank" rel="noopener noreferrer" onClick={onConnect}>Trocar contas na Meta</a>}</div>}
 
         <Link
           href={config.dashboardHref}

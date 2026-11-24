@@ -16,7 +16,7 @@ import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
 import { socialAccountsOverview } from "@/lib/social/connections";
 import { socialAreas, socialNavigation, socialPath, type SocialArea, type SocialShell } from "@/lib/social/policy";
 
-export async function SocialWorkspacePage({ shell, area, outcome }: { shell: SocialShell; area: string; outcome?: string }) {
+export async function SocialWorkspacePage({ shell, area, outcome, initialCompose = false }: { shell: SocialShell; area: string; outcome?: string; initialCompose?: boolean }) {
   await connection();
   if (!socialAreas.includes(area as SocialArea)) notFound();
   // Client connected accounts moved into Conexões; keep OAuth outcomes and old links working.
@@ -38,12 +38,11 @@ export async function SocialWorkspacePage({ shell, area, outcome }: { shell: Soc
     if (!entitlement.allowed) content = <FeatureUpgradePanel entitlement={entitlement} title="Publicações" description="Disponível nos planos ativos, conforme as permissões da conta."/>;
     else {
       const overview = await getClientMetaOrganicOverview({ userId: workspace.user.id, organizationId: company.id }).catch(() => null);
-      content = readMetaReviewAccess(workspace.user) ? (overview ? <MetaOrganicConsole overview={overview} companyId={company.id} initialView={area === "calendario" ? "calendar" : area === "biblioteca" ? "library" : "compose"}/> : <p role="alert">Não foi possível carregar o histórico Meta.</p>) : <><SocialPublishingConsole key={area} companyId={company.id} shell={shell} area={area} canManage={["owner","admin"].includes(company.role)}/>
-        {area === "publicacoes" && <details className="mt-8 rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold">Publicações Meta anteriores e outros formatos</summary><div className="mt-4">{overview ? <MetaOrganicConsole overview={overview} companyId={company.id} initialView="calendar" socialShell={shell}/> : <p role="alert">Não foi possível consultar o histórico Meta. Atualize a página.</p>}</div></details>}</>;
+      content = readMetaReviewAccess(workspace.user) ? (overview ? <MetaOrganicConsole overview={overview} companyId={company.id} initialView={area === "calendario" ? "calendar" : area === "biblioteca" ? "library" : "compose"}/> : <p role="alert">Não foi possível carregar o histórico Meta.</p>) : <SocialPublishingConsole key={`${company.id}:${area}`} companyId={company.id} shell={shell} area={area} initialCompose={initialCompose} canManage={["owner","admin"].includes(company.role)} legacyPosts={overview?.items ?? []} metaComposer={area !== "biblioteca" ? <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="mb-4 text-sm text-slate-600">Fotos, carrosséis, stories e histórico dos formatos Meta. Para o mesmo vídeo em quatro redes, use a aba Vídeo.</p>{overview ? <MetaOrganicConsole overview={overview} companyId={company.id} initialView="compose" socialShell={shell}/> : <p role="alert">Não foi possível consultar os formatos Meta. Atualize a página.</p>}</div> : undefined}/>;
     }
   }
   return <ConnectyShell mode={shell} activeHref={socialPath(shell, area as SocialArea)} isPlatformAdmin={workspace.profile.isPlatformAdmin} userAvatarUrl={workspace.profile.avatarUrl} userLabel={workspace.profile.email ?? undefined} workspaceName={company.name}>
-    <nav aria-label="Redes sociais" className="mb-5 flex flex-wrap gap-2">{socialNavigation(shell).filter(item => shell === "admin" || item.key !== "contas").map(item => <Link key={item.key} href={item.href} aria-current={area === item.key ? "page" : undefined} className={`rounded-xl border px-3 py-2 text-sm ${area === item.key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}>{item.label}</Link>)}</nav>
+    <nav aria-label="Redes sociais" className="mb-5 flex flex-wrap gap-2">{socialNavigation(shell).map(item => <Link key={item.key} href={item.href} aria-current={area === item.key ? "page" : undefined} className={`rounded-xl border px-3 py-2 text-sm ${area === item.key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}>{item.label}</Link>)}</nav>
     {shell === "admin" && <p className="mb-4 text-sm text-slate-500">Operação própria · {company.name}</p>}
     {content}
   </ConnectyShell>;
