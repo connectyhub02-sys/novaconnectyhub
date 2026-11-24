@@ -686,7 +686,7 @@ export async function ensureTrialForCompletedSignup(input: {
 
   const organization = membership?.organizations ?? null;
 
-  if (!organization || organization.plan_code !== TRIAL_PLAN_CODE) {
+  if (!organization || organization.plan_code !== TRIAL_PLAN_CODE || organization.status === "trial_expired") {
     return organization;
   }
 
