@@ -8,13 +8,14 @@ import { MetaSocialConnectionActions } from "@/components/connectyhub-os/meta-so
 import { Panel, PageHeader } from "@/components/connectyhub-os/panel-primitives";
 import { metaRecord, selectedMetaAsset } from "@/lib/meta/ads-leads-context";
 export const metadata = { title: "Instagram e Facebook | ConnectyHub" };
-export default async function Page() {
+export default async function Page({searchParams}:{searchParams:Promise<{integration?:string}>}) {
   await connection();
   const workspace = await getMetaWorkspace();
   if (!workspace?.profile.isPlatformAdmin || !workspace.organization) return <AccessDenied/>;
   const result = await createServiceClient().from("organization_integrations").select("status,external_account_label,scopes,metadata").eq("organization_id", workspace.organization.id).eq("provider_id", "meta-ads").maybeSingle();
   const assetRows = await createServiceClient().from("integration_assets").select("external_id,label").eq("organization_id", workspace.organization.id).eq("provider_id", "meta-ads").in("asset_type", ["facebook_page", "instagram_business_account", "meta_ad_account"]);
   const social = result.data, assets = metaRecord(social?.metadata);
+  const outcome = (await searchParams).integration;
   const entries = [
     { label: "Página Facebook", id: selectedMetaAsset(assets, "facebook_page_id"), items: assets.facebook_pages },
     { label: "Instagram", id: selectedMetaAsset(assets, "instagram_business_id"), items: assets.instagram_accounts },
@@ -22,11 +23,13 @@ export default async function Page() {
   ];
   return <ConnectyShell mode="admin" activeHref="/admin/redes-sociais/contas" isPlatformAdmin userLabel={workspace.profile.email ?? undefined}>
     <PageHeader title="Instagram e Facebook" description="Perfis, publicações, atendimento e anúncios da operação própria."/>
+    {outcome === "meta_error" && <p role="alert" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">A autorização não foi concluída. Confira o estado da conexão abaixo e use Reconectar para tentar novamente.</p>}
+    {outcome === "meta_connected" && social?.status === "connected" && <p role="status" className="mb-5 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900">Autorização concluída. Confira os perfis selecionados antes de criar sua publicação.</p>}
     <div className="mb-5 flex flex-wrap gap-3 text-sm"><Link className="text-blue-700" href="/admin/redes-sociais/contas">Todas as conexões</Link><Link className="text-blue-700" href="/admin/meta">WhatsApp oficial — conexão independente</Link></div>
     <Panel title="Perfis e conta de anúncios" className="mb-5"><p className="text-sm">{result.error ? "Não foi possível consultar a conexão." : social?.status === "connected" ? "Conexão autorizada" : "Conecte os perfis que deseja usar"}</p>
       <div className="mt-4 grid gap-3 md:grid-cols-3">{entries.map(entry => {
         const match = (Array.isArray(entry.items) ? entry.items : []).map(metaRecord).find(a => a.id === entry.id);
-        const name = assetRows.data?.find(a => a.external_id === entry.id)?.label || match?.name || match?.username || (entry.label === "Conta de anúncios" ? social?.external_account_label : null);
+        const name = assetRows.data?.find(a => a.external_id === entry.id)?.label || match?.label || match?.name || match?.username || (entry.label === "Conta de anúncios" ? social?.external_account_label : null);
         return <div key={entry.label} className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">{entry.label}</p><p className="mt-2 break-words text-sm font-medium">{entry.id ? String(name || `${entry.label} selecionado`) : "Nenhum selecionado"}</p>{entry.id && <p className="mt-1 break-all text-xs text-slate-500">{entry.id}</p>}</div>;
       })}</div>
       <div className="mt-5"><MetaSocialConnectionActions companyId={workspace.organization.id} shell="admin" connected={social?.status === "connected"}/></div>

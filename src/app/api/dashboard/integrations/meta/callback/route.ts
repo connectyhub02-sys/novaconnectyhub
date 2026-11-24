@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     return response;
   };
   const workspace = await getCurrentWorkspace();
-  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/meta";
+  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/meta/social";
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);

@@ -3,6 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 
 describe("Meta OAuth navigation", () => {
+  it.each([true, false])("returns the social authorization to the matching panel (admin=%s)", async admin => {
+    const route = serverModuleHarness<typeof import("../src/app/api/dashboard/integrations/meta/callback/route")>(
+      "src/app/api/dashboard/integrations/meta/callback/route.ts", {
+        "next/server": { NextResponse }, "next/cache": {},
+        "@/lib/billing/trial": {}, "@/lib/client-os/dashboard-route-scope": {},
+        "@/lib/meta/company-access": { getMetaWorkspace: async () => ({profile:{isPlatformAdmin:admin}}) },
+        "@/lib/client-os/guided-oauth": { getAppBaseUrl: () => "https://example.test" },
+        "@/lib/client-os/growth-integrations": {}, "@/lib/supabase/service": {},
+        "@/lib/meta/oauth-state": { metaOAuthCookie: () => ({name:"state",path:"/"}) },
+      });
+    const response = await route.GET(new NextRequest("https://example.test/api/dashboard/integrations/meta/callback"));
+    expect(new URL(response.headers.get("location")!).pathname).toBe(admin ? "/admin/meta/social" : "/dashboard/integracoes");
+    expect(response.headers.get("cache-control")).toContain("no-store");
+  });
   it.each<Record<string, string>>([
     { "next-router-prefetch": "1" },
     { purpose: "prefetch" },

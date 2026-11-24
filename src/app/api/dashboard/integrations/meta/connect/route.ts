@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const baseUrl = getAppBaseUrl();
   const returnUrl = new URL("/dashboard/integracoes", baseUrl);
   const workspace = await getCurrentWorkspace();
-  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/meta";
+  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/meta/social";
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);
