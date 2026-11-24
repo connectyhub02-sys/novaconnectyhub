@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import * as destinations from "../src/lib/auth/route-destinations";
+import * as companySetup from "../src/lib/account/workspace-required";
 import * as recovery from "../src/lib/billing/recovery-paths";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 
 const origin = "https://www.connectyhub.com.br";
-function fixture({ allowed = false, admin = false, authenticated = true } = {}) {
+function fixture({ allowed = false, admin = false, authenticated = true, workspaceMissing = false, complete = true } = {}) {
   const user = authenticated ? { id: "customer-1" } : null;
   const getCurrentWorkspace = vi.fn(async (options?: { allowRestricted?: boolean }) => {
     if (!user) return null;
@@ -26,9 +27,9 @@ function fixture({ allowed = false, admin = false, authenticated = true } = {}) 
   const callback = serverModuleHarness<{ GET: (r: NextRequest) => Promise<NextResponse> }>("src/app/auth/callback/route.ts", imports);
   const profile = {
     full_name: "Cliente Teste", email: "customer@example.test", account_type: "person", document_type: "cpf",
-    phone_normalized: "5511999999999", phone_verified_at: "2026-09-01T00:00:00Z", cpf_hash: "test-hash", is_platform_admin: admin,
+    phone_normalized: "5511999999999", phone_verified_at: "2026-09-01T00:00:00Z", cpf_hash: complete ? "test-hash" : null, is_platform_admin: admin,
   };
-  const rpc = vi.fn(async () => ({ data: { allowed }, error: null }));
+  const rpc = vi.fn(async () => ({ data: { allowed, reason: workspaceMissing ? "workspace_required" : "expired" }, error: null }));
   const supabase = {
     auth: { getUser: async () => ({ data: { user } }) }, rpc,
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: profile, error: null }) }) }) }),
@@ -37,6 +38,7 @@ function fixture({ allowed = false, admin = false, authenticated = true } = {}) 
     ...imports, "@supabase/ssr": { createServerClient: () => supabase },
     "@/lib/auth/meta-review-access": { readMetaReviewAccess: () => null },
     "@/lib/billing/recovery-paths": recovery,
+    "@/lib/account/workspace-required": companySetup,
     "./env": { getSupabasePublicEnv: () => ({ configured: true, url: "https://auth.example.test", publishableKey: "test" }) },
   });
   return { imports, continuation, callback, proxy, getCurrentWorkspace, exchangeCodeForSession, rpc };
@@ -112,4 +114,17 @@ describe("authentication for overdue customers", () => {
     const dashboard = await f.proxy.updateSession(new NextRequest(new URL(entry.headers.get("location")!, origin)));
     expect(dashboard.headers.get("location")).toBe(`${origin}/login?next=%2Fdashboard`);
   });
+});
+
+
+it("permits only first-company setup when the authenticated account has no workspace", async () => {
+  const f=fixture({workspaceMissing:true});
+  for (const [path,method] of [["/dashboard/empresa","GET"],["/api/dashboard/agents","GET"],["/api/dashboard/companies","GET"],["/api/dashboard/companies","POST"]]) {
+    expect((await f.proxy.updateSession(new NextRequest(origin+path,{method}))).status).toBe(200);
+  }
+  for (const method of ["PATCH","DELETE"]) expect((await f.proxy.updateSession(new NextRequest(origin+"/api/dashboard/companies",{method}))).status).toBe(409);
+  expect((await f.proxy.updateSession(new NextRequest(origin+"/api/dashboard/agents",{method:"POST"}))).status).toBe(409);
+  expect((await f.proxy.updateSession(new NextRequest(origin+"/dashboard"))).headers.get("location")).toBe(origin+"/dashboard/empresa");
+  expect((await fixture({workspaceMissing:true,complete:false}).proxy.updateSession(new NextRequest(origin+"/api/dashboard/companies",{method:"POST"}))).status).toBe(428);
+  expect((await fixture().proxy.updateSession(new NextRequest(origin+"/api/dashboard/companies",{method:"POST"}))).status).toBe(402);
 });

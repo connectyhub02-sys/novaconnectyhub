@@ -11,6 +11,7 @@ import { isAccountSignupComplete } from "@/lib/account/signup-completion";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
+import { createInitialCompany } from "@/lib/account/initial-company";
 import { getAdminAssistedAccess } from "@/lib/admin-assisted-access";
 
 export type CurrentProfile = {
@@ -134,7 +135,7 @@ export async function ensureStarterOrganization() {
     || await isAccountSignupComplete({ userId: workspace.user.id, client: supabase }).catch(() => false);
 
   if (workspace.organization) {
-    if (!workspace.profile.isPlatformAdmin && workspace.organization.planCode === TRIAL_PLAN_CODE && signupComplete) {
+    if (!workspace.profile.isPlatformAdmin && workspace.organization.planCode === TRIAL_PLAN_CODE && workspace.organization.status !== "trial_expired" && signupComplete) {
       if (workspace.organization.status === "trial_pending") {
         await supabase
           .from("organizations")
@@ -166,7 +167,7 @@ export async function ensureStarterOrganization() {
       userId: workspace.user.id,
     });
 
-    if (existingOrganization.plan_code === TRIAL_PLAN_CODE && signupComplete) {
+    if (existingOrganization.plan_code === TRIAL_PLAN_CODE && existingOrganization.status !== "trial_expired" && signupComplete) {
       if (existingOrganization.status === "trial_pending") {
         await supabase
           .from("organizations")
@@ -190,83 +191,16 @@ export async function ensureStarterOrganization() {
     return null;
   }
 
-  const starterOrganization = await createStarterOrganization({
-    client: supabase,
-    profile: workspace.profile,
-    user: workspace.user,
+  const starterOrganization = await createInitialCompany({
+    client: supabase, userId: workspace.user.id, automatic: true,
   });
-
-  await ensureTrialSetup({
-    organizationId: starterOrganization.id,
-    userId: workspace.user.id,
-    optIn: workspace.profile.trialWhatsappOptIn,
-    client: supabase,
-  });
-
+  if (!starterOrganization) return null;
+  // Trial provisioning is atomic in the first-company RPC. No personal-name fallback.
+  if (starterOrganization.status === "trial") {
+    await ensureTrialSetup({ organizationId: starterOrganization.id, userId: workspace.user.id,
+      optIn: workspace.profile.trialWhatsappOptIn, client: supabase });
+  }
   return mapOwnedOrganization(starterOrganization);
-}
-
-async function createStarterOrganization(input: {
-  client: Awaited<ReturnType<typeof createWorkspaceDataClient>>;
-  profile: CurrentProfile;
-  user: User;
-}): Promise<OwnedOrganizationRow> {
-  const { data: organization, error } = await input.client
-    .from("organizations")
-    .insert({
-      name: buildStarterOrganizationName(input.profile, input.user),
-      slug: createStarterOrganizationSlug(input.profile, input.user),
-      owner_id: input.user.id,
-      plan_code: TRIAL_PLAN_CODE,
-      status: "trial",
-    })
-    .select("id, name, slug, plan_code, status, created_at")
-    .single<OwnedOrganizationRow>();
-
-  if (organization) {
-    await ensureOwnerMembership({
-      client: input.client,
-      organizationId: organization.id,
-      userId: input.user.id,
-    });
-
-    return organization;
-  }
-
-  const existingOrganization = await findExistingOwnedOrganization(input.client, input.user.id);
-  if (existingOrganization) {
-    return existingOrganization;
-  }
-
-  throw new Error(error?.message ?? "Nao foi possivel criar o workspace inicial.");
-}
-
-function buildStarterOrganizationName(profile: CurrentProfile, user: User) {
-  const rawName = [
-    profile.companyName,
-    profile.fullName,
-    profile.email,
-    user.email,
-  ].find((value) => typeof value === "string" && value.trim());
-  const name = (rawName ?? "Workspace ConnectyHub").trim().replace(/\s+/g, " ");
-
-  return name.slice(0, 96).trim() || "Workspace ConnectyHub";
-}
-
-function createStarterOrganizationSlug(profile: CurrentProfile, user: User) {
-  const rawBase = profile.companyName ?? profile.fullName ?? profile.email ?? user.email ?? "cliente";
-  const base = rawBase
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .replace(/-+$/g, "");
-  const userSuffix = user.id.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 10);
-  const timeSuffix = Date.now().toString(36);
-
-  return `workspace-${base || "cliente"}-${userSuffix || timeSuffix}-${timeSuffix}`;
 }
 
 async function findExistingOwnedOrganization(

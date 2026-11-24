@@ -11,14 +11,10 @@ function read(path: string) {
 }
 
 describe("starter organization flow", () => {
-  it("creates a billable workspace automatically after signup completion", () => {
-    expect(profileSource).toContain("const starterOrganization = await createStarterOrganization");
-    expect(profileSource).toContain('.from("organizations")');
-    expect(profileSource).toContain("owner_id: input.user.id");
-    expect(profileSource).toContain("plan_code: TRIAL_PLAN_CODE");
-    expect(profileSource).toContain('status: "trial"');
-    expect(profileSource).toContain("await ensureOwnerMembership");
-    expect(profileSource).toContain("await ensureTrialSetup");
+  it("delegates automatic creation to the PF/PJ policy without a personal-name fallback", () => {
+    expect(profileSource).toContain("await createInitialCompany(");
+    expect(profileSource).toContain("automatic: true");
+    expect(profileSource).not.toContain("buildStarterOrganizationName");
   });
 
   it("creates the starter workspace as soon as account completion is saved", () => {

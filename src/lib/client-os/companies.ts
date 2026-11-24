@@ -5,6 +5,7 @@ import {loadAcceptedCustomTerms} from "@/lib/billing/custom-contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServiceClient } from "@/lib/supabase/service";
+import { createInitialCompany } from "@/lib/account/initial-company";
 
 export type ClientCompany = {
   planLabel?: string;
@@ -37,7 +38,7 @@ type MembershipRow = {
   organizations: OrganizationRow | OrganizationRow[] | null;
 };
 
-const maxCompanyNameLength = 96;
+const maxCompanyNameLength = 120;
 const clientCompanySlugPrefix = "empresa-cliente-";
 const organizationSelect = "id, name, slug, plan_code, status, metadata, created_at";
 const organizationMembershipSelect = `role, organizations(${organizationSelect})`;
@@ -69,7 +70,13 @@ export async function createClientCompany(input: {
 }) {
   const client = input.client ?? createServiceClient();
   const { data: memberships, error: scopeError } = await client.from("organization_members").select("organization_id").eq("user_id", input.userId).order("created_at").limit(1);
-  if (scopeError || !memberships?.[0]) throw new Error("Crie e regularize sua conta antes de adicionar empresas.");
+  if (scopeError) throw new Error("Não foi possível verificar as empresas da conta.");
+  if (!memberships?.[0]) {
+    const first = await createInitialCompany({ userId: input.userId, name: input.name, automatic: false, client });
+    if (!first) throw new Error("Não foi possível criar a primeira empresa.");
+    return { id: first.id, name: first.name, slug: first.slug, planCode: first.plan_code,
+      status: first.status, createdAt: first.created_at, role: "owner", brandLogoUrl: null, brandLogoAlt: first.name } satisfies ClientCompany;
+  }
   const contract = await assertContractAccess(memberships[0].organization_id, client);
   const name = normalizeCompanyName(input.name);
   const existingCompany = await findExistingClientCompanyByName({

@@ -29,6 +29,7 @@ export default async function DashboardPlanosPage() {
   }
 
   const organization = workspace.organization;
+  if (!organization && !workspace.profile.isPlatformAdmin) redirect("/dashboard/empresa");
   const client = createServiceClient();
 
   try {

@@ -343,8 +343,12 @@ function ConnectyShellRoot({
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
-  const restricted = billingAccess && ["paid_expired", "trial_expired", "inactive"].includes(billingAccess.state);
-  const sections = groupPanelNavigation(mode === "admin" ? adminSections : restricted ? restrictedClientSections : clientSections, mode);
+  const [workspaceRequired, setWorkspaceRequired] = useState(false);
+  const restricted = !isPlatformAdmin && (!billingAccess || ["paid_expired", "trial_expired", "inactive"].includes(billingAccess.state));
+  const accountSections = workspaceRequired
+    ? [{ label: "Sua conta", items: [{ label: "Criar empresa", href: "/dashboard/empresa", icon: Building2 }, ...restrictedClientSections[0].items] }]
+    : restrictedClientSections;
+  const sections = groupPanelNavigation(mode === "admin" ? adminSections : restricted ? accountSections : clientSections, mode);
   const activeItem = resolveActiveItem(sections, active);
   // Restricted (expired) accounts keep their few account links visible.
   const sidebarSections = restricted ? sections : sidebarNavigation(sections, mode);
@@ -362,7 +366,7 @@ function ConnectyShellRoot({
   const logoTone  = "blue";
   const isAccountPage = active === "/dashboard/minha-conta" || active.startsWith("/dashboard/minha-conta/");
   const isAttendancePage = active === "/dashboard/atendimento" || active === "/admin/whatsapp/atendimento";
-  const isBillingRecoveryPage = isClientBillingRecoveryPage(active);
+  const isBillingRecoveryPage = isClientBillingRecoveryPage(active) || (workspaceRequired && active === "/dashboard/empresa");
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -501,10 +505,14 @@ function ConnectyShellRoot({
     async function loadBillingAccess() {
       try {
         const response = await fetch("/api/dashboard/billing/status", { cache: "no-store" });
-        const data = (await response.json().catch(() => null)) as { billingAccess?: BillingAccessClientStatus } | null;
+        const data = (await response.json().catch(() => null)) as { billingAccess?: BillingAccessClientStatus; workspaceRequired?: boolean } | null;
 
         if (!cancelled && response.ok && data?.billingAccess) {
           setBillingAccess(data.billingAccess);
+          setWorkspaceRequired(data.workspaceRequired === true);
+        } else if (!cancelled) {
+          setBillingAccess(null);
+          setWorkspaceRequired(false);
         }
       } catch {
         if (!cancelled) {

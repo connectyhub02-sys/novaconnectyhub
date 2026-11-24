@@ -3,6 +3,7 @@ import { getOrganizationBillingAccess } from "@/lib/billing/trial";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { estimateReplies } from "@/lib/billing/reply-estimate";
 import { createServiceClient } from "@/lib/supabase/service";
+import { workspaceRequiredBillingAccess } from "@/lib/account/workspace-required";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ export async function GET() {
   const organization = workspace.organization ?? await ensureStarterOrganization();
 
   if (!organization) {
-    return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 422 });
+    return NextResponse.json({ workspaceRequired: true, billingAccess: workspaceRequiredBillingAccess() });
   }
 
   try {

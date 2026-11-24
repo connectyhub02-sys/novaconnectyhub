@@ -128,6 +128,7 @@ export function CompanyConsole() {
       setShowForm(false);
       setCompanies((current) => [company, ...current.filter((item) => item.id !== company.id)]);
       setNotice({ tone: "success", message: "Empresa cadastrada." });
+      window.dispatchEvent(new Event("connectyhub:billing-refresh"));
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao cadastrar empresa." });
     } finally {
@@ -322,14 +323,15 @@ export function CompanyConsole() {
       ) : null}
 
       {!loading && !showForm && companies.length === 0 ? (
-        <div className="grid min-h-[320px] place-items-center">
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-4">
+          <p className="max-w-md text-center text-sm">Sua conta já está criada. Escolha o nome da sua primeira empresa para organizar sua operação.</p>
           <button
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-5 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
             type="button"
             onClick={() => setShowForm(true)}
           >
             <Plus className="h-4 w-4" />
-            Nova empresa
+            Criar minha empresa
           </button>
         </div>
       ) : null}

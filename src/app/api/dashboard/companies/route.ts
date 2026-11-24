@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
   const body = await readJson<{ name?: unknown }>(request);
 
   try {
+    await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
     const company = await createClientCompany({
       userId: workspace.user.id,
       name: typeof body?.name === "string" ? body.name : "",

@@ -1,3 +1,4 @@
+import { workspaceRequiredBillingAccess } from "@/lib/account/workspace-required";
 import { readCustomPlan } from "@/lib/billing/custom-plan-presentation";
 import { accountPaymentNotice, type AccountCardAttempt } from "@/lib/billing/account-payment-notice";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -149,7 +150,20 @@ export async function GET() {
   const organization = workspace.organization ?? await ensureStarterOrganization();
 
   if (!organization) {
-    return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 422 });
+    const completion = await getAccountCompletionStatusForUser({ userId: workspace.user.id, client: createServiceClient() });
+    return NextResponse.json({ workspaceRequired: true, account: {
+      profile: { id: workspace.profile.id, email: workspace.profile.email ?? workspace.user.email ?? null,
+        fullName: completion.fullName, phone: completion.phone, phoneNormalized: completion.phoneNormalized,
+        phoneVerified: completion.phoneVerified, phoneWhatsappExists: completion.phoneWhatsappExists,
+        cpfPreview: completion.cpfPreview, signupCompletedAt: completion.signupCompletedAt,
+        companyName: completion.companyName, avatarUrl: workspace.profile.avatarUrl, completion },
+      organization: null, billingAccess: workspaceRequiredBillingAccess(),
+      wallet: { balanceCredits: 0, reservedCredits: 0, lifetimePurchasedCredits: 0, lifetimeUsedCredits: 0, status: "not_created", updatedAt: null },
+      subscriptions: [], payments: [], creditTransactions: [], usageEvents: [], cycles: [],
+      usageSummary: { balanceCredits: 0, includedCredits: 0, usedCredits: 0, remainingCredits: 0,
+        totalChargeCredits30d: 0, todayChargeCredits: 0, eventCount30d: 0, lastEventAt: null, byCategory: [] },
+      actions: { plansHref: "/dashboard/empresa", pendingCheckoutHref: null },
+    } });
   }
 
   try {

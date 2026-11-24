@@ -78,7 +78,7 @@ describe("Connecty shell responsive layout", () => {
   });
 
   it("lets blocked clients reach the plan checkout instead of covering it with the billing lock", () => {
-    expect(shellSource).toContain("const isBillingRecoveryPage = isClientBillingRecoveryPage(active);");
+    expect(shellSource).toContain('const isBillingRecoveryPage = isClientBillingRecoveryPage(active) || (workspaceRequired && active === "/dashboard/empresa");');
     expect(shellSource).toContain("!isAttendancePage && !isBillingRecoveryPage ? <BillingStatusBanner");
     expect(shellSource).toContain("!accountCompletionGateActive && !isBillingRecoveryPage ? (");
     expect(isClientBillingRecoveryPage("/dashboard/planos")).toBe(true);

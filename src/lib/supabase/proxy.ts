@@ -1,4 +1,5 @@
 import { isBillingRecoveryPath } from "@/lib/billing/recovery-paths";
+import { isFirstCompanySetupRequest } from "@/lib/account/workspace-required";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
@@ -165,6 +166,11 @@ export async function updateSession(request: NextRequest) {
       const { data: access, error } = await supabase.rpc("my_workspace_contract_access");
       if (error || !access) return NextResponse.json({ error: "Não foi possível verificar o contrato. Tente novamente." }, { status: 503 });
       if (!access.allowed) {
+        if (access.reason === "workspace_required") {
+          if (isFirstCompanySetupRequest(pathname, request.method)) return response;
+          if (isProtectedApi) return NextResponse.json({ error: "Crie sua primeira empresa para utilizar este recurso.", code: "workspace_required", setupUrl: "/dashboard/empresa" }, { status: 409 });
+          return NextResponse.redirect(new URL("/dashboard/empresa", request.url));
+        }
         if (isProtectedApi) return NextResponse.json({ error: "Regularize o plano para utilizar este recurso.", code: "billing_access_required", checkoutUrl: "/dashboard/planos" }, { status: 402 });
         return NextResponse.redirect(new URL("/dashboard/planos?regularizar=1", request.url));
       }

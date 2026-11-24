@@ -99,7 +99,7 @@ type AccountData = {
     role: string;
     planCode: string;
     status: string;
-  };
+  } | null;
   billingAccess: BillingAccessClientStatus;
   wallet: {
     balanceCredits: number;
@@ -420,10 +420,17 @@ export function AccountConsole() {
           onAvatarUpload={handleAvatarUpload}
           onReload={() => loadAccount("refresh")}
         />
-        <PlanUsageCard account={account} pendingCheckoutHref={pendingCheckoutHref} />
+        {account.organization ? <PlanUsageCard account={account} pendingCheckoutHref={pendingCheckoutHref} /> : (
+          <div className="rounded-xl border p-5 xl:col-span-4">
+            <h2 className="font-semibold">Sua primeira empresa</h2>
+            <p className="my-3 text-sm">Escolha o nome da empresa que você quer criar dentro da ConnectyHub.</p>
+            <Link href="/dashboard/empresa" className="underline">Criar minha empresa</Link>
+          </div>
+        )}
         <SecurityAccessCard email={account.profile.email} onReload={() => loadAccount("refresh")} />
       </div>
 
+      {account.organization ? <>
       <BillingPaymentMethods subscriptions={account.subscriptions} />
 
       <CreditsConsole embedded />
@@ -435,6 +442,7 @@ export function AccountConsole() {
         activeTab={activeBillingTab}
         onTabChange={setActiveBillingTab}
       />
+      </> : null}
     </section>
   );
 }
@@ -503,7 +511,7 @@ function AccountDetailsCard({
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingWhatsapp, setEditingWhatsapp] = useState(false);
   const [fullName, setFullName] = useState(profile.fullName ?? "");
-  const [companyName, setCompanyName] = useState(profile.companyName ?? account.organization.name ?? "");
+  const [companyName, setCompanyName] = useState(account.organization?.name ?? profile.companyName ?? "");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -760,7 +768,7 @@ function AccountDetailsCard({
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 items-center gap-4">
-            <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
+            <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization?.name ?? "Minha conta"} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-xl font-semibold text-slate-950">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
@@ -805,7 +813,7 @@ function AccountDetailsCard({
           <dl className="grid overflow-hidden rounded-lg border border-slate-200 bg-slate-50/80 sm:grid-cols-2">
             <AccountFact label="WhatsApp" value={profile.phone ?? "Nao informado"} />
             <AccountFact label="CPF/CNPJ" value={profile.cpfPreview ?? "Pendente"} />
-            <AccountFact label="Empresa" value={profile.companyName ?? account.organization.name} />
+            <AccountFact label="Empresa" value={account.organization?.name ?? profile.companyName ?? "Ainda não criada"} />
             <AccountFact label="Cadastro" value={profile.signupCompletedAt ? formatDate(profile.signupCompletedAt) : "Em andamento"} />
           </dl>
         )}
@@ -882,7 +890,7 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
   const access = account.billingAccess;
   const usageSummary = account.usageSummary;
   const activeSubscription = getPrimarySubscription(account.subscriptions);
-  const planName = activeSubscription?.planName ?? formatPlanName(account.organization.planCode);
+  const planName = activeSubscription?.planName ?? formatPlanName(account.organization?.planCode ?? null);
   const monthlyPrice = activeSubscription?.monthlyPriceBrl ?? 0;
   const nextBillingAt = activeSubscription?.nextBillingAt ?? null;
   const balance = accountCreditBalance(account.wallet.balanceCredits, account.wallet.reservedCredits, usageSummary.referenceCredits ?? access.includedCredits);
@@ -906,7 +914,7 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
             </span>
             <h2 className="truncate text-base font-semibold text-slate-950">Plano e saldo</h2>
           </div>
-          <StatusBadge status={account.organization.status} />
+          <StatusBadge status={account.organization?.status ?? "inactive"} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-center">
@@ -1186,7 +1194,7 @@ function BillingWorkspace({
         <p className="text-sm text-slate-600">Acompanhe seus pagamentos, assinaturas, créditos e ciclos de uso.</p>
       </div>
 
-      {["owner", "admin"].includes(account.organization.role) ? <BillingAddressEditor /> : null}
+      {["owner", "admin"].includes(account.organization?.role ?? "") ? <BillingAddressEditor /> : null}
       <Tabs className="mt-5 gap-4" value={activeTab} onValueChange={(value) => onTabChange(value as BillingTab)}>
         <div className="overflow-x-auto overflow-y-hidden pb-1">
           <TabsList className="w-max min-w-full justify-start gap-0 border-b border-slate-200 bg-transparent p-0" variant="line">
@@ -1213,7 +1221,7 @@ function BillingWorkspace({
           <PaymentsTab payments={account.payments} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="subscriptions">
-          <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} canManage={["owner", "admin"].includes(account.organization.role)} />
+          <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} canManage={["owner", "admin"].includes(account.organization?.role ?? "")} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="credits">
           <CreditsTab
