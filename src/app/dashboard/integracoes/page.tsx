@@ -54,8 +54,7 @@ export default async function DashboardIntegracoesPage({ searchParams }: { searc
         state={hubState}
         showDiagnostics={workspace.profile.isPlatformAdmin}
         googleAvailable={googleAvailable}
-        socialConnected={social ? Object.fromEntries(social.connections.map(c => [c.provider, c.connected])) : null}
-        social={social && organization ? <SocialAccountsConsole embedded overview={social} companyId={organization.id} shell="client" outcome={outcome} /> : null}
+        social={social && organization ? <SocialAccountsConsole embedded cardsOnly overview={social} companyId={organization.id} shell="client" outcome={outcome} /> : null}
       />
     </ConnectyShell>
   );

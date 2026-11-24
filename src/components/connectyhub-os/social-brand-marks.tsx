@@ -1,8 +1,17 @@
 /** Marcas coloridas das redes para identificação visual; decorativas, o texto ao lado nomeia a rede. */
-export type SocialBrand = "instagram" | "facebook" | "whatsapp" | "youtube" | "tiktok";
+export type SocialBrand = "instagram" | "facebook" | "whatsapp" | "youtube" | "tiktok" | "google";
 
 export function SocialBrandMark({ brand, size = 28 }: { brand: SocialBrand; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 32 32", "aria-hidden": true as const, className: "shrink-0" };
+
+  if (brand === "google") {
+    return <svg {...common} viewBox="0 0 48 48">
+      <path fill="#4285F4" d="M43.6 24.5c0-1.5-.1-2.9-.4-4.3H24v8.1h11a9.4 9.4 0 0 1-4.1 6.2v5.2h6.6c3.9-3.6 6.1-8.9 6.1-15.2z"/>
+      <path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5.2c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.3A20.4 20.4 0 0 0 24 44z"/>
+      <path fill="#FBBC05" d="M12.6 27.5a12 12 0 0 1 0-7V15H5.8a20 20 0 0 0 0 18l6.8-5.5z"/>
+      <path fill="#EA4335" d="M24 12.1c3 0 5.6 1 7.7 3l5.8-5.8A19.5 19.5 0 0 0 24 4 20.4 20.4 0 0 0 5.8 15l6.8 5.5C14.2 15.7 18.7 12.1 24 12.1z"/>
+    </svg>;
+  }
 
   if (brand === "instagram") {
     return (
