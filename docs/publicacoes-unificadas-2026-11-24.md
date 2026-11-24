@@ -15,13 +15,17 @@ Pedido de Magno: usar a organização do Meta Business Suite como referência, t
 
 ## Validação e limites
 
-- 57 testes em 9 arquivos: filtros/estados, calendário, Shorts, legado parcial/incerto, autorização por organização, endpoints de leitura/desconexão, políticas, fila/armazenamento, provedores e navegação.
-- TypeScript e ESLint verificados; build de produção e conferência publicada ainda pendentes neste registro inicial.
+- 78 testes em 11 arquivos: filtros/estados, calendário, Shorts, legado parcial/incerto, autorização por organização, endpoints de leitura/desconexão, políticas, fila/armazenamento, provedores, navegação e retorno OAuth admin/cliente.
+- TypeScript e ESLint aprovados; build de produção concluído com 131 páginas. Smoke candidato e público confirmou SHA, 25 assets, proteção das rotas/API e Inngest autenticado com 61 funções (somente leitura).
 - Prévia local com dados fictícios: tabela, detalhes por destino, editor YouTube/TikTok e calendário; 390 × 844 sem transbordamento horizontal. Gravações bloqueadas na prévia.
 - Não foram publicados posts, acionadas campanhas, gerada IA, removidas conexões nem alterados ativos/portfólios. Aprovação dos apps e envio externo real não são comprovados por estes testes de interface.
 
-Referências oficiais consultadas: [YouTube Shorts de até três minutos](https://support.google.com/youtube/answer/15424877?hl=en), [diretrizes de compartilhamento TikTok](https://developers.tiktok.com/doc/content-sharing-guidelines/). Os requisitos e permissões de cada rede continuam aplicáveis.
+Referências oficiais consultadas: [YouTube Shorts de até três minutos](https://support.google.com/youtube/answer/15424877?hl=en), [diretrizes de compartilhamento TikTok](https://developers.tiktok.com/docs/en/content-sharing-guidelines). Os requisitos e permissões de cada rede continuam aplicáveis.
 
 ## Publicação
 
-Pendente de build, smoke e verificação da versão ativa.
+- Release `b1abeefedc2a55a319c83ff249c516de47c44bf1` ativa no slot a em 24/11/2026; anterior `f5409278fcb8230b2ec7063537b69bbcdabc8427` preservada no slot b. Sem migration. Checkout isolado ConnectyHub-admin-support, branch codex/social-publishing-workspace-20261124; alterações não relacionadas do checkout principal não incluídas.
+- Chrome autenticado confirmou 47 conteúdos na seleção inicial (histórico local e consulta real Facebook/Instagram), miniaturas, comentários, editor unificado, campos específicos YouTube, calendário mensal, nomes dos perfis e botões Reconectar/Trocar contas/Desconectar. Retorno OAuth admin foi corrigido para /admin/meta/social, preservando retorno cliente.
+- Na operação própria, Facebook/Instagram autorizados; YouTube e TikTok aparecem como prontos para conectar, não conectados. Não interpretar editor disponível como autorização atual de todos os destinos.
+- Tela publicada em 390 × 844: largura do documento 375 px, sem transbordamento horizontal. Viewport restaurado. Implementação é compartilhada pelos dois painéis; nesta rodada a conferência autenticada foi no admin, não numa conta comum de cliente.
+- Evidências no checkout principal: `output/social-workspace-20261124/producao-publicacoes.jpg`, `producao-editor.jpg`, `producao-conexoes.jpg`, `producao-mobile.jpg`. Nenhuma gravação/publicação externa nem desconexão foi executada na conferência.

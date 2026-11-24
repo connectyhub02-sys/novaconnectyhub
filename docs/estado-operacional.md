@@ -1,5 +1,14 @@
 # Estado operacional da ConnectyHub
 
+## Publicações unificadas e conexões — publicado e observado, 24/11/2026
+
+- Autorização de Magno: reorganizar publicação e conexões dos painéis admin/usuário com referência no Meta Business Suite. Menu Redes sociais destacado; lista com miniaturas, filtros, estados, calendário mensal e Criar publicação. Editor único de vídeo com Facebook, Instagram, TikTok e YouTube, legenda comum ou por rede; campos específicos preservados. Fotos/carrosséis/stories acessíveis na mesma área pelo editor Meta.
+- Reconectar, Trocar contas e Desconectar explícitos; WhatsApp independente e preservado. Retorno OAuth admin vai para /admin/meta/social. Desconexão social remove apenas credenciais sociais/Ads da organização autorizada, sem revogar o grant inteiro nem remover o WhatsApp.
+- Release **b1abeefedc2a55a319c83ff249c516de47c44bf1 ativa no slot a**; anterior f5409278fcb8230b2ec7063537b69bbcdabc8427 preservada no slot b. Sem migration. Checkout isolado ConnectyHub-admin-support, branch codex/social-publishing-workspace-20261124.
+- 78 testes/11 arquivos, tipos/lint e build de produção com 131 páginas aprovados. Smoke candidato/público confirmou SHA, 25 assets, proteção de rotas/API e Inngest autenticado somente leitura. Chrome admin mostrou 47 conteúdos iniciais, mídia real Meta, editor, calendário e controles. Mobile 390 × 844 sem overflow; viewport restaurado.
+- Na operação própria, Facebook/Instagram autorizados; YouTube/TikTok disponíveis para conectar, ainda sem conexão nessa organização. Componente compartilhado admin/cliente; validação autenticada desta rodada foi admin. Sem envio externo, campanha, geração de IA, desconexão real ou alteração de ativos. Não há conversão automática de vídeo; entrega nas redes continua sujeita a formato, autorização e processamento independente.
+- [Relatório](publicacoes-unificadas-2026-11-24.md). Evidências em output/social-workspace-20261124/ do checkout principal. Publicação simultânea nas quatro redes não foi homologada com envio real nesta entrega.
+
 ## Caixa de entrada Meta e conexões separadas — publicado e observado, 24/11/2026, 01h14 BRT
 
 - Autorização de Magno: organizar o atendimento conforme a referência do Meta Business Suite e separar Instagram/Facebook do WhatsApp oficial opcional. Nova caixa de entrada compartilhada por admin/usuário com Mensagens, Comentários e Publicações; mídia/legenda original junto dos comentários, respostas e paginação da rede.
