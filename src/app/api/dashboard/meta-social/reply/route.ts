@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { getMetaWorkspace, requireMetaCompanyAccess } from "@/lib/meta/company-access";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendInboxReply } from "@/lib/meta/inbox-reply";
+import { getAppBaseUrl } from "@/lib/client-os/guided-oauth";
 export async function POST(request: Request) {
   const workspace = await getMetaWorkspace();
   if (!workspace) return NextResponse.json({ error: "Sessão obrigatória." }, { status: 401 });
   if (!workspace.organization) return NextResponse.json({ error: "Empresa obrigatória." }, { status: 422 });
-  if (!request.headers.get("content-type")?.startsWith("application/json") || (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin)) return NextResponse.json({ error: "Origem inválida." }, { status: 403 });
+  // Behind the production proxy, request.url can carry the internal container host.
+  const origin = request.headers.get("origin");
+  const allowedOrigins = new Set([new URL(request.url).origin, new URL(getAppBaseUrl()).origin]);
+  if (!request.headers.get("content-type")?.startsWith("application/json") || (origin && !allowedOrigins.has(origin))) return NextResponse.json({ error: "Origem inválida." }, { status: 403 });
   try {
     const body = await request.json();
     const client = createServiceClient();
