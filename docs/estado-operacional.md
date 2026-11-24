@@ -1,5 +1,14 @@
 # Estado operacional da ConnectyHub
 
+## Caixa de entrada Meta e conexões separadas — publicado e observado, 24/11/2026, 01h14 BRT
+
+- Autorização de Magno: organizar o atendimento conforme a referência do Meta Business Suite e separar Instagram/Facebook do WhatsApp oficial opcional. Nova caixa de entrada compartilhada por admin/usuário com Mensagens, Comentários e Publicações; mídia/legenda original junto dos comentários, respostas e paginação da rede.
+- Resposta humana pública ou privada disponível, com escopo da empresa, gestor, plano/contrato, ativação do canal e janela de mensagens preservados. Registro anterior ao envio, chave idempotente e tratamento explícito de resultado incerto; nenhum envio de teste na Meta, campanha, geração de IA, pagamento ou ativação de automação.
+- Gestão social admin em `/admin/meta/social`; WhatsApp oficial preservado em `/admin/meta`. Cartões separados nas conexões. Portfólios, ativos, credenciais e regras existentes preservados.
+- Release **`f5409278fcb8230b2ec7063537b69bbcdabc8427` ativa no slot b**; anterior `dab097d11ed6d7843bfe75a6d6ad33374c4fc5b9` no slot a. Sem migration. Checkout `C:/Users/conne/Documents/ConnectyHub-admin-support`, branch `codex/meta-social-workspace-20261124`; mudanças não relacionadas do principal não incluídas.
+- 80 testes passaram; tipos/lint aprovados; build de produção com 129 páginas. Smoke candidato/público: SHA, 25 assets, autenticação e Inngest autenticado. Código novo consultou 24 posts Instagram e 19 Facebook, com mídia; propriedade e comentários verificados em ambas as redes. Chrome confirmou vídeo, carrossel, legenda, comentário/resposta e campos de envio vazios; viewport mobile sem overflow horizontal.
+- Limite: envio externo manual ainda não homologado nesta entrega; histórico local limitado a 100 atendimentos/mensagens e mídia/comentários sujeitos ao acesso da Meta. Não equivale a todas as funções do Business Suite. [Relatório](meta-caixa-entrada-2026-11-24.md), evidências em `output/meta-inbox-20261124/` do checkout principal.
+
 ## Cadastro PF/PJ e menus — publicado e observado, 23/11/2026, 22h34 BRT
 
 - Após o mapeamento, titular autorizou implementar a regra: PF escolhe explicitamente o nome da primeira empresa; PJ recebe a empresa com o nome empresarial do cadastro completo. Nome pessoal deixa de ser fallback. Nome da empresa continua editável no painel. Empresas existentes preservadas; Ivan não foi provisionado manualmente.
