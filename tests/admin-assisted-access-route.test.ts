@@ -3,7 +3,7 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 const admin="00000000-0000-4000-8000-000000000001", target="00000000-0000-4000-8000-000000000002";
 const originGuard = serverModuleHarness<{isSameOriginRequest(r: Request, env: Record<string, string>): boolean}>("src/lib/security/same-origin-request.ts");
 class JsonResponse extends Response { static json(body: unknown, init?: ResponseInit) { return new JsonResponse(JSON.stringify(body),init); } }
-function fixture(options: {authDenied?: boolean; platformTarget?: boolean; internal?: boolean; issueFails?: boolean; switchFails?: boolean}={}) {
+function fixture(options: {authDenied?: boolean; platformTarget?: boolean; internal?: boolean; noOrganization?: boolean; membershipError?: boolean; issueFails?: boolean; switchFails?: boolean}={}) {
   const switchSession=vi.fn(async () => ({error:options.switchFails?new Error("switch"):null}));
   const source={auth:{setSession:switchSession}};
   const session={access_token:"target-access",refresh_token:"target-refresh"};
@@ -14,7 +14,7 @@ function fixture(options: {authDenied?: boolean; platformTarget?: boolean; inter
     auth: { admin: { getUserById: async () => ({ data: { user: { id: target, email: "test@example.invalid" } } }), generateLink } },
     from: (table: string) => ({ select: () => ({ eq: () => {
       if (table === "profiles") return { single: async () => ({ data: { is_platform_admin: options.platformTarget ?? false } }) };
-      return { order: () => ({ limit: async () => ({ data: [{ organizations: { id: "server-org", plan_code: options.internal ? "internal" : "pro", slug: "customer" } }] }) }) };
+      return { order: () => ({ limit: async () => ({ error: options.membershipError ? new Error("query failed") : null, data: options.noOrganization ? [] : [{ organizations: { id: "server-org", plan_code: options.internal ? "internal" : "pro", slug: "customer" } }] }) }) };
     } }) }),
   };
   const issue=vi.fn(async () => {if(options.issueFails)throw new Error("issue");});
@@ -37,10 +37,15 @@ it("creates the durable grant for the authenticated originator and fresh target 
   expect(f.targetClient.auth.verifyOtp).toHaveBeenCalledWith({type:"magiclink",token_hash:"one-time-hash"});
 });
 it("refuses clients, internal/admin targets, self-access and foreign origin without issuing access",async()=>{
-  for(const options of [{authDenied:true},{platformTarget:true},{internal:true}]) {
+  for(const options of [{authDenied:true},{platformTarget:true},{internal:true},{membershipError:true,noOrganization:true}]) {
     const f=fixture(options); expect((await f.call()).status).toBe(403); expect(f.issue).not.toHaveBeenCalled(); expect(f.generateLink).not.toHaveBeenCalled();
   }
   const f=fixture(); expect((await f.call(admin)).status).toBe(400); expect((await f.call(target,"https://foreign.test")).status).toBe(403); expect(f.issue).not.toHaveBeenCalled();
+});
+it("allows a customer without a workspace using account-only scope, ignoring a caller-supplied tenant", async()=>{
+  const f=fixture({noOrganization:true}); expect((await f.call()).status).toBe(200);
+  expect(f.issue).toHaveBeenCalledWith(f.service,expect.objectContaining({targetUserId:target,organizationId:null}));
+  expect(f.switchSession).toHaveBeenCalledOnce();
 });
 it.each([{issueFails:true},{switchFails:true}])("cleans up failed starts without signing out the client's other sessions: %j",async(options)=>{
   const f=fixture(options); expect((await f.call()).status).toBe(503);

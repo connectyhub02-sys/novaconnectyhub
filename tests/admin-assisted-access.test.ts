@@ -37,11 +37,16 @@ it("ignores UI metadata and fails closed on missing cookie, invalid Auth, change
   expect(f.rpc).not.toHaveBeenCalled();
 });
 it("denies platform admin outside a client context and any server rejection", async () => {
-  for (const w of [{...workspace,organization:null},{...workspace,profile:{...workspace.profile,isPlatformAdmin:true}},{...workspace,organization:{...workspace.organization!,planCode:"internal"}}]) {
+  for (const w of [{...workspace,profile:{...workspace.profile,isPlatformAdmin:true}},{...workspace,organization:{...workspace.organization!,planCode:"internal"}}]) {
     const f=fixture(); expect(await f.lib.getAdminAssistedAccess(w)).toBeNull(); expect(f.rpc).not.toHaveBeenCalled();
   }
   expect(await fixture({data:null}).lib.getAdminAssistedAccess(workspace)).toBeNull();
   await expect(fixture({error:new Error("offline")}).lib.getAdminAssistedAccess(workspace)).rejects.toThrow("ASSISTED_ACCESS_UNAVAILABLE");
+});
+it("checks an account-only session without inventing a tenant", async () => {
+  const f=fixture();
+  expect(await f.lib.getAdminAssistedAccess({...workspace,organization:null})).toMatchObject({targetUserId:userId});
+  expect(f.rpc).toHaveBeenCalledWith("check_admin_assisted_session",expect.objectContaining({p_organization_id:null}));
 });
 it("revokes the persisted grant before clearing the browser cookie", async () => {
   const f=fixture(); await f.lib.revokeAdminAssistedAccess();

@@ -11,6 +11,7 @@ import { isAccountSignupComplete } from "@/lib/account/signup-completion";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
+import { getAdminAssistedAccess } from "@/lib/admin-assisted-access";
 
 export type CurrentProfile = {
   id: string;
@@ -119,6 +120,12 @@ export async function ensureStarterOrganization() {
   const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
+    return null;
+  }
+
+  // Opening support must not silently provision a trial or send onboarding messages.
+  // The operator can inspect the account and explicitly create its workspace.
+  if (!workspace.organization && await getAdminAssistedAccess(workspace)) {
     return null;
   }
 

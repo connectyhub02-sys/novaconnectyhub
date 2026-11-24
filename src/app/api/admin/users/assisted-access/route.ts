@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
     .select("organizations(id,plan_code,slug)").eq("user_id", body.userId).order("created_at", { ascending: true }).limit(50);
   const organizations = (memberships ?? []).flatMap((row) => row.organizations ? [Array.isArray(row.organizations) ? row.organizations[0] : row.organizations] : []);
   const organization = organizations[0];
-  if (profileError || membershipError || !profile || profile.is_platform_admin || !organization || organization.plan_code === "internal" || organization.slug === "connectyhub-platform-whatsapp") {
-    return NextResponse.json({ error: "Acesso assistido exige um usuário de organização cliente." }, { status: 403 });
+  if (profileError || membershipError || !profile || profile.is_platform_admin || organization?.plan_code === "internal" || organization?.slug === "connectyhub-platform-whatsapp") {
+    return NextResponse.json({ error: "Não foi possível autorizar o acesso assistido a este usuário." }, { status: 403 });
   }
   const { data: target, error: targetError } = await service.auth.admin.getUserById(body.userId);
   if (targetError || !target.user?.email) return NextResponse.json({ error: "Cliente indisponível." }, { status: 403 });
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!targetSession || targetSession.userId !== body.userId) throw new Error("ASSISTED_TARGET_UNAVAILABLE");
     await issueAdminAssistedAccess(service, {
       adminUserId: originator.userId, adminSessionId: originator.sessionId, targetUserId: targetSession.userId,
-      targetSessionId: targetSession.sessionId, organizationId: organization.id,
+      targetSessionId: targetSession.sessionId, organizationId: organization?.id ?? null,
     });
     const { error: switchError } = await auth.supabase.auth.setSession({ access_token: login.session.access_token, refresh_token: login.session.refresh_token });
     if (switchError) throw new Error("ASSISTED_SWITCH_UNAVAILABLE");

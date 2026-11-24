@@ -18,6 +18,7 @@ beforeEach(async () => {
     create function reset_lead_data(uuid,uuid,uuid,boolean) returns jsonb language plpgsql security definer as $$
       begin insert into reset_calls values($1,$2,$3,$4); return '{"deleted":true,"complete":true}'::jsonb; end $$;`);
   await db.exec(readFileSync("supabase/migrations/0146_admin_assisted_lead_reset.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0226_admin_assisted_without_organization.sql", "utf8"));
   [admin,client,org,origin,target] = Array.from({ length: 5 }, () => randomUUID());
   await db.query("insert into auth.users(id) values($1),($2)",[admin,client]);
   await db.query("insert into profiles(id,is_platform_admin) values($1,true),($2,false)",[admin,client]);
@@ -77,4 +78,31 @@ it("blocks client promotion on UPDATE and INSERT while allowing ordinary profile
   await expect(db.query("insert into profiles(id,is_platform_admin) values($1,true)",[randomUUID()])).rejects.toThrow("PLATFORM_ADMIN_ASSIGNMENT_SERVER_ONLY");
   await db.query("update profiles set full_name='Updated name' where id=$1",[client]);
   expect((await db.query("select is_platform_admin from profiles where id=$1",[client])).rows).toEqual([{is_platform_admin:false}]);
+});
+
+async function accountOnly() {
+  await db.exec("delete from organization_members; update admin_assisted_sessions set organization_id=null");
+}
+const checkAccount = () => db.query<{access: unknown}>("select check_admin_assisted_session($1,$2,$3,null) access",[hash,target,client]);
+it("supports an account without a workspace but never grants cross-tenant or destructive scope", async () => {
+  await accountOnly();
+  expect((await checkAccount()).rows[0].access).toMatchObject({adminUserId:admin});
+  expect((await check()).rows[0].access).toBeNull();
+  await expect(reset()).rejects.toThrow("RESET_ASSISTED_ACCESS_REQUIRED");
+  await expect(db.query("select reset_lead_data_assisted($1,$2,$3,null,$4,true)",[hash,target,client,randomUUID()])).rejects.toThrow("RESET_ASSISTED_ACCESS_REQUIRED");
+  expect((await db.query("select * from reset_calls")).rows).toEqual([]);
+  // A newly created workspace requires a fresh, explicitly scoped support session.
+  await db.query("insert into organization_members values($1,$2,'owner')",[client,org]);
+  expect((await checkAccount()).rows[0].access).toBeNull();
+});
+it.each([
+  "update profiles set is_platform_admin=false",
+  "update profiles set is_platform_admin=true",
+  "delete from auth.sessions",
+  "update auth.users set banned_until=now()+interval '1 day'",
+  "update admin_assisted_sessions set revoked_at=now()",
+  "update admin_assisted_sessions set started_at=now()-interval '1 hour',expires_at=now()-interval '30 minutes'",
+])("retains account-only support security checks: %s", async (mutation) => {
+  await accountOnly(); await db.exec(mutation);
+  expect((await checkAccount()).rows[0].access).toBeNull();
 });

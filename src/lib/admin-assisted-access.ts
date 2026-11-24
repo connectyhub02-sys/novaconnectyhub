@@ -26,7 +26,7 @@ export async function verifiedAuthSession(client: SupabaseClient) {
 
 export type AssistedAccess = { tokenHash: string; targetSessionId: string; targetUserId: string; adminUserId: string; expiresAt: string };
 export async function getAdminAssistedAccess(workspace: CurrentWorkspace): Promise<AssistedAccess | null> {
-  if (!workspace.organization || workspace.profile.isPlatformAdmin || workspace.organization.planCode === "internal") return null;
+  if (workspace.profile.isPlatformAdmin || workspace.organization?.planCode === "internal") return null;
   const token = (await cookies()).get(ASSISTED_COOKIE)?.value;
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const session = await verifiedAuthSession(await createClient());
@@ -34,7 +34,7 @@ export async function getAdminAssistedAccess(workspace: CurrentWorkspace): Promi
   const tokenHash = hashAssistedToken(token);
   const { data, error } = await createServiceClient().rpc("check_admin_assisted_session", {
     p_token_hash: tokenHash, p_target_session_id: session.sessionId,
-    p_target_user_id: session.userId, p_organization_id: workspace.organization.id,
+    p_target_user_id: session.userId, p_organization_id: workspace.organization?.id ?? null,
   });
   if (error) throw new Error("ASSISTED_ACCESS_UNAVAILABLE");
   if (!data?.adminUserId || !data?.expiresAt) return null;
@@ -53,7 +53,7 @@ export async function revokeAdminAssistedAccess() {
 }
 
 export async function issueAdminAssistedAccess(client: SupabaseClient, input: {
-  adminUserId: string; adminSessionId: string; targetUserId: string; targetSessionId: string; organizationId: string;
+  adminUserId: string; adminSessionId: string; targetUserId: string; targetSessionId: string; organizationId: string | null;
 }) {
   await revokeAdminAssistedAccess();
   const token = randomBytes(32).toString("hex");
