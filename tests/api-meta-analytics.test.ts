@@ -8,5 +8,6 @@ it('limits analytics to the bound WABA and read operations',()=>{
 });
 it('accepts bounded analytics and rejects credentials, unbounded periods and query injection',()=>{
  expect(()=>coexistenceAnalyticsParams(params)).not.toThrow();
- for(const change of [{access_token:'secret'},{start:'0'},{end:'1994499200'},{granularity:'HOURLY'},{template_ids:'["123&fields=token"]'},{metric_types:'read,access_token'},{limit:'10000'}]) expect(()=>coexistenceAnalyticsParams({...params,...change})).toThrow();
+ const changes: Record<string,string>[] = [{access_token:'secret'},{start:'0'},{end:'1994499200'},{granularity:'HOURLY'},{template_ids:'["123&fields=token"]'},{metric_types:'read,access_token'},{limit:'10000'}];
+ for(const change of changes) expect(()=>coexistenceAnalyticsParams({...params,...change})).toThrow();
 });

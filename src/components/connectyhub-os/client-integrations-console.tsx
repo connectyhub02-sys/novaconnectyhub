@@ -1537,7 +1537,7 @@ export function ClientIntegrationsConsole({
       {state.companies.length > 0 ? (
         <ConnectionsOverview
           items={[
-            { id: "meta-ads-guiado", name: "Meta", detail: "Facebook, Instagram e anúncios", icon: Globe2, status: metaFeatureLaunchPaused ? "soon" : metaConnection?.status === "connected" ? "on" : "off" },
+            { id: "meta-ads-guiado", name: "Instagram e Facebook", detail: "Perfis, atendimento e anúncios", icon: Globe2, status: metaFeatureLaunchPaused ? "soon" : metaConnection?.status === "connected" ? "on" : "off" },
             { id: "whatsapp-oficial", name: "WhatsApp oficial", detail: "API oficial da Meta", icon: MessageCircle, status: "open" },
             { id: "google-ads-guiado", name: "Google", detail: "Ads, Analytics e Search", icon: Search, status: googleConnection?.status === "connected" ? "on" : googleAvailable ? "off" : "soon" },
             { id: "asaas-guiado", name: "Asaas", detail: "Pix, boleto e cartão", icon: CreditCard, status: asaasConnected ? "on" : "off" },

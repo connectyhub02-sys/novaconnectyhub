@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CircleHelp, Link2, Loader2, Video, Music2, Globe2 } from "lucide-react";
+import { CheckCircle2, CircleHelp, Link2, Loader2, Video, Music2, Globe2, MessageCircle } from "lucide-react";
 import { PageHeader } from "./panel-primitives";
 import type { SocialAccountsOverview, SocialProvider, SocialShell } from "@/lib/social/policy";
 
@@ -39,8 +39,9 @@ export function SocialAccountsConsole({ overview, shell, companyId, outcome, emb
         <p className="mt-2 text-sm text-slate-600">{!overview.meta.available ? "Consulta indisponível" : overview.meta.connected ? "Conexão registrada" : "Nenhuma conta conectada"}</p>
         {overview.meta.account && <p className="mt-2 break-words font-medium">{overview.meta.account}</p>}
         <p className="mb-5 mt-3 text-sm leading-6 text-slate-500">{overview.meta.connected && overview.meta.publishingScopes ? "Permissões de publicação registradas. O envio confere o acesso atual e os ativos selecionados." : "A publicação depende da conexão, dos ativos selecionados e das permissões concedidas pela Meta."}</p>
-        <Link className={`${button} mt-auto`} href={shell === "admin" ? "/admin/meta" : "/dashboard/integracoes#meta-ads-guiado"}><Link2 size={16}/>Gerenciar Meta</Link>
+        <Link className={`${button} mt-auto`} href={shell === "admin" ? "/admin/meta/social" : "/dashboard/integracoes#meta-ads-guiado"}><Link2 size={16}/>Gerenciar Instagram e Facebook</Link>
       </article>}
+      {!embedded && <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 text-slate-900"><MessageCircle size={28} className="mb-4 text-emerald-600"/><h2 className="text-lg font-semibold">WhatsApp oficial</h2><p className="mb-5 mt-3 text-sm leading-6 text-slate-500">Conexão opcional e independente. Gerencie o número, o atendimento e os modelos de mensagem da API oficial.</p><Link className={`${secondary} mt-auto`} href={shell === "admin" ? "/admin/meta" : "/dashboard/chat-meta"}>Gerenciar WhatsApp oficial</Link></article>}
       {overview.connections.map(account => {
         const name = account.provider === "youtube" ? "YouTube" : "TikTok";
         const Icon = account.provider === "youtube" ? Video : Music2;

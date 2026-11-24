@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     });
     const result = await client
       .from("conversations")
-      .select("id,lead_id,channel,last_message_preview,last_message_at,status")
+      .select("id,lead_id,channel,last_message_preview,last_message_at,status,metadata")
       .eq("organization_id", company.id)
       .in("channel", channels)
       .order("last_message_at", { ascending: false })
@@ -49,13 +49,15 @@ export async function GET(request: Request) {
         );
       const history = await client
         .from("conversation_messages")
-        .select("id,direction,text_content,message_type,occurred_at")
+        .select("id,direction,text_content,message_type,occurred_at,payload")
         .eq("organization_id", company.id)
         .eq("conversation_id", selected)
         .order("occurred_at", { ascending: false })
         .limit(100);
       if (history.error) throw history.error;
-      messages = (history.data ?? []).reverse();
+      messages = (history.data ?? []).reverse().map(({ payload, ...message }) => ({
+        ...message, deliveryStatus: payload?.manual_inbox_reply === true ? payload.delivery_status : null,
+      }));
     }
     const ids = [
       ...new Set((result.data ?? []).map((c) => c.lead_id).filter(Boolean)),
@@ -72,9 +74,11 @@ export async function GET(request: Request) {
     );
     return NextResponse.json(
       {
-        conversations: (result.data ?? []).map((c) => ({
+        canReply: ["owner", "admin"].includes(company.role),
+        conversations: (result.data ?? []).map(({ metadata, ...c }) => ({
           ...c,
-          name: names.get(c.lead_id) || "Contato Meta",
+          name: names.get(c.lead_id) || (typeof metadata?.external_username === "string" ? metadata.external_username : "Contato Meta"),
+          sourcePostId: typeof metadata?.source_post_id === "string" ? metadata.source_post_id : null,
         })),
         messages,
       },
