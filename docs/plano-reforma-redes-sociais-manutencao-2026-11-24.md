@@ -2,7 +2,7 @@
 
 Pedido do titular após revisar a versão publicada `b1abeefe` (checkout
 `ConnectyHub-admin-support`, branch `codex/social-publishing-workspace-20261124`).
-Status: **planejado, nada implementado** (fases ao final). Vale para os painéis admin e cliente.
+Status: Fases 1 a 4 publicadas em 24/11 (registro no estado operacional); Fase 5 pendente. Vale para os painéis admin e cliente.
 
 ## 1. Publicações (referência: Conteúdos do Meta Business Suite)
 
@@ -49,7 +49,7 @@ Problemas verificados:
 - Falso "Ausente": `maintenance-vault.ts` sabe se o valor vem do cofre, da
   variável de ambiente ou falta (`source`), mas `maintenance-room.tsx` descarta
   essa informação e o formulário só considera o que foi salvo pela tela.
-- 26 integrações e 106 campos abertos numa única página; campos opcionais
+- 19 integrações e 106 campos (26 obrigatórios) abertos numa única página; campos opcionais
   misturados; integrações em standby exibem campos "Obrigatória".
 
 Proposta:
@@ -105,6 +105,13 @@ YouTube/TikTok quando as respectivas conexões estiverem ativas.
 **Fase 5 — Conferência com cliente e redes novas.** Validar os painéis numa conta
 comum de cliente; conectar YouTube da operação própria; TikTok segue o processo
 de aprovação do aplicativo (hoje Sandbox), fora do controle do código.
+
+**Fase 6 — YouTube e TikTok na mesma linha.** Pedido do titular em 24/11: ver Instagram,
+Facebook, TikTok e YouTube na mesma linha, com visualizações de cada rede e o total, sem abrir a
+publicação. Instagram e Facebook já mostram total e valor por rede. YouTube: com o canal conectado,
+`youtube.readonly` permite listar os vídeos e ler `viewCount`; agrupar por título/descrição e horário
+próximos, como no Meta. TikTok: listar vídeos e visualizações exige o escopo `video.list` (Display API),
+hoje não solicitado, e aprovação do aplicativo pelo TikTok. Shorts do YouTube podem divergir na legenda.
 
 Cada fase: testes focados, TypeScript, ESLint, build, prints desktop 1440 px e
 celular 390 px nos dois painéis, release pela VPS e registro no estado operacional.

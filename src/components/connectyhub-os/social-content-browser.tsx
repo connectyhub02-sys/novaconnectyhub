@@ -33,6 +33,7 @@ export function SocialContentBrowser({companyId,shell,calendar,posts,deliveries,
  const [now]=useState(()=>Date.now());
  const [metrics,setMetrics]=useState<Record<string,ContentMetrics&{unavailable?:boolean}>>({}),[columns,setColumns]=useState<MetricKey[]>(['views','reach','interactions','comments']);
  const requested=useRef(new Set<string>());
+ const [missingPerms,setMissingPerms]=useState<Partial<Record<InboxNetwork,string[]>>>({});
  const base=`/api/dashboard/social/content?shell=${shell}&companyId=${encodeURIComponent(companyId)}`;
  const periodDays=periods.find(p=>p.value===period)?.days??null;
  useEffect(()=>{
@@ -80,13 +81,17 @@ export function SocialContentBrowser({companyId,shell,calendar,posts,deliveries,
    const ids=visibleRefs.split(',').filter(k=>k.startsWith(`${n}:`)&&!requested.current.has(k)).map(k=>k.slice(n.length+1));
    if(!ids.length)continue;
    ids.forEach(id=>requested.current.add(`${n}:${id}`));
-   void fetch(`${base}&network=${n}&ids=${ids.map(encodeURIComponent).join(',')}`,{cache:'no-store'}).then(async r=>{const v=await r.json();if(!r.ok)throw Error(v.error);return v.metrics as Record<string,ContentMetrics>;})
-    .then(m=>setMetrics(s=>({...s,...Object.fromEntries(Object.entries(m).map(([id,v])=>[`${n}:${id}`,v]))})))
+   void fetch(`${base}&network=${n}&ids=${ids.map(encodeURIComponent).join(',')}`,{cache:'no-store'}).then(async r=>{const v=await r.json();if(!r.ok)throw Error(v.error);return {metrics:v.metrics as Record<string,ContentMetrics>,missing:(v.missingPermissions??[]) as string[]};})
+    .then(({metrics:m,missing})=>{setMissingPerms(s=>({...s,[n]:missing}));setMetrics(s=>({...s,...Object.fromEntries(Object.entries(m).map(([id,v])=>[`${n}:${id}`,v]))}));})
     .catch(()=>setMetrics(s=>({...s,...Object.fromEntries(ids.map(id=>[`${n}:${id}`,{views:null,reach:null,interactions:null,unavailable:true}]))})));
   }
  },[visibleRefs,base,calendar]);
  const metricOf=(row:Row,key:MetricKey)=>key==='comments'?row.comments:sumOf(row.refs.map(r=>metrics[`${r.network}:${r.id}`]?.[key]));
  const metricPending=(row:Row)=>row.refs.some(r=>!metrics[`${r.network}:${r.id}`]);
+ const perNetwork=(row:Row,key:MetricKey):{network:InboxNetwork;value:number|null}[]=>key==='comments'
+  ?row.group.map(p=>({network:p.network,value:p.commentsCount}))
+  :row.refs.map(r=>({network:r.network,value:metrics[`${r.network}:${r.id}`]?.[key]??null}));
+ const missingList=[...new Set(Object.values(missingPerms).flat())] as string[];
  const shownColumns=metricColumns.filter(c=>columns.includes(c.key));
  const gridStyle={'--content-cols':`minmax(16rem,1fr) 8rem 6.5rem ${shownColumns.map(()=>'5.75rem').join(' ')} 2.5rem`} as CSSProperties;
  const filtersActive=Boolean(search||network||kind);
@@ -109,6 +114,10 @@ export function SocialContentBrowser({companyId,shell,calendar,posts,deliveries,
    <div className="grid grid-cols-7">{['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(d=><div key={d} className="border-b border-slate-200 py-2 text-center text-xs font-semibold text-slate-500">{d}</div>)}{monthDays(month).map(d=>{const key=localDay(d),events=scheduled.filter(p=>localDay(new Date(p.scheduled_for!))===key);return <button key={key} aria-label={`${d.toLocaleDateString('pt-BR')}, ${events.length} publicações`} aria-pressed={day===key} onClick={()=>setDay(day===key?null:key)} className={`min-h-20 min-w-0 border-b border-r border-slate-100 p-1 text-left align-top sm:min-h-28 sm:p-2 ${day===key?'bg-blue-50 ring-1 ring-inset ring-blue-400':d.getMonth()!==month.getMonth()?'bg-slate-50 text-slate-400':'hover:bg-slate-50'}`}><span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${key===localDay(new Date())?'bg-blue-600 font-bold text-white':''}`}>{d.getDate()}</span>{events.slice(0,2).map(p=><span key={p.id} className="mt-1 block truncate rounded bg-blue-100 px-1 py-1 text-[10px] text-blue-900 sm:text-xs"><span className="hidden sm:inline">{new Date(p.scheduled_for!).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} · </span>{p.draft.title}</span>)}{events.length>2&&<span className="text-[10px] text-blue-700">+{events.length-2}</span>}</button>;})}</div>
    <div className="p-4"><h3 className="mb-3 font-semibold">{day?`Agenda de ${day.split('-').reverse().join('/')}`:'Agenda do mês'}</h3>{!agenda.length&&<p className="py-5 text-sm text-slate-500">Nenhuma publicação agendada neste período.</p>}{agenda.sort((a,b)=>Date.parse(a.scheduled_for!)-Date.parse(b.scheduled_for!)).map(p=><button key={p.id} className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-left text-sm hover:bg-slate-50" onClick={()=>onOpen(p)}><span><strong>{p.draft.title}</strong><span className="mt-1 block text-xs text-slate-500">{new Date(p.scheduled_for!).toLocaleString('pt-BR')}</span></span><span className="flex flex-wrap gap-1">{p.draft.targets.map(t=><SocialNetworkBadge target={t} key={t}/>)}</span><span>{contentStatus(p,deliveries.filter(d=>d.post_id===p.id),now)}</span></button>)}</div>
   </>:<>
+   {tab==='published'&&missingList.length>0&&<div role="status" className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <p><strong>Visualizações e alcance indisponíveis:</strong> a conexão com o Meta não tem a permissão {missingList.map((p,i)=><span key={p}>{i>0?' e ':''}<code className="rounded bg-amber-100 px-1">{p}</code></span>)}. Interações e comentários continuam aparecendo.</p>
+    <p className="mt-1">{shell==='admin'?<>Inclua essas permissões na configuração de login do aplicativo no Meta e reconecte em <Link className="underline" href="/admin/redes-sociais/contas">Contas conectadas</Link>. Para clientes, elas também precisam estar aprovadas na revisão do aplicativo.</>:<>Reconecte o Instagram e Facebook em <Link className="underline" href="/dashboard/redes-sociais/contas">Contas conectadas</Link> e autorize o acesso às estatísticas. Se a opção não aparecer, fale com o suporte.</>}</p>
+   </div>}
    <div className="hidden items-center gap-4 border-y border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-600 lg:grid lg:[grid-template-columns:var(--content-cols)]" style={gridStyle}><span>Conteúdo</span><span>Data</span><span>Estado</span>{shownColumns.map(c=><span key={c.key} title={c.hint} className="cursor-help text-right">{c.label}</span>)}<span className="flex justify-end"><ColumnPicker columns={columns} onChange={setColumns}/></span></div>
    {visible.map(row=>{const date=new Date(row.date);return <article key={row.key} style={gridStyle} className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-x-3 gap-y-1 border-b border-slate-100 px-4 py-3 hover:bg-slate-50/60 lg:gap-4 lg:px-5 lg:[grid-template-columns:var(--content-cols)]">
     <button className="flex min-w-0 items-center gap-3 text-left" onClick={()=>open(row)}>
@@ -117,7 +126,10 @@ export function SocialContentBrowser({companyId,shell,calendar,posts,deliveries,
     </button>
     <span className="hidden text-xs leading-5 text-slate-600 lg:block">{date.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'})}<br/>{date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
     <span className="hidden text-sm font-medium text-slate-700 lg:block">{row.status}</span>
-    {shownColumns.map(c=>{const v=metricOf(row,c.key);return <span key={c.key} className="hidden text-right text-sm tabular-nums text-slate-700 lg:block" title={v===null&&!metricPending(row)&&c.key!=='comments'?'A rede não informou esta métrica para este conteúdo (permissão, tipo de mídia ou dado ainda em processamento).':undefined}>{v!==null?fmt.format(v):metricPending(row)&&c.key!=='comments'?'…':'—'}</span>;})}
+    {shownColumns.map(c=>{const v=metricOf(row,c.key),parts=perNetwork(row,c.key);return <span key={c.key} className="hidden text-right tabular-nums lg:block" title={v===null&&!metricPending(row)&&c.key!=='comments'?'A rede não informou esta métrica para este conteúdo (permissão, tipo de mídia ou dado ainda em processamento).':undefined}>
+     <span className="block text-sm font-medium text-slate-800">{v!==null?fmt.format(v):metricPending(row)&&c.key!=='comments'?'…':'—'}</span>
+     {parts.length>1&&<span className="mt-0.5 flex flex-col items-end gap-0.5">{parts.map(p=><span key={p.network} className="inline-flex items-center gap-1 text-[11px] text-slate-500"><SocialBrandMark brand={p.network} size={11}/>{p.value!==null?fmt.format(p.value):'—'}</span>)}</span>}
+    </span>;})}
     <RowMenu row={row} shell={shell} onOpen={()=>open(row)}/>
    </article>;})}
    {!rows.length&&<div className="px-6 py-14 text-center"><Film size={32} className="mx-auto mb-3 text-slate-300"/><h3 className="font-semibold">{loadingRemote&&tab==='published'?'Consultando publicações…':'Nenhuma publicação nesta seleção'}</h3><p className="mt-2 text-sm text-slate-500">{filtersActive?'Altere os filtros ou o período para ver outros conteúdos.':'Crie seu conteúdo e escolha em quais redes publicar.'}</p>{canManage&&!filtersActive&&!(loadingRemote&&tab==='published')&&<button className={`${secondary} mt-4`} onClick={onCreate}>Criar publicação</button>}</div>}

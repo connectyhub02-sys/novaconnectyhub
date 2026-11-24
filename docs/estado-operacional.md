@@ -4135,3 +4135,33 @@ de texto só vale quando fala do formato da resposta, e "me manda um áudio / es
 ler" faz o agente responder em áudio por até 30 minutos, até o lead pedir texto de novo (não vale para
 agentes em modo só texto). O áudio espontâneo em resposta a texto depende da opção "áudio espontâneo",
 que está desligada em todos os agentes em espelho (Luna, Gustavo, Eliane, Renata, Max).
+
+### Reforma de Redes sociais e Sala de Manutenção (Fases 1–4) — 24/11/2026
+
+Plano e decisões: [plano-reforma-redes-sociais-manutencao-2026-11-24.md](plano-reforma-redes-sociais-manutencao-2026-11-24.md).
+Branch `claude/manutencao-20261124`, checkout `ConnectyHub-manutencao`, sobre a linha publicada `b07379f2`
+(o `master` local está em 26/10 e não deve ser publicado). Releases pela VPS, cada uma conferida no slot
+candidato (health/SHA, home/login, 20 assets, 307 das páginas protegidas, 401 nas APIs e no Inngest sem
+assinatura) e ativada com o slot anterior preservado. Sem migration, sem alteração de credenciais.
+
+- Fase 1 `89b059cc` (slot b): Sala de Manutenção mostra origem de cada campo (salva aqui / no servidor /
+  faltando), corrige o falso "Ausente", resumo, filtro de pendências, abas por área, linhas recolhidas,
+  opcionais em Avançado, Mercado Pago checkout em standby fora das pendências.
+- Fase 2 `27321ff5` (slot a): menu com uma entrada Redes sociais; "Conexões" do admin vira aba Contas
+  conectadas; cartões compactos com logotipos, 4 por linha no desktop e 2 no celular, ações em Gerenciar.
+- Fase 3 `e39cadae` (slot b): uma linha por conteúdo (legenda igual e até 15 minutos entre IG/FB),
+  abas Publicado/Agendado/Rascunhos/Com erro, filtros de tipo e período (90 dias), paginação de 25,
+  menu de ações e detalhes por rede; Criar publicação com escolha de formato.
+- Fase 4 `da20f8ab`: visualizações, alcance e interações por conteúdo, só da página visível, com
+  verificação de dono por publicação e seletor de colunas. Métricas que a Meta não informar aparecem
+  como "—". Conferido em produção pelo Chrome do titular (somente leitura, tela Permissões e
+  manutenção): a conexão da operação própria **não tem** `instagram_manage_insights` nem `read_insights`
+  (as outras 20 permissões estão concedidas). Por isso visualizações e alcance vêm vazios; as interações
+  do Facebook aparecem por virem das reações. Provável ausência dessas permissões na configuração de
+  login do app Meta (`META_LOGIN_CONFIG_ID`); incluir lá, reconectar e, para clientes, aprovar na revisão.
+  Ajuste seguinte: total e valor por rede na própria linha e aviso explícito da permissão faltante.
+
+Verificado com prévias de dados fictícios (1440 px e 375 px) e testes focados; suíte completa com 8
+falhas pré-existentes idênticas na base publicada. Não verificado: telas autenticadas em produção,
+agrupamento e métricas com posts reais, painel de cliente comum. Fase 5 (conferência com cliente,
+YouTube da operação própria, TikTok em Sandbox) pendente.

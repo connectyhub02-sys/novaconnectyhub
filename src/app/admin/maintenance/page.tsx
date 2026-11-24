@@ -7,8 +7,8 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const metadata: Metadata = {
-  title: "Sala de Manutencao | ConnectyHub",
-  description: "Cofre operacional da ConnectyHub para credenciais, APIs, webhooks e diagnosticos de plataforma.",
+  title: "Sala de Manutenção | ConnectyHub",
+  description: "Cofre operacional da ConnectyHub para credenciais, APIs, webhooks e diagnósticos da plataforma.",
 };
 
 export default async function AdminMaintenancePage() {

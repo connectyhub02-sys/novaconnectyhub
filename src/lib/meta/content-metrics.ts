@@ -7,6 +7,11 @@ export type ContentMetrics = { views: number | null; reach: number | null; inter
 export type ContentMetricsResult = Record<string, ContentMetrics & { unavailable?: boolean }>;
 
 export const MAX_METRIC_IDS = 25;
+/** Permissões Meta exigidas para visualizações e alcance de cada rede. */
+export const insightPermissions: Record<InboxNetwork, string> = { instagram: "instagram_manage_insights", facebook: "read_insights" };
+export function missingInsightPermissions(network: InboxNetwork, grantedScopes: string[]) {
+  return grantedScopes.includes(insightPermissions[network]) ? [] : [insightPermissions[network]];
+}
 const IG_METRICS = ["views", "reach", "total_interactions"] as const;
 const FB_METRICS = ["post_media_view", "post_total_media_view_unique"] as const;
 

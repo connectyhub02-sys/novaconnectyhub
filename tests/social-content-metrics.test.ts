@@ -54,3 +54,11 @@ describe("content metrics", () => {
     expect(graph).not.toHaveBeenCalled();
   });
 });
+
+describe("insight permissions", () => {
+  it("reports the permission each network needs for views and reach", async () => {
+    const { missingInsightPermissions } = await import("../src/lib/meta/content-metrics");
+    expect(missingInsightPermissions("instagram", ["instagram_basic"])).toEqual(["instagram_manage_insights"]);
+    expect(missingInsightPermissions("facebook", ["read_insights"])).toEqual([]);
+  });
+});
