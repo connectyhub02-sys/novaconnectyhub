@@ -1,9 +1,10 @@
 import {postStatus, type SocialDraft, type Target} from './publishing-policy';
 import type {ClientMetaOrganicPost} from '@/lib/meta/organic-publishing';
+import type {InboxPost} from '@/lib/meta/inbox-model';
 export type ContentPost = {id:string;revision:number;draft:SocialDraft;state:string;scheduled_for:string|null;created_at:string;legacy?:ClientMetaOrganicPost};
 export type ContentDelivery = {id:string;post_id:string;target:Target;status:string;result_url:string|null;error_message:string|null;provider_id:string|null;api_data_deleted_at:string|null;updated_at?:string};
 export type ContentTab = 'all'|'published'|'scheduled'|'drafts'|'attention';
-export const contentTabs: {key:ContentTab;label:string}[] = [{key:'all',label:'Todos'},{key:'published',label:'Publicados'},{key:'scheduled',label:'Agendados'},{key:'drafts',label:'Rascunhos'},{key:'attention',label:'Precisam de atenção'}];
+export const contentTabs: {key:ContentTab;label:string}[] = [{key:'published',label:'Publicado'},{key:'scheduled',label:'Agendado'},{key:'drafts',label:'Rascunhos'},{key:'attention',label:'Com erro'}];
 export function contentMatches(post:ContentPost, deliveries:ContentDelivery[], tab:ContentTab, now:number) {
   if(tab==='all')return true;
   if(tab==='drafts')return post.state==='draft';
@@ -33,4 +34,31 @@ export function legacyContent(items:ClientMetaOrganicPost[]):{posts:ContentPost[
   targetList.forEach((target,index)=>{const delivery=item.deliveryStatus.find(d=>d.surface===item.surfaces[index]);deliveries.push({id:`${id}:${target}`,post_id:id,target,status:delivery?.phase==='published'||item.status==='published'?'published':item.lastError?(delivery?.phase==='sending'?'uncertain':'failed'):item.status==='publishing'?'processing':'queued',result_url:null,error_message:item.lastError,provider_id:delivery?.id??null,api_data_deleted_at:null});});
  }
  return {posts,deliveries};
+}
+
+// ── Agrupamento da lista (uma linha por conteúdo) ─────────────────────────────
+export type ContentKind = 'video'|'image'|'carousel';
+export const contentKindLabels: Record<ContentKind,string> = {video:'Vídeo',image:'Imagem',carousel:'Carrossel'};
+export const CROSS_POST_WINDOW_MS = 15*60*1000;
+export function normalizeCaption(caption:string) {
+  return caption.normalize('NFKC').toLocaleLowerCase('pt-BR').replace(/\s+/g,' ').trim().slice(0,400);
+}
+export function remoteKind(post:InboxPost):ContentKind {
+  if(post.media.length>1)return 'carousel';
+  return post.media[0]?.type==='video'?'video':'image';
+}
+/** Junta o mesmo conteúdo publicado em redes diferentes: legenda igual e horários até 15 minutos de distância.
+ *  Sem legenda não há como afirmar que é o mesmo conteúdo, então cada post fica sozinho. */
+export function groupRemotePosts(posts:InboxPost[], windowMs=CROSS_POST_WINDOW_MS):InboxPost[][] {
+  const groups:{caption:string;time:number;posts:InboxPost[]}[]=[];
+  const sorted=[...posts].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+  for(const post of sorted){
+    const caption=normalizeCaption(post.caption),time=Date.parse(post.timestamp);
+    const group=caption?groups.find(g=>g.caption===caption&&Math.abs(g.time-time)<=windowMs&&!g.posts.some(p=>p.network===post.network)):undefined;
+    if(group)group.posts.push(post);else groups.push({caption,time,posts:[post]});
+  }
+  return groups.map(g=>g.posts);
+}
+export function inPeriod(date:string, days:number|null, now:number) {
+  return days===null||Date.parse(date)>=now-days*24*60*60*1000;
 }

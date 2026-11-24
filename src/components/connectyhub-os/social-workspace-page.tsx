@@ -42,7 +42,7 @@ export async function SocialWorkspacePage({ shell, area, outcome, initialCompose
     }
   }
   return <ConnectyShell mode={shell} activeHref={socialPath(shell, area as SocialArea)} isPlatformAdmin={workspace.profile.isPlatformAdmin} userAvatarUrl={workspace.profile.avatarUrl} userLabel={workspace.profile.email ?? undefined} workspaceName={company.name}>
-    <nav aria-label="Redes sociais" className="mb-5 flex flex-wrap gap-2">{socialNavigation(shell).map(item => <Link key={item.key} href={item.href} aria-current={area === item.key ? "page" : undefined} className={`rounded-xl border px-3 py-2 text-sm ${area === item.key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}>{item.label}</Link>)}</nav>
+    <nav aria-label="Redes sociais" className="-mx-1 mb-5 flex gap-2 overflow-x-auto px-1 pb-1">{socialNavigation(shell).map(item => <Link key={item.key} href={item.href} aria-current={area === item.key ? "page" : undefined} className={`shrink-0 rounded-xl border px-3 py-2 text-sm ${area === item.key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}>{item.label}</Link>)}</nav>
     {shell === "admin" && <p className="mb-4 text-sm text-slate-500">Operação própria · {company.name}</p>}
     {content}
   </ConnectyShell>;
