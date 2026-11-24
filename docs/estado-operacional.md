@@ -4177,3 +4177,15 @@ Facebook e alcance do Instagram batem com o Meta Business Suite. Alcance de Reel
 `post_total_media_view_unique` veio 0 (Meta mostra visualizadores > 0); passa a aparecer como "—" até
 identificar a métrica correta. Clientes dependem da revisão Meta dessas permissões (vídeo de uso).
 
+
+### Google e TikTok — consulta ao vivo, 24/11/2026 (somente leitura)
+
+- Google, projeto `gen-lang-client-0089240657`: marca verificada; acesso a dados **em análise, bloqueado
+  por correção pendente**. Página inicial, privacidade, marca e escopos mínimos aprovados (20–22/11).
+  **Funcionalidade do app reprovada em 22/11**: o vídeo não mostra o fluxo de consentimento OAuth e não
+  demonstra suficientemente a funcionalidade. Corrigir o vídeo e responder ao e-mail da equipe de
+  Confiabilidade e Segurança. Basic access da Google Ads API (developer token) ainda não solicitado.
+- TikTok, app `7702129647836678196`: Production **In review** desde o reenvio de 16/11 (após rejeição de
+  16/11 por URL incompleta no vídeo), sem decisão. Escopos pedidos: `user.info.basic`, `video.publish`,
+  `video.upload`. Não inclui `video.list` (listar vídeos e visualizações) nem a API de anúncios do TikTok
+  (TikTok for Business / Marketing API), que é um app separado ainda não criado.
