@@ -49,4 +49,15 @@ describe("panel navigation", () => {
     expect(panelDockHrefs("admin")).toContain("/admin/infrastructure");
     expect(panelDockHrefs("client")).toContain("/dashboard/whatsapp");
   });
+  it("shows one Redes sociais entry and keeps the other social areas reachable as tabs", () => {
+    for (const mode of ["admin", "client"] as const) {
+      const base = mode === "admin" ? "/admin/redes-sociais" : "/dashboard/redes-sociais";
+      const items = ["publicacoes", "calendario", "biblioteca", "contas"].map(area => ({ href: `${base}/${area}`, label: area }));
+      const grouped = groupPanelNavigation([{ label: "Redes sociais", items }], mode);
+      expect(grouped.map(g => g.label)).toEqual(["Redes sociais"]);
+      expect(grouped[0].items.find(i => i.href.endsWith("/contas"))?.label).toBe("Contas conectadas");
+      expect(sidebarNavigation(grouped, mode).flatMap(s => s.items).map(i => i.href)).toEqual([`${base}/publicacoes`]);
+      for (const area of ["calendario", "biblioteca", "contas"]) expect(sidebarActiveHref(`${base}/${area}`, mode)).toBe(`${base}/publicacoes`);
+    }
+  });
 });

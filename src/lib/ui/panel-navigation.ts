@@ -60,8 +60,8 @@ export const panelNavigation: Record<string, NavigationDefinition> = {
     "aliases": "Biblioteca de mídias Redes sociais"
   },
   "/admin/redes-sociais/contas": {
-    "group": "Sistema",
-    "label": "Conexões",
+    "group": "Redes sociais",
+    "label": "Contas conectadas",
     "aliases": "Conexões sociais Contas conectadas Redes sociais YouTube TikTok Instagram Facebook"
   },
   "/admin/trafego/meta-ads": {
@@ -225,8 +225,8 @@ export const panelNavigation: Record<string, NavigationDefinition> = {
     "aliases": "Biblioteca de mídias Redes sociais"
   },
   "/dashboard/redes-sociais/contas": {
-    "group": "Conta",
-    "label": "Conexões sociais",
+    "group": "Redes sociais",
+    "label": "Contas conectadas",
     "aliases": "Contas conectadas Redes sociais"
   },
   "/dashboard/meta": {
@@ -367,16 +367,25 @@ export const clientAccountTabs: PanelContextLink[] = [
 ];
 /** Admin pages kept reachable (search, Início cards, direct links) but out of the sidebar. */
 export const adminSidebarHidden = ["/admin/ceo", "/admin/aprovacoes", "/admin/setores"];
-/** Sidebar shows one Atendimento entry; other channels stay reachable by its tabs and by search. */
+/** Social areas live as tabs inside Publicações; the first one is the sidebar entry. */
+export function socialAreaHrefs(mode: PanelMode) {
+  const base = mode === "admin" ? "/admin/redes-sociais" : "/dashboard/redes-sociais";
+  return ["publicacoes", "calendario", "biblioteca", "contas"].map(area => `${base}/${area}`);
+}
+/** Sidebar shows one Atendimento and one Redes sociais entry; the other areas stay reachable by tabs and by search. */
 export function sidebarNavigation<T extends { href: string }>(sections: { label: string; items: T[] }[], mode: PanelMode) {
   const [primary, ...secondary] = attendanceChannels(mode).map(c => c.href);
   // Admin: Início already summarizes executive view and approvals; sectors are created with internal agents.
   const hidden = new Set<string>(mode === "client" ? clientAccountTabs.map(t => t.href) : adminSidebarHidden);
   if (sections.some(s => s.items.some(i => i.href === primary))) secondary.forEach(h => hidden.add(h));
+  const [socialPrimary, ...socialSecondary] = socialAreaHrefs(mode);
+  if (sections.some(s => s.items.some(i => i.href === socialPrimary))) socialSecondary.forEach(h => hidden.add(h));
   return sections.map(s => ({ ...s, items: s.items.filter(i => !hidden.has(i.href)) })).filter(s => s.items.length);
 }
 /** The sidebar entry to highlight: any attendance channel highlights Atendimento. */
 export function sidebarActiveHref(active: string, mode: PanelMode) {
+  const social = socialAreaHrefs(mode);
+  if (social.includes(active)) return social[0];
   const channels = attendanceChannels(mode).map(c => c.href);
   // Exact match only: /admin/meta/publicacoes is not an attendance channel.
   return channels.includes(active) ? channels[0] : active;
