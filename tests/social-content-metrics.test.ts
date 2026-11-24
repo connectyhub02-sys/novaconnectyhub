@@ -24,6 +24,7 @@ describe("content metrics", () => {
     const post = { reactions: { summary: { total_count: 5 } }, comments: { summary: { total_count: 2 } } };
     expect(mapFacebookMetrics({}, post)).toEqual({ views: null, reach: null, interactions: 7 });
     expect(mapFacebookMetrics({ post_media_view: 40, post_total_media_view_unique: 30 }, { ...post, shares: { count: 1 } })).toEqual({ views: 40, reach: 30, interactions: 8 });
+    expect(mapFacebookMetrics({ post_media_view: 150, post_total_media_view_unique: 0 }, post).reach).toBeNull();
   });
 
   it("returns Instagram metrics only for media owned by the selected profile", async () => {

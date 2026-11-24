@@ -39,7 +39,11 @@ export function mapFacebookMetrics(values: Record<string, number | null>, post: 
   const comments = num(metaRecord(metaRecord(post.comments).summary).total_count);
   const shares = num(metaRecord(post.shares).count) ?? (reactions !== null ? 0 : null);
   const interactions = reactions === null && comments === null ? null : (reactions ?? 0) + (comments ?? 0) + (shares ?? 0);
-  return { views: values.post_media_view ?? null, reach: values.post_total_media_view_unique ?? null, interactions };
+  const views = values.post_media_view ?? null;
+  // Em Reels do Facebook a Graph tem devolvido 0 visualizadores únicos mesmo com visualizações; 0 seria um número falso.
+  const unique = values.post_total_media_view_unique ?? null;
+  const reach = unique === 0 && (views ?? 0) > 0 ? null : unique;
+  return { views, reach, interactions };
 }
 
 async function instagramMetrics(ctx: InboxContext, id: string, owner: string): Promise<ContentMetrics | null> {

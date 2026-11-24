@@ -4165,3 +4165,15 @@ Verificado com prévias de dados fictícios (1440 px e 375 px) e testes focados;
 falhas pré-existentes idênticas na base publicada. Não verificado: telas autenticadas em produção,
 agrupamento e métricas com posts reais, painel de cliente comum. Fase 5 (conferência com cliente,
 YouTube da operação própria, TikTok em Sandbox) pendente.
+
+Atualização 24/11, mesma sessão: por pedido do titular, adicionadas ao app Meta (casos de uso, status
+"Ready for testing", sem envio à revisão) `instagram_manage_insights`, `instagram_manage_contents`,
+`read_insights`; `catalog_management` já existia. Incluídas nas configurações de login "ConnectyHub
+Connect" (1530551425223156, clientes) e "ConnectyHub validacao interna" (1581800719812884, usada pela
+operação própria via `internal_validation_config_id`), ambas com 21 permissões; WhatsApp segue na
+configuração própria. Operação própria reconectada com os mesmos ativos (Página ConnectyHub, Instagram
+connectyhub.ai, Connecty - Conta de anúncios). Métricas reais conferidas: visualizações do Instagram e do
+Facebook e alcance do Instagram batem com o Meta Business Suite. Alcance de Reels do Facebook via
+`post_total_media_view_unique` veio 0 (Meta mostra visualizadores > 0); passa a aparecer como "—" até
+identificar a métrica correta. Clientes dependem da revisão Meta dessas permissões (vídeo de uso).
+
