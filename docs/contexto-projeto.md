@@ -135,6 +135,9 @@ admin passa um número para "faturado pela ConnectyHub", e só depois que a linh
 de crédito (Solution Partner ou parceiro) estiver compartilhada com a WABA.
 Antes disso o cliente pagaria duas vezes. Esta decisão substitui a pendência de
 11/10 sobre os 2×. [Regras, implementação e limites](cobranca-whatsapp-oficial-2026-11-26.md).
+No mesmo dia o titular escolheu **somente o caminho Solution Partner próprio**,
+sem parceiro ponte (Multi-Partner Solution). Nenhum número muda de modo antes
+dessa aprovação e do piloto.
 
 ### Direção do produto
 

@@ -118,7 +118,8 @@ Release `b2635c8b` ativa no slot b em 26/11/2026; slot a (`54575794`) preservado
 - O upgrade para Tech Partner é outro processo. Exige 2.500 mensagens por dia em média, 10 contas ativas e treinamento Blueprint, e mesmo assim **não** dá linha de crédito.
 - A API de compartilhamento de crédito lista as moedas AUD, EUR, GBP, IDR, INR e USD. **BRL não aparece.** Confirmar com a Meta como fica a linha de crédito para o Brasil.
 - Uma linha de crédito não pode ser trocada depois de anexada a uma WABA. Se um parceiro for usado como ponte, a migração posterior precisa ser planejada.
-- Alternativa enquanto isso: Multi-Partner Solution com um Solution Partner existente, que compartilha a linha de crédito dele com os clientes cadastrados pelo nosso Embedded Signup (`extras.setup.solutionID`).
+- **Decisão do titular (26/11):** seguir somente com o pedido de Solution Partner próprio, sem ponte com parceiro.
+- Alternativa descartada: Multi-Partner Solution com um Solution Partner existente, que compartilha a linha de crédito dele com os clientes cadastrados pelo nosso Embedded Signup (`extras.setup.solutionID`).
 
 ## Limites e pendências
 
