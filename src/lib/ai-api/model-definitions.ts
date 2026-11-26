@@ -252,6 +252,7 @@ export const aiModelDefinitions = [
     "consumption": "Maior conforme a tarefa",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
@@ -412,6 +413,7 @@ export const aiModelDefinitions = [
     "consumption": "Maior conforme a tarefa",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
@@ -432,6 +434,7 @@ export const aiModelDefinitions = [
     "consumption": "Maior conforme a tarefa",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
@@ -452,6 +455,7 @@ export const aiModelDefinitions = [
     "consumption": "Maior conforme a tarefa",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
@@ -472,6 +476,7 @@ export const aiModelDefinitions = [
     "consumption": "Maior conforme a tarefa",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
@@ -492,6 +497,7 @@ export const aiModelDefinitions = [
     "consumption": "Maior conforme a tarefa",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
@@ -512,6 +518,7 @@ export const aiModelDefinitions = [
     "consumption": "Econômico",
     "recommended": false,
     "capabilities": [
+      "image_input",
       "image_output",
       "batch"
     ],
