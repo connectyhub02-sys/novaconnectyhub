@@ -5,3 +5,7 @@ Teste real da Vision Comex em 26/11 encontrou rejeição `model_capability_unava
 17 testes de catálogo, gateway e edição com duas referências passaram. ESLint aprovado. Release 688bdb006a34d6f17134887ad927149957eba5a6 promovida ao slot b após smoke. Dois testes reais concluíram pelo gateway: preparação do cenário e montagem com duas fotos, com 673,752 créditos liquidados no total. A primeira tentativa, anterior à correção, falhou na validação de capacidade. Publicação social não executada por esta correção.
 
 Referência: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-pro-image (edição de imagens e entrada multimodal).
+
+## Decisão visual posterior
+
+Magno reprovou a montagem do carro na loja por parecer artificial e escolheu o carrossel escuro com imagens originais do configurador. O teste comprova a integração técnica de imagens, não aprovação da qualidade. A montagem não foi ativada na rotina da Comex e não haverá geração de imagens neste padrão escolhido.
