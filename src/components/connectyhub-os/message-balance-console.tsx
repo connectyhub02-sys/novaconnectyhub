@@ -59,6 +59,8 @@ export function MessageBalanceConsole() {
   const billedSenders = data?.senders.filter((s) => s.billing_mode === "connectyhub_credit_line") ?? [];
   const metaSenders = data?.senders.filter((s) => s.billing_mode !== "connectyhub_credit_line") ?? [];
   const rates = (data?.rates ?? []).filter((r) => r.market === "BR").sort((a, b) => rateOrder.indexOf(a.category) - rateOrder.indexOf(b.category));
+  // Top-ups only make sense once a number is billed through ConnectyHub (or money is already there).
+  const usesWallet = billedSenders.length > 0 || Number(wallet?.balance_brl ?? 0) > 0 || Number(wallet?.debt_brl ?? 0) > 0;
   const monthCharged = (data?.month ?? []).filter((m) => m.status === "charged");
   const monthFree = (data?.month ?? []).filter((m) => m.status === "free").reduce((sum, m) => sum + Number(m.messages), 0);
   const monthTotal = monthCharged.reduce((sum, m) => sum + Number(m.charged_brl), 0);
@@ -73,19 +75,20 @@ export function MessageBalanceConsole() {
       <a href="#creditos-recargas" className={`${panel} block border-l-4 border-l-blue-600 hover:border-slate-300`}>
         <p className="flex items-center gap-2 text-sm font-semibold text-blue-800"><Sparkles size={18} aria-hidden /> Créditos de IA</p>
         <p className="mt-3 text-3xl font-bold">{data ? formatPreciseCredits(aiAvailable) : "…"} <span className="text-base font-normal text-slate-600">créditos</span></p>
+        <p className="mt-1 text-xs text-slate-500">disponíveis{data && Number(data.aiCredits?.reserved_credits ?? 0) > 0 ? ` · ${formatPreciseCredits(Number(data.aiCredits?.reserved_credits))} reservados em operações em andamento (saldo total ${formatPreciseCredits(Number(data.aiCredits?.balance_credits ?? 0))})` : ""}</p>
         <p className="mt-2 text-sm leading-6 text-slate-600">Usados pelos agentes, respostas automáticas, voz e API de IA.</p>
       </a>
       <a href="#saldo-whatsapp" className={`${panel} block border-l-4 border-l-emerald-600 hover:border-slate-300`}>
         <p className="flex items-center gap-2 text-sm font-semibold text-emerald-800"><MessageCircle size={18} aria-hidden /> Saldo WhatsApp oficial</p>
         <p className="mt-3 text-3xl font-bold">{data ? formatBrl(available) : "…"}</p>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Em reais. Usado nas mensagens enviadas pela API oficial da Meta, cobradas só quando entregues.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{usesWallet ? "Em reais. Usado nas mensagens enviadas pela API oficial da Meta, cobradas só quando entregues." : "Em reais. Ainda não está em uso: hoje a Meta cobra as mensagens oficiais no seu cartão."}</p>
       </a>
     </div>
 
     <section id="saldo-whatsapp" className={`${panel} scroll-mt-24 space-y-5`} aria-labelledby="saldo-whatsapp-title">
       <div>
         <h2 id="saldo-whatsapp-title" className="text-xl font-bold">Saldo WhatsApp oficial</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-600">Você recarrega aqui e as mensagens da API oficial são descontadas deste saldo. Não é preciso cadastrar cartão na Meta para os números faturados pela ConnectyHub.</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{usesWallet ? "Você recarrega aqui e as mensagens da API oficial são descontadas deste saldo. Não é preciso cadastrar cartão na Meta para os números faturados pela ConnectyHub." : "Hoje as mensagens da API oficial são cobradas pela Meta, no cartão cadastrado na sua conta da Meta. Este saldo em reais será usado quando o faturamento passar para a ConnectyHub; até lá, não é preciso recarregar."}</p>
       </div>
       {!data ? <p role="status">Carregando saldo…</p> : <>
         <dl className="grid gap-3 sm:grid-cols-3">
@@ -106,7 +109,7 @@ export function MessageBalanceConsole() {
         </div>
 
         <div>
-          <h3 className="font-semibold">Quanto custa cada mensagem entregue</h3>
+          <h3 className="font-semibold">{usesWallet ? "Quanto custa cada mensagem entregue" : "Preço por mensagem entregue quando o faturamento for pela ConnectyHub"}</h3>
           <div className="mt-2 overflow-x-auto"><table className="w-full min-w-[28rem] text-left text-sm">
             <thead><tr className="text-xs text-slate-500"><th className="py-2 pr-3 font-medium">Tipo</th><th className="py-2 pr-3 font-medium">Quando é usado</th><th className="py-2 font-medium">Preço (Brasil)</th></tr></thead>
             <tbody>{rates.map((r) => <tr key={r.category} className="border-t border-slate-100"><td className="py-2 pr-3 font-semibold">{META_MESSAGE_CATEGORY_LABELS[r.category] ?? r.category}</td><td className="py-2 pr-3 text-slate-600">{META_MESSAGE_CATEGORY_HINTS[r.category] ?? ""}</td><td className="py-2">{formatBrl(r.customer_price_brl, true)}</td></tr>)}</tbody>
@@ -114,11 +117,11 @@ export function MessageBalanceConsole() {
           <p className="mt-2 text-xs leading-5 text-slate-500">Grátis: mensagens que a Meta não cobra, como as primeiras 1.000 respostas de atendimento do mês por número e as conversas iniciadas por anúncios que levam ao WhatsApp. Mensagens não entregues não são cobradas.</p>
         </div>
 
-        <div>
+        {usesWallet ? <div>
           <h3 className="font-semibold">Recarregar</h3>
           {data.packages.length ? <div className="mt-2 flex flex-wrap gap-3">{data.packages.map((p) => <button key={p.id} type="button" disabled={busy} className={button} onClick={() => void buy(p.id)}>{formatBrl(p.amount_brl)}</button>)}</div> : <p className="mt-2 text-sm text-slate-600">Recargas indisponíveis no momento.</p>}
           <p className="mt-2 text-xs text-slate-500">Pagamento por Pix ou cartão no checkout. O valor entra integralmente no saldo após a confirmação.</p>
-        </div>
+        </div> : null}
 
         <details>
           <summary className="cursor-pointer font-semibold">Extrato</summary>
