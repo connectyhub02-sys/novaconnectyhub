@@ -121,6 +121,20 @@ Release `b2635c8b` ativa no slot b em 26/11/2026; slot a (`54575794`) preservado
 - **Decisão do titular (26/11):** seguir somente com o pedido de Solution Partner próprio, sem ponte com parceiro.
 - Alternativa descartada: Multi-Partner Solution com um Solution Partner existente, que compartilha a linha de crédito dele com os clientes cadastrados pelo nosso Embedded Signup (`extras.setup.solutionID`).
 
+## Partnership Home (26/11/2026)
+
+- Login com o perfil Eliane, autorizado pelo titular, no portfólio **ConnectyHub `293619797157346`**, que é o dono do app `1002348522666389`.
+- Concluído, com autorização do titular no chat:
+  - Termos e Condições do Partnership Home aceitos em nome da ConnectyHub;
+  - verificação da empresa já estava concluída;
+  - autodeclaração de conformidade enviada com os 4 itens "Compliant". A Meta confirmou "Setup is complete".
+- Business Messaging → Technology Partner: conta de desenvolvedor e App Review concluídos. Elegibilidade: 1 de 4 itens.
+  - Contas de mensagem ativas: 1 de 10 mínimo.
+  - Média diária de mensagens: 0 de 2.500 mínimo.
+  - Treinamento Blueprint: pendente.
+  - Qualidade: OK (0 dias de baixa qualidade, bloqueio 0%).
+- **O portal não oferece pedido de Solution Partner.** O suporte de programas (`/business/fmpsupport`) é restrito a membros já inscritos no Meta Business Partners. Sem o selo de parceiro, o único contato encontrado é "Operational support" (Central de Ajuda) ou "Schedule a call".
+
 ## Limites e pendências
 
 - **Nenhum número está faturado pela ConnectyHub.** Antes de trocar um número para `connectyhub_credit_line`:
