@@ -265,7 +265,7 @@ const clientSections: NavSection[] = [
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
       { label: "API de AI",        href: "/dashboard/api-ia",           icon: PlugZap, tone: "emerald" },
       { label: "Estúdio de Voz e Áudio AI",              href: "/dashboard/voz",              icon: Megaphone, tone: "violet" },
-      { label: "Créditos e recargas", href: "/dashboard/creditos", icon: Coins, tone: "amber" },
+      { label: "Saldo e créditos", href: "/dashboard/creditos", icon: Coins, tone: "amber" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
       { label: "Minhas compras", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "blue" },
       { label: "Minha Conta",      href: "/dashboard/minha-conta",      icon: CreditCard, tone: "blue" },
@@ -1249,7 +1249,7 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
     <Link href="/dashboard/creditos" aria-label={`Saldo ${label} créditos${repliesLabel ? `, ${repliesLabel}` : ""}. Abrir créditos e recargas`}
       className="ch-credit-chip"
       data-state={status?.canUseBillableFeatures === false ? "blocked" : undefined}
-      title={repliesLabel ? `${repliesLabel}. Créditos e recargas` : "Créditos e recargas"}
+      title={repliesLabel ? `${repliesLabel}. Créditos de IA e saldo` : "Créditos de IA e saldo"}
       style={{ color: status?.canUseBillableFeatures === false ? "var(--ch-danger)" : tone.color === "var(--ch-brand-primary)" ? "var(--ch-text)" : tone.color }}
     >
       <Coins className="h-4 w-4 shrink-0" aria-hidden="true" style={{ color: "var(--ch-warning)" }} />

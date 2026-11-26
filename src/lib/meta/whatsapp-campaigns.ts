@@ -11,6 +11,22 @@ import {
   sendOfficialMessage,
 } from "./whatsapp-cloud";
 import { collectOutboundLinks } from "@/lib/whatsapp/outbound-links";
+import { MetaMessageBillingError, campaignCostEstimate, expectedMessageCategory, formatBrl } from "./message-billing-policy";
+import { currentRate, loadMetaMessageWalletSummary, walletAvailable } from "./message-billing";
+
+/** What starting this campaign may cost in BRL, for senders billed by ConnectyHub. */
+export async function officialCampaignBilling(client: SupabaseClient, org: string, campaign: { id: string; phone_number_id: string; template_snapshot: { category?: string } }) {
+  const summary = await loadMetaMessageWalletSummary(client, org);
+  const sender = summary.senders.find((item) => item.phone_number_id === campaign.phone_number_id);
+  if (sender?.billing_mode !== "connectyhub_credit_line") return { billedBy: "customer_meta" as const };
+  const pending = await client.from("meta_whatsapp_campaign_recipients").select("id", { head: true, count: "exact" })
+    .eq("organization_id", org).eq("campaign_id", campaign.id).in("status", ["pending", "processing"]);
+  if (pending.error) throw new Error("Não foi possível contar os destinatários pendentes.");
+  const category = expectedMessageCategory("template", campaign.template_snapshot?.category);
+  const unitPrice = currentRate(summary, category);
+  return { billedBy: "connectyhub" as const, category, recipients: pending.count ?? 0, unitPriceBrl: unitPrice,
+    estimateBrl: campaignCostEstimate(pending.count ?? 0, unitPrice), availableBrl: walletAvailable(summary), debtBrl: Number(summary.wallet?.debt_brl ?? 0) };
+}
 
 export async function prepareOfficialCampaign(
   client: SupabaseClient,
@@ -125,6 +141,13 @@ export async function changeOfficialCampaign(
         "O modelo mudou ou deixou de estar aprovado. Prepare uma nova campanha.",
       );
     templateParameters(template, c.parameters);
+    const billing = await officialCampaignBilling(client, org, c);
+    if (billing.billedBy === "connectyhub") {
+      if (billing.estimateBrl === null) throw new Error("Ainda não há tarifa para este tipo de mensagem. Fale com o suporte da ConnectyHub.");
+      if (billing.debtBrl > 0) throw new Error("Regularize a diferença pendente no saldo do WhatsApp oficial antes de iniciar.");
+      if (billing.availableBrl < billing.estimateBrl)
+        throw new Error(`Saldo do WhatsApp oficial insuficiente: esta campanha pode custar até ${formatBrl(billing.estimateBrl)} e há ${formatBrl(billing.availableBrl)} disponíveis. Recarregue em Saldo e créditos.`);
+    }
   }
   const result = await client
     .from("meta_whatsapp_campaigns")
@@ -207,6 +230,7 @@ export async function dispatchOfficialCampaignBatch(client: SupabaseClient) {
           expectedTemplate: c.template_snapshot.components,
           consent: true,
           consentNote: c.consent_note,
+          campaignId: c.id,
         },
       );
       messageId = result.id;
@@ -214,6 +238,15 @@ export async function dispatchOfficialCampaignBatch(client: SupabaseClient) {
         status = "uncertain";
       if (result.status === "failed") status = "failed";
     } catch (error) {
+      if (error instanceof MetaMessageBillingError) {
+        // Nothing was sent: the recipient waits for a top-up instead of being skipped.
+        const waiting = await client.from("meta_whatsapp_campaign_recipients").update({ status: "pending", detail: error.message, updated_at: new Date().toISOString() })
+          .eq("id", r.id).eq("organization_id", r.organization_id).eq("status", "processing");
+        const paused = await client.from("meta_whatsapp_campaigns").update({ status: "paused", updated_at: new Date().toISOString() })
+          .eq("id", c.id).eq("organization_id", c.organization_id).eq("status", "running");
+        if (waiting.error || paused.error) throw new Error("Falha ao pausar a campanha sem saldo. A reserva será recuperada sem repetição.");
+        continue;
+      }
       const existing = await client
         .from("meta_whatsapp_messages")
         .select("id,status")

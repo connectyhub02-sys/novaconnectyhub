@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
       .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`).limit(1).maybeSingle();
     if (owned.error) throw new Error("Não foi possível conferir suas compras.");
     const credits = readOrderBumpCreditAmount(product.metadata??{},product.name,product.short_description??product.commercial_description??"")??0;
-    if (owned.data && product.billing_cycle !== "recurring" && credits <= 0) return NextResponse.json({ checkoutUrl: `/dashboard/meus-produtos/${owned.data.id}`, alreadyPurchased: true });
+    const repurchasable = product.metadata?.product_kind === "meta_message_balance";
+    if (owned.data && product.billing_cycle !== "recurring" && credits <= 0 && !repurchasable) return NextResponse.json({ checkoutUrl: `/dashboard/meus-produtos/${owned.data.id}`, alreadyPurchased: true });
     const amount = normalizeCurrencyAmount(product.offer?.sale_price ?? product.offer?.salePrice ?? product.price);
     if (!amount || amount <= 0) throw new Error("O preço deste produto precisa ser configurado.");
     const terms = { billing_cycle: product.billing_cycle, billing_interval: product.billing_interval, price_brl: amount, included_credits: credits, access_duration_days: null };

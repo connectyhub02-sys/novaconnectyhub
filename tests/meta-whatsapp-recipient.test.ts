@@ -1,5 +1,6 @@
 import { describe,expect,it,vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
+import * as billingPolicy from "../src/lib/meta/message-billing-policy";
 import * as crypto from "node:crypto";
 import { officialPhone,serviceWindowOpen } from "../src/lib/meta/whatsapp-policy";
 const recipientModule=serverModuleHarness<typeof import("../src/lib/meta/whatsapp-recipient")>("src/lib/meta/whatsapp-recipient.ts",{"./whatsapp-policy":{officialPhone}});
@@ -46,6 +47,8 @@ describe("send with a verified recipient alias",()=>{
    "@/lib/client-os/guided-oauth":{loadMetaGuidedOAuthConfig:async()=>({graphVersion:"v25.0",appSecret:"test"})},
    "@/lib/security/credentials-crypto":{decryptCredentialValue:()=>"test-token"},
    "@/lib/whatsapp/outbound-links":{collectOutboundLinks:()=>[]},
+   "./message-billing-policy":billingPolicy,
+   "./message-billing":{reserveOfficialMessageCharge:async()=>({billing:"customer_meta"}),linkOfficialMessageCharge:async()=>{},releaseOfficialMessageCharge:async()=>{},recordOfficialMessagePricing:async()=>"not_billed"},
   },[],{fetch});
   const send=()=>cloud.sendOfficialMessage(client as never,{organization_id:"org-a",phone_number_id:"123456",webhook_subscribed:true,encrypted_token:"encrypted"} as never,"actor",{phone:waId,type:"text",text:"Resposta",requestKey:"00000000-0000-0000-0000-000000000001"});
   return {send,fetch,rpc};

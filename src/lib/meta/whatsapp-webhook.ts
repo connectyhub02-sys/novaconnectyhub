@@ -5,6 +5,8 @@ import { officialOptOut, officialPhone } from "./whatsapp-policy";
 import { recordRecipientIdentity } from "./whatsapp-recipient";
 import { officialInboundProfileName } from "./whatsapp-contact-profile";
 import { coexistenceEchoes, coexistenceOffboarded, historySyncOutcome } from "./whatsapp-signup-mode";
+import { statusPricing } from "./message-billing-policy";
+import { recordOfficialMessagePricing } from "./message-billing";
 
 type RecordValue = Record<string,unknown>;
 const record = (value:unknown):RecordValue => value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
@@ -65,10 +67,13 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
         if (typeof status.id !== "string" || !["sent","delivered","read","failed"].includes(String(status.status))) continue;
         const timestamp = Number(status.timestamp)*1000;
         if (!Number.isFinite(timestamp)) continue;
-        const receipt = await client.from("meta_whatsapp_receipts").upsert({phone_number_id:phoneId,provider_message_id:status.id,status:status.status,occurred_at:new Date(timestamp).toISOString(),error_code:record(array(status.errors)[0]).code ? String(record(array(status.errors)[0]).code) : null},{onConflict:"phone_number_id,provider_message_id,status",ignoreDuplicates:true});
+        const receipt = await client.from("meta_whatsapp_receipts").upsert({phone_number_id:phoneId,provider_message_id:status.id,status:status.status,occurred_at:new Date(timestamp).toISOString(),error_code:record(array(status.errors)[0]).code ? String(record(array(status.errors)[0]).code) : null,pricing:statusPricing(status.pricing)},{onConflict:"phone_number_id,provider_message_id,status",ignoreDuplicates:true});
         if (receipt.error) throw new Error("Falha ao registrar recibo WhatsApp.");
         const reconciled = await client.rpc("reconcile_meta_whatsapp_receipt",{p_phone:phoneId,p_message:status.id});
         if (reconciled.error) throw new Error("Falha ao atualizar entrega WhatsApp.");
+        // Messages billed through the ConnectyHub credit line are charged once, on delivery,
+        // at twice Meta's rate; what Meta does not charge stays free. Others are ignored.
+        await recordOfficialMessagePricing(client,phoneId,status.id);
         const message = await client.from("meta_whatsapp_messages").select("id,phone").eq("organization_id",org).eq("phone_number_id",phoneId).eq("provider_message_id",status.id).eq("direction","outbound").maybeSingle();
         if (message.data) {
           if(status.status!=="failed" && typeof status.recipient_id==="string") await recordRecipientIdentity(client,org,phoneId,message.data.phone,[{input:message.data.phone,wa_id:status.recipient_id}]);

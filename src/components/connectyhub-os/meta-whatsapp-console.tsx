@@ -685,6 +685,7 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
       )}
       {tab === "campaigns" && (
         <OfficialCampaignPanel
+          billingUrl={(id) => makeUrl({ billing: id })}
           campaigns={campaigns}
           senders={data?.connections ?? []}
           sender={selectedSender}

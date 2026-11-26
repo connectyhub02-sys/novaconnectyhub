@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
+import * as billingPolicy from "../src/lib/meta/message-billing-policy";
 function fixture(failure?: Error, existingStatus?: string) {
   const campaign = {
     id: "campaign",
@@ -102,6 +103,8 @@ function fixture(failure?: Error, existingStatus?: string) {
         officialConnection: async () => ({ phone_number_id: "123456" }),
         sendOfficialMessage: send,
       },
+      "./message-billing-policy": billingPolicy,
+      "./message-billing": { currentRate: () => null, loadMetaMessageWalletSummary: async () => ({}), walletAvailable: () => 0 },
     },
     [],
     { Error },
@@ -150,5 +153,12 @@ describe("official campaign worker", () => {
       message_id: "existing",
     });
     expect(f.send).toHaveBeenCalledTimes(1);
+  });
+  it("pauses without balance and keeps the recipient waiting instead of skipping it", async () => {
+    const f = fixture(new billingPolicy.MetaMessageBillingError("balance_insufficient"));
+    await f.run();
+    expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.recipients.map((r) => r.status)).toEqual(["pending", "pending"]);
+    expect(f.campaign.status).toBe("paused");
   });
 });

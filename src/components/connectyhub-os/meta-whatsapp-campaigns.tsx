@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Plus,
   Pause,
@@ -30,6 +30,7 @@ import {
   officialStatus,
 } from "./meta-whatsapp-types";
 type Props = {
+  billingUrl: (campaignId: string) => string;
   campaigns: Campaign[];
   senders: Sender[];
   sender: string;
@@ -338,12 +339,7 @@ export function OfficialCampaignPanel(p: Props) {
                   </dd>
                 </div>
               </dl>
-              <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
-                A Meta pode cobrar pelas mensagens conforme categoria, país e
-                conta. Esta tela não calcula uma tarifa garantida nem adiciona
-                margem da ConnectyHub. Fila inicial: até 20 destinatários por
-                minuto, sujeita aos limites e à qualidade da conta.
-              </p>
+              <CampaignBillingNotice url={p.billingUrl(reviewing.id)} />
               <label className="mt-4 flex gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -351,7 +347,7 @@ export function OfficialCampaignPanel(p: Props) {
                   onChange={(e) => setCostAccepted(e.target.checked)}
                 />{" "}
                 Revisei o número, os destinatários e o modelo e autorizo iniciar
-                os envios e os custos de uso da Meta.
+                os envios e a cobrança das mensagens entregues.
               </label>
               <div className="mt-4 flex gap-2">
                 <button
@@ -548,4 +544,40 @@ export function OfficialReports({ campaigns }: { campaigns: Campaign[] }) {
       </p>
     </div>
   );
+}
+
+type CampaignBilling =
+  | { billedBy: "customer_meta" }
+  | { billedBy: "connectyhub"; category: string; recipients: number; unitPriceBrl: number | null; estimateBrl: number | null; availableBrl: number; debtBrl: number };
+const brl = (value: number, precise = false) =>
+  value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: precise ? 4 : 2 });
+const categoryLabel: Record<string, string> = { marketing: "Marketing", utility: "Utilidade", authentication: "Autenticação" };
+
+// Shows who pays Meta for this sender and, when billed by ConnectyHub, the maximum cost.
+function CampaignBillingNotice({ url }: { url: string }) {
+  const [billing, setBilling] = useState<CampaignBilling | null>(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    fetch(url, { cache: "no-store" })
+      .then(async (r) => { const v = await r.json(); if (!r.ok) throw new Error(v.error); if (active) setBilling(v); })
+      .catch((e) => active && setError(e instanceof Error ? e.message : "Não foi possível calcular o custo."));
+    return () => { active = false; };
+  }, [url]);
+  const queue = " Fila inicial: até 20 destinatários por minuto, sujeita aos limites e à qualidade da conta.";
+  if (error) return <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-xs text-rose-900">{error}</p>;
+  if (!billing) return <p className="mt-4 text-xs text-slate-500">Calculando o custo da campanha…</p>;
+  if (billing.billedBy === "customer_meta")
+    return <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Este número é cobrado diretamente pela Meta, no método de pagamento da sua conta Meta, conforme categoria e país.{queue}</p>;
+  const enough = billing.estimateBrl !== null && billing.debtBrl <= 0 && billing.availableBrl >= billing.estimateBrl;
+  return <div className={`mt-4 rounded-xl p-3 text-xs ${enough ? "bg-emerald-50 text-emerald-950" : "bg-rose-50 text-rose-950"}`}>
+    <p className="font-semibold">Cobrado no seu saldo do WhatsApp oficial (em reais)</p>
+    {billing.unitPriceBrl === null || billing.estimateBrl === null ? <p className="mt-1">Ainda não há tarifa para este tipo de mensagem. Fale com o suporte.</p> : <>
+      <p className="mt-1">{billing.recipients} destinatários × {brl(billing.unitPriceBrl, true)} ({categoryLabel[billing.category] ?? billing.category}) = <strong>até {brl(billing.estimateBrl)}</strong></p>
+      <p>Saldo disponível: <strong>{brl(billing.availableBrl)}</strong>{billing.debtBrl > 0 ? ` · diferença pendente ${brl(billing.debtBrl)}` : ""}</p>
+      <p className="mt-1">Só são cobradas as mensagens entregues e cobradas pela Meta. Mensagens não entregues voltam para o saldo.</p>
+      {!enough ? <p className="mt-1 font-semibold">Recarregue em <a className="underline" href="/dashboard/creditos#saldo-whatsapp">Saldo e créditos</a> antes de iniciar.</p> : null}
+    </>}
+    <p className="mt-1">{queue.trim()}</p>
+  </div>;
 }

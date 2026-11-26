@@ -17,6 +17,7 @@ import {
 import {
   prepareOfficialCampaign,
   changeOfficialCampaign,
+  officialCampaignBilling,
 } from "@/lib/meta/whatsapp-campaigns";
 import {
   uploadOfficialMedia,
@@ -78,6 +79,19 @@ export async function GET(request: NextRequest) {
       }
       return json({ recipients: rows });
     }
+    if (params.get("billing")) {
+      const campaign = await auth.client
+        .from("meta_whatsapp_campaigns")
+        .select("id,phone_number_id,template_snapshot")
+        .eq("organization_id", auth.organizationId)
+        .eq("id", params.get("billing")!)
+        .maybeSingle();
+      if (campaign.error || !campaign.data)
+        throw new Error("Campanha não encontrada nesta empresa.");
+      return json(
+        await officialCampaignBilling(auth.client, auth.organizationId, campaign.data),
+      );
+    }
     if (params.get("view") === "campaigns")
       return json({
         campaigns: await officialCampaigns(auth.client, auth.organizationId),
@@ -86,7 +100,7 @@ export async function GET(request: NextRequest) {
     const connections = await auth.client
       .from("meta_whatsapp_connections")
       .select(
-        "phone_number_id,display_phone,verified_name,label,status,webhook_subscribed,webhook_at,coexistence,history_sync_state,contacts_sync_state",
+        "phone_number_id,display_phone,verified_name,label,status,webhook_subscribed,webhook_at,coexistence,history_sync_state,contacts_sync_state,billing_mode",
       )
       .eq("organization_id", auth.organizationId)
       .order("connected_at");

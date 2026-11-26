@@ -11,6 +11,8 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getOperationAudit } from "@/lib/billing/operation-audit";
 import { getAgentOptimizationAdmin, getCostCenterMonth } from "@/lib/billing/cost-center-month";
+import { currentCostCenterMonth } from "@/lib/billing/cost-center-report";
+import { MetaMessageBillingAdmin } from "@/components/connectyhub-os/meta-message-billing-admin";
 
 export const metadata: Metadata = {
   title: "Financeiro IA | ConnectyHub",
@@ -60,5 +62,6 @@ export default async function AdminFinanceiroPage({searchParams}:{searchParams:P
       agentOptimizations={agentOptimizations}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     />
+    <MetaMessageBillingAdmin month={params.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : currentCostCenterMonth()} />
   </>);
 }

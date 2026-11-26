@@ -301,8 +301,8 @@ export const panelNavigation: Record<string, NavigationDefinition> = {
   },
   "/dashboard/creditos": {
     "group": "Conta",
-    "label": "Créditos e recargas",
-    "aliases": "Créditos e recargas Crescimento"
+    "label": "Saldo e créditos",
+    "aliases": "Créditos e recargas Créditos de IA Saldo WhatsApp oficial Meta API mensagens Crescimento"
   },
   "/dashboard/planos": {
     "group": "Conta",
@@ -362,7 +362,7 @@ export function attendanceChannels(mode: PanelMode): PanelContextLink[] {
 /** Account pages open from Minha conta (identity menu, credits chip) and its tabs, not the sidebar. */
 export const clientAccountTabs: PanelContextLink[] = [
   { href: "/dashboard/minha-conta", label: "Dados e cobrança" },
-  { href: "/dashboard/creditos", label: "Créditos e recargas" },
+  { href: "/dashboard/creditos", label: "Saldo e créditos" },
   { href: "/dashboard/planos", label: "Planos" },
 ];
 /** Admin pages kept reachable (search, Início cards, direct links) but out of the sidebar. */

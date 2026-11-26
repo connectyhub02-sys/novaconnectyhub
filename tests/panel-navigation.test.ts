@@ -35,7 +35,7 @@ describe("panel navigation", () => {
   it("keeps account pages out of the client sidebar, as tabs of Minha conta, with Minhas compras kept", () => {
     const conta=[{label:"Conta",items:["/dashboard/empresa","/dashboard/integracoes","/dashboard/creditos","/dashboard/planos","/dashboard/meus-produtos","/dashboard/minha-conta"].map(href=>({href,label:href}))}];
     expect(sidebarNavigation(conta,"client").flatMap(s=>s.items).map(i=>i.href)).toEqual(["/dashboard/empresa","/dashboard/integracoes","/dashboard/meus-produtos"]);
-    expect(panelContextLinks("/dashboard/creditos","client")?.items.map(i=>i.label)).toEqual(["Dados e cobrança","Créditos e recargas","Planos"]);
+    expect(panelContextLinks("/dashboard/creditos","client")?.items.map(i=>i.label)).toEqual(["Dados e cobrança","Saldo e créditos","Planos"]);
     expect(panelContextLinks("/dashboard/meus-produtos","client")).toBeNull();
     expect(panelContextLinks("/dashboard/integracoes","client")).toBeNull();
     // Admin keeps its own account links; only the attendance channels collapse.

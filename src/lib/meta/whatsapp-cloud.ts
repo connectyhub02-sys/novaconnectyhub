@@ -8,8 +8,10 @@ import { officialAssetId, officialPhone, serviceWindowOpen, templateInput } from
 import { collectOutboundLinks } from "@/lib/whatsapp/outbound-links";
 import { recipientAliases, recipientIdentity, recordRecipientIdentity } from "./whatsapp-recipient";
 import { coexistenceInstanceConflict, officialSignupMode, selectOfficialSignupPhone, type SignupPhone } from "./whatsapp-signup-mode";
+import { expectedMessageCategory } from "./message-billing-policy";
+import { linkOfficialMessageCharge, recordOfficialMessagePricing, releaseOfficialMessageCharge, reserveOfficialMessageCharge } from "./message-billing";
 
-export type OfficialConnection = { coexistence?: boolean; organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
+export type OfficialConnection = { billing_mode?: string; coexistence?: boolean; organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
 export type MetaTemplate = OfficialTemplate;
 export class MetaCloudError extends Error {
   constructor(public code: string, public uncertain = false) { super(`Meta recusou a operação (${code}). Confira a conexão, as permissões e o status do número.`); }
@@ -153,11 +155,13 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
   }
   const payload: Record<string,unknown> = {messaging_product:"whatsapp",recipient_type:"individual",to:identity.phone,type};
   let content = String(body.text ?? "").trim();
+  let templateCategory: string | undefined;
   if (type === "template") {
     const consentNote = String(body.consentNote ?? "").trim();
     if (body.consent !== true || consentNote.length < 5 || consentNote.length > 500) throw new Error("Registre como o destinatário autorizou o contato.");
     const template = (await listOfficialTemplates(client,connection)).find(t=>t.name===body.templateName && t.language===body.language && t.status==="APPROVED");
     if (!template) throw new Error("Selecione um modelo aprovado pela Meta.");
+    templateCategory = template.category;
     if(body.expectedTemplate && JSON.stringify(template.components)!==JSON.stringify(body.expectedTemplate))throw new Error("O modelo mudou após a revisão da campanha.");
     const rendered=templateParameters(template,body.parameters);
     content = template.components.map(c=>c.type==="BODY"?rendered.text:c.text ?? "").filter(Boolean).join("\n");
@@ -188,9 +192,24 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
   if (collectOutboundLinks({text:content}).length) throw new Error("Use texto sem URLs. Links rastreáveis em botões oficiais ainda não estão habilitados.");
   const storedContent={...payload};delete storedContent.to;delete storedContent.messaging_product;delete storedContent.recipient_type;
   delete payload.templatePreview;
+  // Senders billed through the ConnectyHub credit line reserve the BRL price first; the
+  // database decides by the sender's billing mode. Nothing is sent without the reservation.
+  const charge = await reserveOfficialMessageCharge(client,{organizationId:org,phoneNumberId:connection.phone_number_id,requestKey:key,phone:identity.phone,category:expectedMessageCategory(type,templateCategory),campaignId:typeof body.campaignId==="string"?body.campaignId:null});
+  const billed = charge.billing === "connectyhub";
   const reserved = await client.from("meta_whatsapp_messages").insert({organization_id:org,phone_number_id:connection.phone_number_id,phone,direction:"outbound",message_type:type,text_content:content,request_key:key,request_hash:hash,status:"sending",content:storedContent,created_by:actorId}).select("id,status").single();
-  if (reserved.error) throw new Error(reserved.error.code === "23505" ? "Este envio já está em processamento. Atualize o chat." : "Não foi possível registrar o envio.");
+  if (reserved.error) {
+    if (billed) await releaseOfficialMessageCharge(client,org,key,"Envio não registrado.");
+    throw new Error(reserved.error.code === "23505" ? "Este envio já está em processamento. Atualize o chat." : "Não foi possível registrar o envio.");
+  }
   const id = reserved.data.id;
+  if (billed) {
+    try { await linkOfficialMessageCharge(client,org,key,id); }
+    catch (error) {
+      await releaseOfficialMessageCharge(client,org,key,"Reserva não vinculada.");
+      await client.from("meta_whatsapp_messages").update({status:"failed",error_code:"saldo_indisponivel",updated_at:new Date().toISOString()}).eq("id",id).eq("status","sending");
+      throw error;
+    }
+  }
   try {
     const result = await cloudRequest<{messages:Array<{id:string}>;contacts?:unknown}>(await officialSettings(client),decryptCredentialValue(connection.encrypted_token),`${connection.phone_number_id}/messages`,payload);
     const messageId = result.messages?.[0]?.id;
@@ -200,12 +219,17 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
     try { await recordRecipientIdentity(client,org,connection.phone_number_id,identity.phone,result.contacts); }
     catch { return {id,status:"accepted",warning:"Meta aceitou o envio; associação do contato pendente. Não reenvie."}; }
     const receipt = await client.rpc("reconcile_meta_whatsapp_receipt",{p_phone:connection.phone_number_id,p_message:messageId});
+    // Webhooks may have arrived before the provider id was saved: settle from stored receipts.
+    if (billed) await recordOfficialMessagePricing(client,connection.phone_number_id,messageId).catch(()=>null);
     const archive = await client.rpc("archive_meta_whatsapp_message",{p_id:id});
     if (receipt.error || archive.error) return {id,status:"accepted",warning:"Meta aceitou o envio; sincronização do histórico pendente. Não reenvie."};
     return {id,status:"accepted"};
   } catch (error) {
     const status = error instanceof MetaCloudError && !error.uncertain ? "failed" : "uncertain";
     await client.from("meta_whatsapp_messages").update({status,error_code:error instanceof MetaCloudError ? error.code : "falha_interna",updated_at:new Date().toISOString()}).eq("id",id).eq("status","sending");
+    // A definitive refusal was never delivered; an uncertain one keeps its reservation until
+    // Meta reports the outcome (or the reservation expires without delivery).
+    if (billed && status === "failed") await releaseOfficialMessageCharge(client,org,key,"Meta recusou o envio.");
     throw error;
   }
 }

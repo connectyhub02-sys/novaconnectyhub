@@ -836,6 +836,8 @@ export const functions = [
   inngest.createFunction({id:"connectyhub-meta-lead-ads",name:"Meta Lead Ads: importar no CRM",retries:0,concurrency:{limit:1},triggers:[{cron:"* * * * *"}]},
     async({step})=>step.run("import-lead-ads",async()=>{const {processLeadAdsBatch}=await import("@/lib/meta/lead-ads");return processLeadAdsBatch(createServiceClient());})),
   inngest.createFunction({id:"connectyhub-meta-whatsapp-campaigns",name:"Campanhas WhatsApp oficial",retries:0,concurrency:{limit:1},triggers:[{cron:"* * * * *"}]},async({step})=>step.run("dispatch-official-campaigns",async()=>{const {dispatchOfficialCampaignBatch}=await import("@/lib/meta/whatsapp-campaigns");return dispatchOfficialCampaignBatch(createServiceClient());})),
+  // Official WhatsApp BRL balance: undelivered reservations expire; delivered without pricing settle.
+  inngest.createFunction({id:"connectyhub-meta-message-charges",name:"Saldo WhatsApp oficial: conferir reservas",retries:0,concurrency:{limit:1},triggers:[{cron:"17 * * * *"}]},async({step})=>step.run("expire-message-charges",async()=>{const {expireOfficialMessageCharges}=await import("@/lib/meta/message-billing");return expireOfficialMessageCharges(createServiceClient());})),
   // Voice agents: finished conversations are charged once (idempotent by provider conversation id).
   inngest.createFunction({ id: "connectyhub-voice-agent-metering", name: "Voz: cobrança de conversas de agentes", retries: 0, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
     async ({ step }) => step.run("meter-voice-agent-conversations", async () => {
