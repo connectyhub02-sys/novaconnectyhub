@@ -135,6 +135,26 @@ Release `b2635c8b` ativa no slot b em 26/11/2026; slot a (`54575794`) preservado
   - Qualidade: OK (0 dias de baixa qualidade, bloqueio 0%).
 - **O portal não oferece pedido de Solution Partner.** O suporte de programas (`/business/fmpsupport`) é restrito a membros já inscritos no Meta Business Partners. Sem o selo de parceiro, o único contato encontrado é "Operational support" (Central de Ajuda) ou "Schedule a call".
 
+## Até ser Solution Partner: cliente paga a Meta (decisão de 26/11/2026)
+
+- Disparo em massa oficial continua liberado desde o plano Start (R$ 97). O objetivo é chegar às 10 contas ativas e 2.500 mensagens por dia exigidas pela Meta.
+- Até lá, o cliente cadastra o cartão na própria conta da Meta. Não há cobrança por mensagem pela ConnectyHub.
+- Detecção da falta de cartão:
+  - O `health_status` do número (`GET {phone_number_id}?fields=health_status`) traz, na entidade WABA, o erro **141006** ("There is an error with the payment method").
+  - Um Tech Provider **não** consegue ler os campos de cobrança da WABA: `primary_funding_id` devolve o erro 10, que exige BSP.
+  - Conferido nas duas WABAs de produção em 26/11: as duas estão sem cartão.
+- Link direto para a página de pagamento: `https://business.facebook.com/billing_hub/accounts/details/?business_id={BM}&asset_id={WABA}&placement=standalone`.
+  - O BM vem da entidade BUSINESS do `health_status`.
+  - Conferido no Chrome: abre "Faturamento e pagamentos" da conta, com o botão "Adicionar método de pagamento".
+- Onde aparece para o cliente:
+  - Chat Meta: aviso no topo com o botão **Adicionar cartão na Meta**.
+  - Saldo e créditos: o mesmo aviso ao lado de cada número "Cobrado pela Meta".
+- Bloqueios quando a Meta indica falta de cartão:
+  - iniciar campanha e enviar modelo avulso são bloqueados, com uma mensagem em português;
+  - respostas dentro da janela de 24h continuam funcionando;
+  - o erro 131042 devolvido no envio também aparece traduzido.
+- Se não for possível consultar a Meta, o sistema mostra um aviso neutro e não bloqueia.
+
 ## Limites e pendências
 
 - **Nenhum número está faturado pela ConnectyHub.** Antes de trocar um número para `connectyhub_credit_line`:

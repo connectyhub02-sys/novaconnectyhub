@@ -30,6 +30,7 @@ import {
   OfficialTemplatePreview,
   OfficialVariables,
 } from "./meta-whatsapp-models";
+import { MetaPaymentNotice } from "./meta-payment-notice";
 import {
   OfficialCampaignPanel,
   OfficialReports,
@@ -475,6 +476,9 @@ export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations
           {error}
         </p>
       )}
+      <MetaPaymentNotice
+        url={connected ? makeUrl({ payment: selectedSender }) : null}
+      />
       {notice && (
         <p
           role="status"

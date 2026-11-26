@@ -13,6 +13,7 @@ import {
 import { collectOutboundLinks } from "@/lib/whatsapp/outbound-links";
 import { MetaMessageBillingError, campaignCostEstimate, expectedMessageCategory, formatBrl } from "./message-billing-policy";
 import { currentRate, loadMetaMessageWalletSummary, walletAvailable } from "./message-billing";
+import { assertOfficialPaymentReady } from "./whatsapp-payment";
 
 /** What starting this campaign may cost in BRL, for senders billed by ConnectyHub. */
 export async function officialCampaignBilling(client: SupabaseClient, org: string, campaign: { id: string; phone_number_id: string; template_snapshot: { category?: string } }) {
@@ -141,6 +142,8 @@ export async function changeOfficialCampaign(
         "O modelo mudou ou deixou de estar aprovado. Prepare uma nova campanha.",
       );
     templateParameters(template, c.parameters);
+    // Customer-paid senders: Meta blocks campaigns while the WABA has no card.
+    await assertOfficialPaymentReady(client, connection);
     const billing = await officialCampaignBilling(client, org, c);
     if (billing.billedBy === "connectyhub") {
       if (billing.estimateBrl === null) throw new Error("Ainda não há tarifa para este tipo de mensagem. Fale com o suporte da ConnectyHub.");

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCircle, Sparkles } from "lucide-react";
 import { formatPreciseCredits } from "./credit-explainer";
+import { MetaPaymentNotice } from "./meta-payment-notice";
 import { META_MESSAGE_CATEGORY_HINTS, META_MESSAGE_CATEGORY_LABELS, formatBrl } from "@/lib/meta/message-billing-policy";
 
 type Summary = {
@@ -99,9 +100,9 @@ export function MessageBalanceConsole() {
           <h3 className="font-semibold">Seus números oficiais</h3>
           {!data.senders.length ? <p className="mt-2 text-sm text-slate-600">Nenhum número da API oficial conectado. Conecte em Integrações.</p> : <ul className="mt-2 space-y-2 text-sm">
             {billedSenders.map((s) => <li key={s.phone_number_id} className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-900">Faturado pela ConnectyHub</span>{s.verified_name ?? s.display_phone} · {s.display_phone}</li>)}
-            {metaSenders.map((s) => <li key={s.phone_number_id} className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Cobrado pela Meta</span>{s.verified_name ?? s.display_phone} · {s.display_phone}</li>)}
+            {metaSenders.map((s) => <li key={s.phone_number_id}><span className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Cobrado pela Meta</span>{s.verified_name ?? s.display_phone} · {s.display_phone}</span><MetaPaymentNotice compact url={`/api/dashboard/integrations/meta/whatsapp?payment=${encodeURIComponent(s.phone_number_id)}`} /></li>)}
           </ul>}
-          {metaSenders.length ? <p className="mt-2 text-xs leading-5 text-slate-500">Números “Cobrado pela Meta” ainda usam o método de pagamento da sua conta Meta e não descontam deste saldo. A ConnectyHub faz a migração do faturamento de cada número.</p> : null}
+          {metaSenders.length ? <p className="mt-2 text-xs leading-5 text-slate-500">Números “Cobrado pela Meta” usam o cartão cadastrado na sua conta da Meta e não descontam deste saldo.</p> : null}
         </div>
 
         <div>

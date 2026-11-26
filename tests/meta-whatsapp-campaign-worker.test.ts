@@ -105,6 +105,7 @@ function fixture(failure?: Error, existingStatus?: string) {
       },
       "./message-billing-policy": billingPolicy,
       "./message-billing": { currentRate: () => null, loadMetaMessageWalletSummary: async () => ({}), walletAvailable: () => 0 },
+      "./whatsapp-payment": { assertOfficialPaymentReady: async () => {} },
     },
     [],
     { Error },

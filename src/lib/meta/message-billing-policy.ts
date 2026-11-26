@@ -88,3 +88,45 @@ export function formatBrl(value: number | string | null | undefined, precise = f
     maximumFractionDigits: precise ? 4 : 2,
   });
 }
+
+// Customer-paid senders: Meta reports a missing payment method as WABA error 141006 in
+// the phone number's health_status. Without it, business-initiated messages are blocked.
+export type MetaPaymentStatus = {
+  status: "ok" | "missing" | "unknown";
+  businessId: string | null;
+  wabaId: string;
+  paymentUrl: string;
+  canSendMessage: string | null;
+  issues: string[];
+};
+
+export const META_PAYMENT_MISSING_MESSAGE =
+  "Falta adicionar um cartão de crédito na sua conta da Meta. Sem ele, campanhas e mensagens iniciadas por você não são enviadas.";
+
+export function metaPaymentUrl(wabaId: string, businessId: string | null) {
+  const url = new URL("https://business.facebook.com/billing_hub/accounts/details/");
+  if (businessId) url.searchParams.set("business_id", businessId);
+  url.searchParams.set("asset_id", wabaId);
+  url.searchParams.set("placement", "standalone");
+  return url.toString();
+}
+
+export function metaPaymentStatusFromHealth(wabaId: string, health: unknown): MetaPaymentStatus {
+  const record = health && typeof health === "object" ? (health as Record<string, unknown>) : {};
+  const entities = Array.isArray(record.entities) ? (record.entities as Array<Record<string, unknown>>) : [];
+  const business = entities.find((e) => e.entity_type === "BUSINESS");
+  const businessId = typeof business?.id === "string" && /^\d{5,30}$/.test(business.id) ? business.id : null;
+  const errors = entities.flatMap((e) => (Array.isArray(e.errors) ? (e.errors as Array<Record<string, unknown>>).map((err) => ({ entity: String(e.entity_type), code: Number(err.error_code) })) : []));
+  const missing = errors.some((e) => e.entity === "WABA" && e.code === 141006);
+  const issues: string[] = [];
+  if (missing) issues.push(META_PAYMENT_MISSING_MESSAGE);
+  if (errors.some((e) => e.entity === "BUSINESS" && e.code === 141010)) issues.push("A empresa ainda não concluiu a verificação do negócio na Meta. O limite de envios fica reduzido até a verificação.");
+  return {
+    status: !entities.length ? "unknown" : missing ? "missing" : "ok",
+    businessId,
+    wabaId,
+    paymentUrl: metaPaymentUrl(wabaId, businessId),
+    canSendMessage: typeof record.can_send_message === "string" ? record.can_send_message : null,
+    issues,
+  };
+}

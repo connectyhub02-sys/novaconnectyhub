@@ -7,6 +7,8 @@ import {
   metaBillingMode,
   metaMessageBillingCode,
   statusPricing,
+  metaPaymentStatusFromHealth,
+  metaPaymentUrl,
 } from "@/lib/meta/message-billing-policy";
 
 describe("official WhatsApp message billing policy", () => {
@@ -51,5 +53,24 @@ describe("official WhatsApp message billing policy", () => {
   it("formats reais with optional four decimals", () => {
     expect(formatBrl(0.6434, true)).toMatch(/0,6434/);
     expect(formatBrl(643.4)).toMatch(/643,40/);
+  });
+
+  it("detects a missing Meta payment method from the sender health status", () => {
+    const health = { can_send_message: "BLOCKED", entities: [
+      { entity_type: "PHONE_NUMBER", id: "1373711385827414", can_send_message: "AVAILABLE", errors: [{ error_code: 138024 }] },
+      { entity_type: "WABA", id: "1077354978498958", can_send_message: "BLOCKED", errors: [{ error_code: 141006, error_description: "There is an error with the payment method." }] },
+      { entity_type: "BUSINESS", id: "293619797157346", can_send_message: "LIMITED", errors: [{ error_code: 141010 }] },
+    ] };
+    const status = metaPaymentStatusFromHealth("1077354978498958", health);
+    expect(status.status).toBe("missing");
+    expect(status.businessId).toBe("293619797157346");
+    expect(status.paymentUrl).toBe("https://business.facebook.com/billing_hub/accounts/details/?business_id=293619797157346&asset_id=1077354978498958&placement=standalone");
+    expect(status.issues).toHaveLength(2);
+  });
+
+  it("treats a healthy or unreadable sender without blocking", () => {
+    expect(metaPaymentStatusFromHealth("1", { can_send_message: "AVAILABLE", entities: [{ entity_type: "WABA", id: "1", can_send_message: "AVAILABLE" }] }).status).toBe("ok");
+    expect(metaPaymentStatusFromHealth("1", undefined).status).toBe("unknown");
+    expect(metaPaymentUrl("123456", null)).toBe("https://business.facebook.com/billing_hub/accounts/details/?asset_id=123456&placement=standalone");
   });
 });

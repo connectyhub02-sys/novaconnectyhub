@@ -24,6 +24,7 @@ import {
   downloadOfficialMedia,
 } from "@/lib/meta/whatsapp-media";
 import { officialAssetId } from "@/lib/meta/whatsapp-policy";
+import { assertOfficialPaymentReady, officialPaymentStatus } from "@/lib/meta/whatsapp-payment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +79,13 @@ export async function GET(request: NextRequest) {
         if (result.data.length < 1000) break;
       }
       return json({ recipients: rows });
+    }
+    if (params.get("payment")) {
+      // Live Meta check of the sender's payment method (customer-paid numbers).
+      const connection = await officialConnection(auth.client, auth.organizationId, params.get("payment")!);
+      if (!connection) throw new OfficialAccessError("Número não encontrado nesta empresa.", 404);
+      if (connection.billing_mode === "connectyhub_credit_line") return json({ billedBy: "connectyhub" });
+      return json({ billedBy: "customer_meta", ...(await officialPaymentStatus(auth.client, connection)) });
     }
     if (params.get("billing")) {
       const campaign = await auth.client
@@ -259,10 +267,13 @@ export async function POST(request: NextRequest) {
     if (!connection) throw new Error("Conecte o número oficial primeiro.");
     if (body.action === "create_template")
       return json(await createOfficialTemplate(auth.client, connection, body));
-    if (body.action === "send")
+    if (body.action === "send") {
+      // A template starts a business-initiated conversation: needs a card at Meta.
+      if (body.type === "template") await assertOfficialPaymentReady(auth.client, connection);
       return json(
         await sendOfficialMessage(auth.client, connection, auth.actorId, body),
       );
+    }
     if (body.action === "register")
       return json(
         await registerOfficialNumber(auth.client, connection, body.pin),

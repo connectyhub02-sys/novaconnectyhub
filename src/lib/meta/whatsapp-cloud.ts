@@ -14,7 +14,7 @@ import { linkOfficialMessageCharge, recordOfficialMessagePricing, releaseOfficia
 export type OfficialConnection = { billing_mode?: string; coexistence?: boolean; organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
 export type MetaTemplate = OfficialTemplate;
 export class MetaCloudError extends Error {
-  constructor(public code: string, public uncertain = false) { super(`Meta recusou a operação (${code}). Confira a conexão, as permissões e o status do número.`); }
+  constructor(public code: string, public uncertain = false) { super(code === "131042" ? "A Meta recusou o envio por falta de método de pagamento. Adicione um cartão de crédito na sua conta da Meta (Chat Meta → Adicionar cartão na Meta)." : `Meta recusou a operação (${code}). Confira a conexão, as permissões e o status do número.`); }
 }
 export async function officialSettings(client: SupabaseClient) {
   const config = await loadMetaGuidedOAuthConfig({ client });
