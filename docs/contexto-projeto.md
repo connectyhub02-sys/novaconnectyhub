@@ -120,12 +120,21 @@ próprio painel. Estado verificado no documento operacional.
 
 O titular confirmou que hoje a ConnectyHub usa somente o próprio portfólio Meta
 e ainda vai começar a gerenciar clientes. Autorizou o aceite como Tech Provider
-independente após ciência da restrição de revenda nos termos atuais. O desejo de
-cobrar 2× o custo por mensagem entregue fica pendente de acordo comercial que
-permita esse modelo; não habilitar um adicional por mensagem apenas mudando seu
-nome para taxa de serviço. R$ 0,32 foi exemplo, não tarifa universal. Ver o
+independente após ciência da restrição de revenda nos termos atuais. Ver o
 [plano](plano-expansao-social-meta-youtube-tiktok-2026-10-11.md) e o
 [registro da primeira etapa](meta-fase-1-conexao-2026-10-11.md).
+
+**Cobrança de mensagens do WhatsApp oficial — decisão de 26/11/2026.** O cliente
+não cadastra cartão na Meta. Ele paga tudo na ConnectyHub, num **saldo em reais
+separado dos créditos de IA**. O que a Meta cobra custa ao cliente o dobro da
+tarifa; o que a Meta não cobra sai grátis. Mensagem não entregue não é cobrada.
+A cobrança acontece uma vez, na entrega, pela categoria e pelo tipo informados
+pela Meta. Cliente e admin veem os dois saldos separados.
+Cada número tem um modo de faturamento: o padrão é o cliente pagar a Meta. Só o
+admin passa um número para "faturado pela ConnectyHub", e só depois que a linha
+de crédito (Solution Partner ou parceiro) estiver compartilhada com a WABA.
+Antes disso o cliente pagaria duas vezes. Esta decisão substitui a pendência de
+11/10 sobre os 2×. [Regras, implementação e limites](cobranca-whatsapp-oficial-2026-11-26.md).
 
 ### Direção do produto
 

@@ -1,5 +1,13 @@
 # Estado operacional da ConnectyHub
 
+## Cobrança do WhatsApp oficial em saldo próprio (R$) — implementado e publicado, 26/11/2026
+
+- Autorização de Magno: o cliente não cadastra cartão na Meta; o que a Meta cobra custa 2× ao cliente e o que ela não cobra é grátis. O saldo é em reais, separado dos créditos de IA, e aparece separado no painel do cliente e no Financeiro do admin.
+- Migration **0228 aplicada e registrada** em 26/11 (13h17 UTC). Backup prévio `/var/backups/connectyhub/manual/pre-0228-20261126T131457Z.dump`, com SHA-256 `6411fcf5…`. Dois ensaios em transação desfeita cobriram reserva, cobrança única, gratuidade, falha, diferença de categoria, quitação pela recarga, relatório, tarifa, expiração e permissões.
+- Tabela do Brasil gravada: R$ 0,3217 marketing e R$ 0,035 utilidade/autenticação/atendimento, multiplicador 2. Conferir a tabela oficial BRL. Há quatro pacotes ocultos de recarga, de R$ 50 a R$ 500.
+- **Nenhum número é faturado pela ConnectyHub ainda**: os dois conectados estão em `customer_meta`. A troca é feita no Admin Financeiro, só depois de a linha de crédito (Solution Partner ou parceiro) estar compartilhada com a WABA. Falta piloto com envio real e compra real de recarga.
+- Release **`b2635c8b1a9846d14cdb5c7d7cd7f82a9f51e750` ativa no slot b** desde 26/11, por volta de 10h50 BRT. A anterior, `54575794`, está preservada no slot a para retorno. Smoke da candidata: SHA, telas `/dashboard/creditos` e `/admin/financeiro` protegidas por login, e novas APIs retornando 401 sem sessão. `PUT /api/inngest` registrou a nova função horária `connectyhub-meta-message-charges`. As telas ainda não foram conferidas com login. Código na branch `claude/whatsapp-message-billing-20261126`, a partir da produção `54575794`/`2b192c8a`. 79 testes relacionados, tipos e lint aprovados. As 8 falhas restantes da suíte completa também existem na base. [Regras, fluxo e limites](cobranca-whatsapp-oficial-2026-11-26.md).
+
 ## Publicações unificadas e conexões — publicado e observado, 24/11/2026
 
 - Autorização de Magno: reorganizar publicação e conexões dos painéis admin/usuário com referência no Meta Business Suite. Menu Redes sociais destacado; lista com miniaturas, filtros, estados, calendário mensal e Criar publicação. Editor único de vídeo com Facebook, Instagram, TikTok e YouTube, legenda comum ou por rede; campos específicos preservados. Fotos/carrosséis/stories acessíveis na mesma área pelo editor Meta.
