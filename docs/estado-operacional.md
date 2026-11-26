@@ -1,5 +1,13 @@
 # Estado operacional da ConnectyHub
 
+## Edição de imagens com referências — publicado e observado, 26/11/2026
+
+- Release `688bdb006a34d6f17134887ad927149957eba5a6` ativa no slot b; anterior `e759d08be96e309de66d4914a5b493408e49c598` preservada no slot a. Correção do catálogo: modelos de imagem passam a aceitar `image_input`, além de `image_output`. Migration 0229 aplicada a sete linhas sem alterar preços ou habilitação.
+- 17 testes de catálogo/gateway/referências, lint e build aprovados. Smoke candidato e público validou saúde, assets, rotas protegidas e Inngest autenticado (62 funções).
+- Teste real autorizado da Vision: cenário vazio vertical a partir de foto da loja e montagem do Cadillac usando duas referências retornaram imagens pela API `pro-3-image`. Consumo liquidado: 334,6368 e 339,1152 créditos. Chave de imagem separada no mesmo projeto/carteira da Vision; texto preservado, segredo cifrado no ambiente Vision.
+- Nenhuma publicação social nesta validação. Magno reprovou o realismo da montagem e escolheu o carrossel escuro com fotos originais do configurador; geração de cenários não ativada na rotina Vision. [Relatório](ai-image-reference-2026-11-26.md).
+
+
 ## Cobrança do WhatsApp oficial em saldo próprio (R$) — implementado e publicado, 26/11/2026
 
 - Autorização de Magno: o cliente não cadastra cartão na Meta; o que a Meta cobra custa 2× ao cliente e o que ela não cobra é grátis. O saldo é em reais, separado dos créditos de IA, e aparece separado no painel do cliente e no Financeiro do admin.
